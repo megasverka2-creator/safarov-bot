@@ -1,24 +1,28 @@
 # -*- coding: utf-8 -*-
 """
-SAFAROV — shaxsiy blog boti (hub).
+SAFAROV — shaxsiy blog boti (hub + AI bo'limlari).
 
-Tuzilma:
-  /start (yoki /menu) -> asosiy menyu (inline tugmalar)
-    🎯 Hayot G'ildiragi  -> pastdan web-app tugmasi chiqadi (Mini App)
-    🌙 Kun hikmati        -> tez orada
-    🧠 Testlar            -> tez orada
-    📖 Kitob tanlash      -> tez orada
-    📣 Kanallar           -> barcha kanallar
-    💬 Fikr bildirish     -> tez orada
+Bo'limlar:
+  🎯 Hayot G'ildiragi  -> Mini App (web)
+  🌙 Kun hikmati        -> AI: kanallardan eng ta'sirli fikr/she'r
+  📖 Kitob tavsiyasi    -> AI: kitob kanallaridan bitta tavsiya
+  🧠 Testlar / 💬 Fikr  -> tez orada
+  📣 Kanallar           -> barcha kanallar
 
-Yangi bo'lim qo'shish oson: COMING lug'atiga yoki yangi callback qo'shing.
+Kerakli o'zgaruvchilar (Railway -> Variables):
+  BOT_TOKEN           = @BotFather token
+  ANTHROPIC_API_KEY   = console.anthropic.com dagi kalit
 
-O'rnatish: pip install "python-telegram-bot>=21,<22"
-Ishga tushirish: BOT_TOKEN ni qo'yib -> python bot.py
+O'rnatish: pip install -r requirements.txt
 """
 
-import json
 import os
+import re
+import json
+import time
+import html
+import httpx
+from bs4 import BeautifulSoup
 from telegram import (
     Update, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo,
     InlineKeyboardButton, InlineKeyboardMarkup,
@@ -28,13 +32,20 @@ from telegram.ext import (
     filters, ContextTypes,
 )
 
+try:
+    from anthropic import AsyncAnthropic
+except Exception:
+    AsyncAnthropic = None
+
 # ----------------------------------------------------------------------
 TOKEN = os.environ.get("BOT_TOKEN", "BU_YERGA_BOT_TOKENINGIZNI_QOYING")
+ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY")
+MODEL = "claude-haiku-4-5-20251001"   # arzon va tez; kerak bo'lsa o'zgartirsa bo'ladi
 
-# Mini App manzili (Netlify)
+aclient = AsyncAnthropic(api_key=ANTHROPIC_KEY) if (ANTHROPIC_KEY and AsyncAnthropic) else None
+
 WEBAPP_URL = "https://starlit-arithmetic-7b0c9e.netlify.app/"
 
-# Barcha kanallar (sarlavha, username)
 CHANNELS = [
     ("✍️ Shaxsiy blog — Safarov",      "safaroov_blog"),
     ("📚 Fikr, adabiyot va hayot",      "Sutuur_uz"),
@@ -48,7 +59,13 @@ CHANNELS = [
     ("🤍 Samimiylik istab",             "samimiylik_istab"),
 ]
 
-# Tavsiyalar: yo'nalish -> (matn, kanal username)
+# AI bo'limlari uchun manba kanallar
+SECTION_SOURCES = {
+    "quote": ["devonaiy_bedor", "farosatdaan", "Sutuur_uz"],
+    "books": ["mutolaachidan", "sutuur_kitoblari"],
+}
+
+# G'ildirak tavsiyalari
 REC = {
     "Sog'liq va Energiya": ("Hayotdan lavhalar va ilhom", "safaroov_blog"),
     "Karyera va O'sish":   ("O'sish va shaxsiy yo'l",       "safaroov_blog"),
@@ -63,17 +80,17 @@ REC = {
 }
 LOW_THRESHOLD = 5
 
-# "Tez orada" bo'limlari (callback -> (sarlavha, tavsif))
 COMING = {
-    "quote": ("🌙 Kun hikmati", "Har kuni yangi iqtibos, she'r va hikmat shu yerda bo'ladi."),
     "tests": ("🧠 Testlar", "Qisqa, qiziqarli o'z-o'zini bilish testlari tez orada qo'shiladi."),
-    "books": ("📖 Kitob tanlash", "Kayfiyatingizga mos kitob tavsiyasi tez orada."),
     "feedback": ("💬 Fikr bildirish", "Fikr va takliflaringiz uchun bo'lim tez orada ishga tushadi."),
 }
 
 HUB_TEXT = ("🏠 *SAFAROV*\n\n"
             "Xush kelibsiz! Bu — shaxsiy makonim: o'z-o'zini rivojlantirish, "
             "kitob va ma'naviyat bir joyda.\n\nQuyidan tanlang 👇")
+
+CACHE = {}            # key -> (timestamp, text)
+CACHE_TTL = 6 * 3600  # 6 soat
 # ----------------------------------------------------------------------
 
 
@@ -81,8 +98,8 @@ def main_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🎯 Hayot G'ildiragi", callback_data="wheel")],
         [InlineKeyboardButton("🌙 Kun hikmati", callback_data="quote"),
-         InlineKeyboardButton("🧠 Testlar", callback_data="tests")],
-        [InlineKeyboardButton("📖 Kitob tanlash", callback_data="books"),
+         InlineKeyboardButton("📖 Kitob tavsiyasi", callback_data="books")],
+        [InlineKeyboardButton("🧠 Testlar", callback_data="tests"),
          InlineKeyboardButton("📣 Kanallar", callback_data="channels")],
         [InlineKeyboardButton("💬 Fikr bildirish", callback_data="feedback")],
     ])
@@ -90,6 +107,13 @@ def main_menu() -> InlineKeyboardMarkup:
 
 def back_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Asosiy menyu", callback_data="menu")]])
+
+
+def section_kb(kind: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔄 Yangilash", callback_data=f"{kind}_new")],
+        [InlineKeyboardButton("⬅️ Asosiy menyu", callback_data="menu")],
+    ])
 
 
 def channels_kb() -> InlineKeyboardMarkup:
@@ -107,8 +131,81 @@ def channels_kb() -> InlineKeyboardMarkup:
 def wheel_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         [[KeyboardButton("🎯 G'ildirakni to'ldirish", web_app=WebAppInfo(url=WEBAPP_URL))]],
-        resize_keyboard=True,
-    )
+        resize_keyboard=True)
+
+
+# ---------------- Kanal postlarini olish ----------------
+async def fetch_posts(username: str, limit: int = 15):
+    url = f"https://t.me/s/{username}"
+    try:
+        async with httpx.AsyncClient(timeout=15.0,
+                                     headers={"User-Agent": "Mozilla/5.0"}) as c:
+            r = await c.get(url)
+        soup = BeautifulSoup(r.text, "html.parser")
+        out = []
+        for div in soup.select("div.tgme_widget_message_text"):
+            txt = div.get_text("\n", strip=True)
+            txt = re.sub(r"\n{3,}", "\n\n", txt).strip()
+            if len(txt) > 20:
+                out.append(txt[:500])
+        return out[-limit:]
+    except Exception:
+        return []
+
+
+async def collect_sources(kind: str):
+    chunks = []
+    for user in SECTION_SOURCES.get(kind, []):
+        posts = await fetch_posts(user)
+        if posts:
+            joined = "\n- ".join(posts[-8:])
+            chunks.append(f"[@{user}]\n- {joined}")
+    return "\n\n".join(chunks)[:7000]
+
+
+# ---------------- AI ----------------
+SYS = ("Sen 'Safarov' o'zbek blogining yordamchisisan. Faqat o'zbek tilida, "
+       "sodda va samimiy yoz. Markdown belgilarini (*, _, #) ishlatma.")
+
+PROMPTS = {
+    "quote": ("Quyida bir nechta Telegram kanal postlari (manbasi bilan) berilgan. "
+              "Ulardan eng ta'sirli, qisqa va ma'noli BITTA fikr yoki she'r parchasini tanla. "
+              "Avval o'sha hikmatning o'zini yoz, keyin yangi qatorda '— manba: @kanal' ko'rinishida "
+              "manbani ko'rsat. Ortiqcha izoh yozma. Maksimum 60 so'z.\n\nPostlar:\n{texts}"),
+    "books": ("Quyida kitob kanallaridan postlar (manbasi bilan) berilgan. Ulardan BITTA kitobni "
+              "tanlab tavsiya qil. Avval kitob nomi (va muallifi agar bor bo'lsa), keyin 1-2 jumla "
+              "nima haqida ekani, keyin yangi qatorda '— manba: @kanal'. Qisqa va aniq.\n\nPostlar:\n{texts}"),
+}
+
+TITLES = {"quote": "🌙 Kun hikmati", "books": "📖 Kitob tavsiyasi"}
+
+
+async def generate_section(kind: str, force: bool = False) -> str:
+    now = time.time()
+    if not force and kind in CACHE and now - CACHE[kind][0] < CACHE_TTL:
+        return CACHE[kind][1]
+
+    if aclient is None:
+        return (f"{TITLES.get(kind,'')}\n\n🚧 AI hali sozlanmagan. "
+                "Railway'da ANTHROPIC_API_KEY o'zgaruvchisini qo'shing.")
+
+    texts = await collect_sources(kind)
+    if not texts:
+        return (f"{TITLES.get(kind,'')}\n\nHozircha kanallardan post topilmadi. "
+                "Birozdan keyin urinib ko'ring.")
+
+    try:
+        msg = await aclient.messages.create(
+            model=MODEL, max_tokens=350, system=SYS,
+            messages=[{"role": "user", "content": PROMPTS[kind].format(texts=texts)}],
+        )
+        body = "".join(b.text for b in msg.content if getattr(b, "type", None) == "text").strip()
+    except Exception as e:
+        return f"{TITLES.get(kind,'')}\n\n⚠️ Tahlil qilib bo'lmadi. Keyinroq urinib ko'ring."
+
+    result = f"{TITLES.get(kind,'')}\n\n{body}"
+    CACHE[kind] = (now, result)
+    return result
 
 
 # ---------------- Handlers ----------------
@@ -117,8 +214,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def kanallar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "📣 *Bizning kanallarimiz:*", reply_markup=channels_kb(), parse_mode="Markdown")
+    await update.message.reply_text("📣 *Bizning kanallarimiz:*", reply_markup=channels_kb(),
+                                    parse_mode="Markdown")
 
 
 async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -133,14 +230,20 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                   parse_mode="Markdown")
     elif data == "wheel":
         await q.message.reply_text(
-            "🎯 *Hayot G'ildiragi*\n\n"
-            "Pastdagi *« G'ildirakni to'ldirish »* tugmasini bosing va hayotingizni "
-            "10 ta yo'nalish bo'yicha baholang. Natija va shaxsiy tavsiyalar shu yerga keladi.",
+            "🎯 *Hayot G'ildiragi*\n\nPastdagi *« G'ildirakni to'ldirish »* tugmasini bosing va "
+            "hayotingizni 10 ta yo'nalish bo'yicha baholang.",
             reply_markup=wheel_kb(), parse_mode="Markdown")
+    elif data in ("quote", "books", "quote_new", "books_new"):
+        kind = data.replace("_new", "")
+        force = data.endswith("_new")
+        await q.edit_message_text(f"{TITLES[kind]}\n\n⏳ Tayyorlanmoqda...")
+        text = await generate_section(kind, force=force)
+        await q.edit_message_text(text, reply_markup=section_kb(kind),
+                                  disable_web_page_preview=True)
     elif data in COMING:
         title, desc = COMING[data]
-        await q.edit_message_text(f"*{title}*\n\n🚧 {desc}",
-                                  reply_markup=back_kb(), parse_mode="Markdown")
+        await q.edit_message_text(f"*{title}*\n\n🚧 {desc}", reply_markup=back_kb(),
+                                  parse_mode="Markdown")
 
 
 # ---------------- Mini App natijasi ----------------
