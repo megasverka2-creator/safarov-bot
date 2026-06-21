@@ -2,51 +2,68 @@
 """
 SAFAROV — Hayot G'ildiragi Interaktiv Tizimi (Telegram bot).
 
-PDF konsepsiyasidagi 3 bosqichli foydalanuvchi yo'li:
+Foydalanuvchi yo'li:
   1) Web-sayt   — foydalanuvchi 10 ta yo'nalishni baholaydi (Mini App).
-  2) Bot tahlil — natija + grafik shu botga keladi va chiroyli matn bo'ladi.
-  3) Tavsiyalar — past ball olgan sohalar uchun blogdagi maqolalar tavsiya qilinadi.
+  2) Bot tahlil — natija + grafik shu botga keladi.
+  3) Tavsiyalar — past ball olgan soha uchun mos KANAL tavsiya qilinadi.
+
+Buyruqlar:
+  /start     — g'ildirakni to'ldirish tugmasi
+  /kanallar  — barcha kanallar ro'yxati
 
 O'rnatish:   pip install "python-telegram-bot>=21,<22"
-Ishga tushirish:   TOKEN va URL larni to'ldirib  ->  python bot.py
+Ishga tushirish: BOT_TOKEN ni qo'yib  ->  python bot.py
 """
 
 import json
 import os
-from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
+from telegram import (
+    Update, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo,
+    InlineKeyboardButton, InlineKeyboardMarkup,
+)
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, filters, ContextTypes,
 )
 
 # ----------------------------------------------------------------------
-# 1) @BotFather bergan token.
-#    Serverga joylaganda BOT_TOKEN nomli "environment variable" qo'ying,
-#    shunda token kodda ko'rinmaydi (xavfsizroq). Lokal sinov uchun esa
-#    pastdagi qatorga to'g'ridan-to'g'ri yozsangiz ham bo'ladi.
+# 1) @BotFather bergan token. Serverda BOT_TOKEN env-variable orqali qo'yiladi.
 TOKEN = os.environ.get("BOT_TOKEN", "BU_YERGA_BOT_TOKENINGIZNI_QOYING")
 
-# 2) Asboblar (Mini App'lar). Yangi bo'lim — shunchaki yangi qator.
+# 2) Mini App manzili (Netlify).
 TOOLS = {
-    "🎯 Hayot g'ildiragi": "https://tiny-boba-2c6d74.netlify.app/",
+    "🎯 Hayot g'ildiragi": "https://starlit-arithmetic-7b0c9e.netlify.app/",
 }
 
-# 3) TAVSIYALAR: past ball olingan yo'nalish -> blog maqolasi.
-#    Kalitlar Mini App'dagi yo'nalish nomlari bilan AYNAN bir xil bo'lsin.
-#    Linklarni o'z kanalingiz postlari bilan almashtiring (https://t.me/Safarov_blog/123).
-ARTICLES = {
-    "Sog'liq va Energiya": ("Energiyani tiklash: 5 oddiy odat", "https://t.me/Safarov_blog"),
-    "Karyera va O'sish":   ("Karyerada keyingi qadam qanday", "https://t.me/Safarov_blog"),
-    "Moliyaviy Erkinlik":  ("Moliyaviy yostiq qurish", "https://t.me/Safarov_blog"),
-    "Oila va Yaqinlar":    ("Yaqinlar bilan aloqani mustahkamlash", "https://t.me/Safarov_blog"),
-    "Do'stlar va Muhit":   ("To'g'ri muhitni tanlash", "https://t.me/Safarov_blog"),
-    "Shaxsiy Rivojlanish": ("Har kuni o'sish: oddiy tizim", "https://t.me/Safarov_blog"),
-    "Dam olish":           ("Charchoqdan chiqish va hordiq", "https://t.me/Safarov_blog"),
-    "Ma'naviyat":          ("Ichki xotirjamlikni topish", "https://t.me/Safarov_blog"),
-    "Xobbi":               ("Sevimli mashg'ulot va energiya", "https://t.me/Safarov_blog"),
-    "Atrof-muhit":         ("Maoning hayotingizga ta'siri", "https://t.me/Safarov_blog"),
+# 3) BARCHA KANALLAR — /kanallar buyrug'ida ko'rsatiladi.
+#    (sarlavha, username)  — username @ belgisisiz.
+CHANNELS = [
+    ("✍️ Shaxsiy blog — Safarov",     "safaroov_blog"),
+    ("📚 Fikr, adabiyot va hayot",     "Sutuur_uz"),
+    ("🤲 Ruhiy va ma'naviy yo'l",      "Nurulyaqin_uz"),
+    ("🧠 Fikr va farosat maydoni",     "farosatdaan"),
+    ("📖 Kitoblar va mutolaa olami",   "mutolaachidan"),
+    ("📕 Manfaatli kitoblar tavsiyasi","sutuur_kitoblari"),
+    ("🌙 She'r va tafakkur oqshomlari","devonaiy_bedor"),
+    ("🎼 Satrlar ohangi",              "satrlar_ohangi"),
+    ("💭 Xayol olami",                 "Xayol_Olamim"),
+    ("🤍 Samimiylik istab",            "samimiylik_istab"),
+]
+
+# 4) TAVSIYALAR: har bir yo'nalish -> mos kanal (mavzuga yaqin).
+#    (ko'rinadigan matn, username)
+REC = {
+    "Sog'liq va Energiya": ("Hayotdan lavhalar va ilhom", "safaroov_blog"),
+    "Karyera va O'sish":   ("O'sish va shaxsiy yo'l",       "safaroov_blog"),
+    "Moliyaviy Erkinlik":  ("Fikr va farosat maydoni",      "farosatdaan"),
+    "Oila va Yaqinlar":    ("Samimiylik va munosabatlar",   "samimiylik_istab"),
+    "Do'stlar va Muhit":   ("Fikr, adabiyot va hayot",      "Sutuur_uz"),
+    "Shaxsiy Rivojlanish": ("Kitoblar va mutolaa olami",    "mutolaachidan"),
+    "Dam olish":           ("Xayol olami",                  "Xayol_Olamim"),
+    "Ma'naviyat":          ("Ruhiy va ma'naviy yo'l",       "Nurulyaqin_uz"),
+    "Xobbi":               ("She'r va tafakkur oqshomlari", "devonaiy_bedor"),
+    "Atrof-muhit":         ("Satrlar ohangi",               "satrlar_ohangi"),
 }
-# Past ball chegarasi: shu ball yoki undan past bo'lsa, maqola tavsiya qilinadi.
-LOW_THRESHOLD = 5
+LOW_THRESHOLD = 5  # shu ball yoki past bo'lsa, kanal tavsiya qilinadi
 # ----------------------------------------------------------------------
 
 
@@ -58,8 +75,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Assalomu alaykum! 👋\n\n"
         "Bu — *Hayot G'ildiragi*. Quyidagi tugmani bosing va hayotingizni "
         "10 ta yo'nalish bo'yicha baholang. Natija va shaxsiy tavsiyalar shu yerga keladi.\n\n"
+        "Barcha kanallarimiz uchun: /kanallar\n\n"
         "_Halol javob bering — natija faqat o'zingiz uchun._",
         reply_markup=keyboard, parse_mode="Markdown",
+    )
+
+
+async def kanallar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """ Barcha kanallar — ikki ustunli inline tugmalar. """
+    buttons, row = [], []
+    for i, (title, user) in enumerate(CHANNELS, 1):
+        row.append(InlineKeyboardButton(title, url=f"https://t.me/{user}"))
+        if i % 2 == 0:
+            buttons.append(row); row = []
+    if row:
+        buttons.append(row)
+    await update.message.reply_text(
+        "📣 *Bizning kanallarimiz* — qiziqishingizga mos birini tanlang:",
+        reply_markup=InlineKeyboardMarkup(buttons), parse_mode="Markdown",
     )
 
 
@@ -75,20 +108,26 @@ def format_result(data: dict) -> str:
     return "\n".join(lines)
 
 
-def format_advice(data: dict) -> str:
-    """ Past ball olingan sohalar uchun maqola tavsiyalari (PDF: 3-bosqich). """
+def build_advice(data: dict):
+    """ Past ball olingan eng zaif 3 ta soha uchun matn + kanal tugmalari. """
     low = [a for a in data.get("areas", []) if a["score"] <= LOW_THRESHOLD]
-    low.sort(key=lambda a: a["score"])  # eng past birinchi
+    low.sort(key=lambda a: a["score"])
     if not low:
-        return "✨ Barakalla! Hech bir yo'nalish past emas — muvozanatni shu tarzda saqlang."
-    out = ["💡 *Avval shu yo'nalishlardan boshlang:*", ""]
-    for a in low[:3]:  # eng past 3 ta soha
-        art = ARTICLES.get(a["name"])
-        if art:
-            out.append(f"• *{a['name']}* ({a['score']}/10) — [{art[0]}]({art[1]})")
+        return ("✨ Barakalla! Hech bir yo'nalish past emas — muvozanatni shu tarzda saqlang.", None)
+
+    lines = ["💡 *Avval shu yo'nalishlardan boshlang:*", ""]
+    buttons = []
+    for a in low[:3]:
+        rec = REC.get(a["name"])
+        if rec:
+            label, user = rec
+            lines.append(f"• *{a['name']}* ({a['score']}/10) — {label}")
+            buttons.append([InlineKeyboardButton(f"📂 {label}", url=f"https://t.me/{user}")])
         else:
-            out.append(f"• *{a['name']}* ({a['score']}/10)")
-    return "\n".join(out)
+            lines.append(f"• *{a['name']}* ({a['score']}/10)")
+    lines += ["", "📣 Barcha kanallar: /kanallar"]
+    markup = InlineKeyboardMarkup(buttons) if buttons else None
+    return ("\n".join(lines), markup)
 
 
 async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -100,14 +139,16 @@ async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_text(format_result(data), parse_mode="Markdown")
+    text, markup = build_advice(data)
     await update.message.reply_text(
-        format_advice(data), parse_mode="Markdown", disable_web_page_preview=True
+        text, parse_mode="Markdown", reply_markup=markup, disable_web_page_preview=True
     )
 
 
 def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("kanallar", kanallar))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
     print("Bot ishga tushdi...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
