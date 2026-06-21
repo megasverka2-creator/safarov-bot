@@ -32,18 +32,18 @@ TOOLS = {
 
 # 3) TAVSIYALAR: past ball olingan yo'nalish -> blog maqolasi.
 #    Kalitlar Mini App'dagi yo'nalish nomlari bilan AYNAN bir xil bo'lsin.
-#    Linklarni o'z kanalingiz postlari bilan almashtiring (https://t.me/Safaroov_blog/123).
+#    Linklarni o'z kanalingiz postlari bilan almashtiring (https://t.me/Safarov_blog/123).
 ARTICLES = {
-    "Sog'liq va Energiya": ("Energiyani tiklash: 5 oddiy odat", "https://t.me/Safaroov_blog"),
-    "Karyera va O'sish":   ("Karyerada keyingi qadam qanday", "https://t.me/Safaroov_blog"),
-    "Moliyaviy Erkinlik":  ("Moliyaviy yostiq qurish", "https://t.me/Safaroov_blog"),
-    "Oila va Yaqinlar":    ("Yaqinlar bilan aloqani mustahkamlash", "https://t.me/Safaroov_blog"),
-    "Do'stlar va Muhit":   ("To'g'ri muhitni tanlash", "https://t.me/Safaroov_blog"),
-    "Shaxsiy Rivojlanish": ("Har kuni o'sish: oddiy tizim", "https://t.me/Safaroov_blog"),
-    "Dam olish":           ("Charchoqdan chiqish va hordiq", "https://t.me/Safaroov_blog"),
-    "Ma'naviyat":          ("Ichki xotirjamlikni topish", "https://t.me/Safaroov_blog"),
-    "Xobbi":               ("Sevimli mashg'ulot va energiya", "https://t.me/Safaroov_blog"),
-    "Atrof-muhit":         ("Maoning hayotingizga ta'siri", "https://t.me/Safaroov_blog"),
+    "Sog'liq va Energiya": ("Energiyani tiklash: 5 oddiy odat", "https://t.me/Safarov_blog"),
+    "Karyera va O'sish":   ("Karyerada keyingi qadam qanday", "https://t.me/Safarov_blog"),
+    "Moliyaviy Erkinlik":  ("Moliyaviy yostiq qurish", "https://t.me/Safarov_blog"),
+    "Oila va Yaqinlar":    ("Yaqinlar bilan aloqani mustahkamlash", "https://t.me/Safarov_blog"),
+    "Do'stlar va Muhit":   ("To'g'ri muhitni tanlash", "https://t.me/Safarov_blog"),
+    "Shaxsiy Rivojlanish": ("Har kuni o'sish: oddiy tizim", "https://t.me/Safarov_blog"),
+    "Dam olish":           ("Charchoqdan chiqish va hordiq", "https://t.me/Safarov_blog"),
+    "Ma'naviyat":          ("Ichki xotirjamlikni topish", "https://t.me/Safarov_blog"),
+    "Xobbi":               ("Sevimli mashg'ulot va energiya", "https://t.me/Safarov_blog"),
+    "Atrof-muhit":         ("Maoning hayotingizga ta'siri", "https://t.me/Safarov_blog"),
 }
 # Past ball chegarasi: shu ball yoki undan past bo'lsa, maqola tavsiya qilinadi.
 LOW_THRESHOLD = 5
