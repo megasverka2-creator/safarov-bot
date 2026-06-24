@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-SAFAROV — shaxsiy blog boti.
-Asosiy menyu endi VIZUAL Mini App (index.html). Bot quyidagilarni boshqaradi:
-  • /start -> pastdan "SAFAROV menyu" web-tugmasi
-  • Mini App'dan kelgan signallar:
-      {action:"quote"}  -> AI: Kun hikmati
-      {action:"books"}  -> AI: Kitob tavsiyasi
-      {action:"join", name, role, reason} -> ariza adminga
-      {areas:[...]}     -> Hayot G'ildiragi natijasi
-  • /kanallar, /stats (admin)
+SAFAROV — shaxsiy blog boti (hub + AI + jamoa + statistika + Mini Konkurs).
 
-Railway -> Variables: BOT_TOKEN, ANTHROPIC_API_KEY, ADMIN_ID, (DATA_DIR ixtiyoriy)
+Mini Konkurs:
+  • Har bir foydalanuvchiga shaxsiy referal havola.
+  • Do'st shu havola orqali kirib @safaroov_blog ga obuna bo'lsa -> taklif qilganga +3 ochko.
+  • Eng ko'p ochko yig'gan g'olib (kitob sovrin). 3 kunlik muddat.
+
+Railway -> Variables: BOT_TOKEN, ANTHROPIC_API_KEY, ADMIN_ID, DATA_DIR=/data
+  (ixtiyoriy) CONTEST_PHOTO = kitob rasmining URL manzili
+
+MUHIM: obunani tekshirish uchun bot @safaroov_blog kanalida ADMIN bo'lishi shart.
 """
 
 import os
@@ -18,6 +18,8 @@ import re
 import json
 import time
 import httpx
+from datetime import datetime
+from urllib.parse import quote
 from bs4 import BeautifulSoup
 from telegram import (
     Update, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo,
@@ -44,7 +46,17 @@ USERS_FILE = os.path.join(DATA_DIR, "users.json")
 APPS_FILE = os.path.join(DATA_DIR, "applications.json")
 
 aclient = AsyncAnthropic(api_key=ANTHROPIC_KEY) if (ANTHROPIC_KEY and AsyncAnthropic) else None
-WEBAPP_URL = "https://starlit-arithmetic-7b0c9e.netlify.app/"   # index.html (hub)
+WEBAPP_URL = "https://starlit-arithmetic-7b0c9e.netlify.app/"
+BOT_USERNAME = "safarovblog_bot"   # post_init da avtomatik yangilanadi
+
+# ----- MINI KONKURS sozlamalari -----
+CONTEST_ACTIVE = True
+CONTEST_TITLE = "1-Mini Konkurs"
+CONTEST_PRIZE = "Kitob 📚"
+CONTEST_END = "2026-06-27 23:59"          # 3 kun (server vaqti ~UTC). Tahrirlash mumkin.
+CONTEST_CHANNEL = "safaroov_blog"          # qatnashish uchun shu kanalga obuna shart
+REF_POINTS = 3                             # har bir taklif uchun ochko
+CONTEST_PHOTO = os.environ.get("CONTEST_PHOTO", "")  # ixtiyoriy: kitob rasmi URL
 
 CHANNELS = [
     ("✍️ Shaxsiy blog — Safarov",      "safaroov_blog"),
@@ -104,9 +116,165 @@ def track_user(user):
     rec["name"] = user.full_name
     rec["username"] = user.username or ""
     rec.setdefault("first_seen", today)
+    rec.setdefault("points", 0)
     rec["last_seen"] = today
     users[uid] = rec
     save_json(USERS_FILE, users)
+
+
+# ---------------- Konkurs yordamchilari ----------------
+def contest_delta():
+    try:
+        return datetime.strptime(CONTEST_END, "%Y-%m-%d %H:%M") - datetime.now()
+    except Exception:
+        return None
+
+def contest_over():
+    d = contest_delta()
+    return d is not None and d.total_seconds() <= 0
+
+def left_str():
+    d = contest_delta()
+    if d is None:
+        return ""
+    s = int(d.total_seconds())
+    if s <= 0:
+        return "Tugadi"
+    days, rem = s // 86400, s % 86400
+    hours, mins = rem // 3600, (rem % 3600) // 60
+    if days > 0:
+        return f"{days} kun {hours} soat qoldi"
+    if hours > 0:
+        return f"{hours} soat {mins} daqiqa qoldi"
+    return f"{mins} daqiqa qoldi"
+
+async def is_subscribed(bot, uid):
+    try:
+        m = await bot.get_chat_member(f"@{CONTEST_CHANNEL}", uid)
+        return m.status in ("member", "administrator", "creator")
+    except Exception:
+        return False
+
+async def try_count(bot, uid):
+    """ Obuna bo'lgan taklif qilingan foydalanuvchi uchun taklif qilganga +3 ochko. """
+    users = load_json(USERS_FILE, {})
+    u = users.get(str(uid))
+    if not u:
+        return None
+    ref = u.get("ref_by")
+    if not ref or u.get("counted"):
+        return None
+    if not await is_subscribed(bot, uid):
+        return None
+    inv = users.get(str(ref))
+    u["counted"] = True
+    if inv:
+        inv["points"] = inv.get("points", 0) + REF_POINTS
+        users[str(ref)] = inv
+    users[str(uid)] = u
+    save_json(USERS_FILE, users)
+    return ref if inv else None
+
+def ranking():
+    users = load_json(USERS_FILE, {})
+    return sorted([(uid, u) for uid, u in users.items() if u.get("points", 0) > 0],
+                  key=lambda kv: kv[1]["points"], reverse=True)
+
+def contest_text(user, sub, link):
+    pts = load_json(USERS_FILE, {}).get(str(user.id), {}).get("points", 0)
+    ranked = ranking()
+    pos = next((i + 1 for i, (uid, _) in enumerate(ranked) if uid == str(user.id)), "—")
+    status = ("✅ Obunangiz tasdiqlandi — qatnashyapsiz!" if sub
+              else f"⚠️ Avval @{CONTEST_CHANNEL} ga obuna bo'ling, keyin «Obunani tekshirish».")
+    return (
+        f"🏆 {CONTEST_TITLE}\n"
+        f"🎁 Sovrin: {CONTEST_PRIZE}\n"
+        f"⏳ {left_str()}\n\n"
+        "Qatnashish shartlari:\n"
+        f"1️⃣ @{CONTEST_CHANNEL} ga obuna bo'ling\n"
+        "2️⃣ Quyidagi havola orqali do'stlaringizni taklif qiling\n"
+        f"3️⃣ Har bir do'st (obuna bo'lsa) = +{REF_POINTS} ochko\n"
+        "4️⃣ Eng ko'p ochko yig'gan g'olib — sovrinni yutadi! 🎉\n\n"
+        f"{status}\n\n"
+        f"🔗 Sizning havolangiz:\n{link}\n\n"
+        f"⭐ Ochkolaringiz: {pts}   |   O'rin: {pos}"
+    )
+
+def contest_kb(sub, link):
+    share = ("https://t.me/share/url?url=" + quote(link, safe="")
+             + "&text=" + quote("Mini konkursda qatnashib, kitob yutib oling! 🎁📚", safe=""))
+    rows = [[InlineKeyboardButton("📤 Do'stlarni taklif qilish", url=share)],
+            [InlineKeyboardButton("✅ Obunani tekshirish", callback_data="con_check"),
+             InlineKeyboardButton("🏆 Reyting", callback_data="con_top")]]
+    if not sub:
+        rows.insert(0, [InlineKeyboardButton(f"📣 @{CONTEST_CHANNEL} ga obuna",
+                                             url=f"https://t.me/{CONTEST_CHANNEL}")])
+    return InlineKeyboardMarkup(rows)
+
+def leaderboard_text(user):
+    ranked = ranking()
+    lines = [f"🏆 {CONTEST_TITLE} — Reyting (TOP 10)", f"⏳ {left_str()}", ""]
+    medals = ["🥇", "🥈", "🥉"]
+    if not ranked:
+        lines.append("Hozircha ishtirokchi yo'q. Birinchi bo'ling — do'st taklif qiling!")
+    for i, (uid, u) in enumerate(ranked[:10]):
+        mark = medals[i] if i < 3 else f"{i+1}."
+        lines.append(f"{mark} {u.get('name','Foydalanuvchi')} — {u['points']} ochko")
+    pos = next((i + 1 for i, (uid, _) in enumerate(ranked) if uid == str(user.id)), None)
+    if pos:
+        lines += ["", f"Sizning o'rningiz: {pos}"]
+    return "\n".join(lines)
+
+def closed_text():
+    ranked = ranking()
+    if ranked:
+        uid, u = ranked[0]
+        return (f"🏁 {CONTEST_TITLE} yakunlandi!\n\n"
+                f"🥇 G'olib: {u.get('name','Foydalanuvchi')} — {u['points']} ochko\n"
+                f"🎁 {CONTEST_PRIZE} g'olibga topshiriladi. Tabriklaymiz! 🎉")
+    return f"🏁 {CONTEST_TITLE} yakunlandi!"
+
+async def send_contest(bot, chat_id, user, edit_message=None):
+    track_user(user)
+    if not CONTEST_ACTIVE:
+        msg = "Hozircha faol konkurs yo'q. Tez orada yangi konkurs bo'ladi! 🔔"
+        if edit_message:
+            await edit_message.edit_text(msg)
+        else:
+            await bot.send_message(chat_id, msg)
+        return
+    if contest_over():
+        msg = closed_text()
+        if edit_message:
+            await edit_message.edit_text(msg)
+        else:
+            await bot.send_message(chat_id, msg)
+        return
+
+    inviter = await try_count(bot, user.id)
+    if inviter:
+        try:
+            await bot.send_message(int(inviter),
+                                   f"🎉 Havolangiz orqali yangi do'st qo'shildi! +{REF_POINTS} ochko.")
+        except Exception:
+            pass
+
+    sub = await is_subscribed(bot, user.id)
+    link = f"https://t.me/{BOT_USERNAME}?start=ref_{user.id}"
+    text = contest_text(user, sub, link)
+    kb = contest_kb(sub, link)
+    if edit_message:
+        try:
+            await edit_message.edit_text(text, reply_markup=kb, disable_web_page_preview=True)
+        except Exception:
+            pass
+    else:
+        if CONTEST_PHOTO:
+            try:
+                await bot.send_photo(chat_id, CONTEST_PHOTO)
+            except Exception:
+                pass
+        await bot.send_message(chat_id, text, reply_markup=kb, disable_web_page_preview=True)
 
 
 # ---------------- Klaviaturalar ----------------
@@ -185,12 +353,34 @@ async def generate_section(kind, force=False):
 
 # ---------------- Buyruqlar ----------------
 async def start(update, context):
-    track_user(update.effective_user)
+    user = update.effective_user
+    track_user(user)
+    args = context.args
+    if args and args[0].startswith("ref_"):
+        ref = args[0][4:]
+        users = load_json(USERS_FILE, {})
+        u = users.get(str(user.id), {})
+        if ref.isdigit() and ref != str(user.id) and not u.get("ref_by"):
+            u["ref_by"] = ref
+            users[str(user.id)] = u
+            save_json(USERS_FILE, users)
+    inviter = await try_count(context.bot, user.id)
+    if inviter:
+        try:
+            await context.bot.send_message(int(inviter),
+                                           f"🎉 Havolangiz orqali yangi do'st qo'shildi! +{REF_POINTS} ochko.")
+        except Exception:
+            pass
+    extra = ""
+    if CONTEST_ACTIVE and not contest_over():
+        extra = f"\n\n🏆 *{CONTEST_TITLE}* ketyapti — sovrin: {CONTEST_PRIZE}! Qatnashish: /konkurs"
     await update.message.reply_text(
-        "Assalomu alaykum! 👋\n\n"
-        "Pastdagi *« SAFAROV menyu »* tugmasini bosing — barcha bo'limlar shu yerda: "
-        "Hayot G'ildiragi, Kun hikmati, Kitob tavsiyasi, Kanallar va Jamoaga qo'shilish.",
-        reply_markup=menu_kb(), parse_mode="Markdown")
+        "Assalomu alaykum! 👋\n\nPastdagi *« SAFAROV menyu »* tugmasini bosing — barcha bo'limlar "
+        "shu yerda: Hayot G'ildiragi, Kun hikmati, Kitob tavsiyasi, Kanallar, Jamoa va Mini Konkurs."
+        + extra, reply_markup=menu_kb(), parse_mode="Markdown")
+
+async def konkurs(update, context):
+    await send_contest(context.bot, update.effective_chat.id, update.effective_user)
 
 async def kanallar(update, context):
     await update.message.reply_text("📣 *Bizning kanallarimiz:*", reply_markup=channels_kb(),
@@ -203,9 +393,13 @@ async def stats(update, context):
     apps = load_json(APPS_FILE, [])
     today = time.strftime("%Y-%m-%d")
     active = sum(1 for u in users.values() if u.get("last_seen") == today)
+    parts = sum(1 for u in users.values() if u.get("points", 0) > 0)
+    top = ranking()[:1]
+    top_line = f"\n🥇 Yetakchi: {top[0][1]['name']} ({top[0][1]['points']} ochko)" if top else ""
     await update.message.reply_text(
         f"📊 *Statistika*\n\n👥 Jami foydalanuvchi: *{len(users)}*\n"
-        f"🟢 Bugun faol: *{active}*\n🤝 Jamoaga arizalar: *{len(apps)}*",
+        f"🟢 Bugun faol: *{active}*\n🤝 Jamoaga arizalar: *{len(apps)}*\n"
+        f"🏆 Konkurs ishtirokchilari: *{parts}*{top_line}",
         parse_mode="Markdown")
 
 
@@ -217,6 +411,16 @@ async def on_gen(update, context):
     await q.edit_message_text(f"{TITLES.get(kind,'')}\n\n⏳ Yangilanmoqda...")
     text = await generate_section(kind, force=True)
     await q.edit_message_text(text, reply_markup=gen_kb(kind), disable_web_page_preview=True)
+
+async def on_contest_cb(update, context):
+    q = update.callback_query
+    if q.data == "con_top":
+        await q.answer()
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Konkurs", callback_data="con_back")]])
+        await q.edit_message_text(leaderboard_text(update.effective_user), reply_markup=kb)
+    else:  # con_check, con_back
+        await q.answer("Tekshirildi ✅" if q.data == "con_check" else None)
+        await send_contest(context.bot, q.message.chat_id, update.effective_user, edit_message=q.message)
 
 async def admin_decide(update, context):
     q = update.callback_query
@@ -272,14 +476,15 @@ async def on_webapp_data(update, context):
     except Exception:
         await update.message.reply_text("Ma'lumotni o'qib bo'lmadi.")
         return
-
     action = data.get("action")
 
     if action in ("quote", "books"):
         await update.message.reply_text(f"{TITLES[action]}\n\n⏳ Tayyorlanmoqda...")
         text = await generate_section(action)
-        await update.message.reply_text(text, reply_markup=gen_kb(action),
-                                        disable_web_page_preview=True)
+        await update.message.reply_text(text, reply_markup=gen_kb(action), disable_web_page_preview=True)
+
+    elif action == "contest":
+        await send_contest(context.bot, update.effective_chat.id, user)
 
     elif action == "join":
         name = data.get("name", "—"); role = data.get("role", "—"); reason = data.get("reason", "—")
@@ -294,12 +499,9 @@ async def on_webapp_data(update, context):
                 InlineKeyboardButton("✅ Qabul", callback_data=f"acc:{user.id}"),
                 InlineKeyboardButton("❌ Rad", callback_data=f"rej:{user.id}")]])
             await context.bot.send_message(
-                ADMIN_ID,
-                f"🆕 Yangi ariza\n\n👤 {user.full_name} {uname}\n🆔 {user.id}\n"
-                f"Yo'nalish: {role}\n\nIsm/yosh: {name}\nSabab: {reason}",
-                reply_markup=kb)
-        await update.message.reply_text(
-            "✅ Arizangiz qabul qilindi! Tez orada siz bilan bog'lanamiz. Rahmat! 🤝")
+                ADMIN_ID, f"🆕 Yangi ariza\n\n👤 {user.full_name} {uname}\n🆔 {user.id}\n"
+                f"Yo'nalish: {role}\n\nIsm/yosh: {name}\nSabab: {reason}", reply_markup=kb)
+        await update.message.reply_text("✅ Arizangiz qabul qilindi! Tez orada bog'lanamiz. Rahmat! 🤝")
 
     elif "areas" in data:
         await update.message.reply_text(format_result(data), parse_mode="Markdown")
@@ -309,7 +511,13 @@ async def on_webapp_data(update, context):
 
 
 async def post_init(app):
-    """ Xabar yozish joyi yonidagi doimiy «menyu» tugmasini o'rnatadi (ochilganda Mini App). """
+    global BOT_USERNAME
+    try:
+        me = await app.bot.get_me()
+        if me.username:
+            BOT_USERNAME = me.username
+    except Exception:
+        pass
     try:
         await app.bot.set_chat_menu_button(
             menu_button=MenuButtonWebApp(text="SAFAROV", web_app=WebAppInfo(url=WEBAPP_URL)))
@@ -320,9 +528,11 @@ async def post_init(app):
 def main():
     app = Application.builder().token(TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler(["start", "menu"], start))
+    app.add_handler(CommandHandler("konkurs", konkurs))
     app.add_handler(CommandHandler("kanallar", kanallar))
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CallbackQueryHandler(on_gen, pattern="^gen:"))
+    app.add_handler(CallbackQueryHandler(on_contest_cb, pattern="^con_"))
     app.add_handler(CallbackQueryHandler(admin_decide, pattern="^(acc|rej):"))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
     print("Bot ishga tushdi...")
