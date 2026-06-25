@@ -17,13 +17,14 @@ import os
 import re
 import json
 import time
+import asyncio
 import httpx
 from datetime import datetime
 from urllib.parse import quote
 from bs4 import BeautifulSoup
 from telegram import (
     Update, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo,
-    InlineKeyboardButton, InlineKeyboardMarkup, MenuButtonWebApp,
+    InlineKeyboardButton, InlineKeyboardMarkup, MenuButtonDefault,
 )
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, CallbackQueryHandler,
@@ -382,6 +383,33 @@ async def start(update, context):
 async def konkurs(update, context):
     await send_contest(context.bot, update.effective_chat.id, update.effective_user)
 
+async def xabar(update, context):
+    """ Faqat admin: barcha foydalanuvchilarga xabar yuboradi. /xabar <matn> """
+    if update.effective_user.id != ADMIN_ID:
+        return
+    text = (update.message.text or "").partition(" ")[2].strip()
+    if not text:
+        await update.message.reply_text(
+            "📢 Foydalanish: /xabar <matn>\n\n"
+            "Masalan:\n/xabar 🏆 Mini Konkurs davom etyapti! Do'st taklif qilib, kitobni "
+            "yutib oling 👉 /konkurs")
+        return
+    users = load_json(USERS_FILE, {})
+    ids = list(users.keys())
+    await update.message.reply_text(f"📤 Yuborilmoqda... ({len(ids)} foydalanuvchi)")
+    sent, failed = 0, 0
+    for uid in ids:
+        try:
+            await context.bot.send_message(int(uid), text, disable_web_page_preview=True)
+            sent += 1
+        except Exception:
+            failed += 1
+        if (sent + failed) % 25 == 0:
+            await asyncio.sleep(1)
+    await update.message.reply_text(
+        f"✅ Yetkazildi: {sent}\n🚫 Yetmadi (bloklagan/o'chirgan): {failed}")
+
+
 async def kanallar(update, context):
     await update.message.reply_text("📣 *Bizning kanallarimiz:*", reply_markup=channels_kb(),
                                     parse_mode="Markdown")
@@ -519,8 +547,7 @@ async def post_init(app):
     except Exception:
         pass
     try:
-        await app.bot.set_chat_menu_button(
-            menu_button=MenuButtonWebApp(text="SAFAROV", web_app=WebAppInfo(url=WEBAPP_URL)))
+        await app.bot.set_chat_menu_button(menu_button=MenuButtonDefault())
     except Exception:
         pass
 
@@ -531,6 +558,7 @@ def main():
     app.add_handler(CommandHandler("konkurs", konkurs))
     app.add_handler(CommandHandler("kanallar", kanallar))
     app.add_handler(CommandHandler("stats", stats))
+    app.add_handler(CommandHandler("xabar", xabar))
     app.add_handler(CallbackQueryHandler(on_gen, pattern="^gen:"))
     app.add_handler(CallbackQueryHandler(on_contest_cb, pattern="^con_"))
     app.add_handler(CallbackQueryHandler(admin_decide, pattern="^(acc|rej):"))
