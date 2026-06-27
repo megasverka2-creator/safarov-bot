@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<title>SAFAROV</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0B0B0B; --charcoal:#121212; --charcoal-2:#1A1A1A; --charcoal-3:#242424;
+    --line:rgba(255,255,255,.09); --line-2:rgba(255,255,255,.18);
+    --lime:#D1FF1A; --lime-dim:#A6BF2E; --white:#F3F3F1; --muted:#8C8C8C; --muted-2:#5C5C5C;
+    --maxw:560px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--ink);color:var(--white);font-family:'Urbanist',system-ui,sans-serif;
+       line-height:1.5;-webkit-font-smoothing:antialiased;overflow:hidden}
+
+  /* Tirik fon */
+  .bg{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;
+      background:radial-gradient(150% 110% at 50% -10%, #161616 0%, #0E0E0E 46%, #090909 100%)}
+  .orb{position:absolute;border-radius:50%;filter:blur(64px);will-change:transform}
+  .o1{width:64vmax;height:64vmax;left:-16vmax;top:-26vmax;background:radial-gradient(circle,rgba(209,255,26,.20),transparent 60%);animation:d1 26s ease-in-out infinite}
+  .o2{width:48vmax;height:48vmax;right:-18vmax;top:-8vmax;background:radial-gradient(circle,rgba(209,255,26,.12),transparent 60%);animation:d2 32s ease-in-out infinite}
+  .o3{width:56vmax;height:56vmax;left:24%;bottom:-30vmax;background:radial-gradient(circle,rgba(150,210,70,.10),transparent 62%);animation:d3 38s ease-in-out infinite}
+  @keyframes d1{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(7vmax,6vmax) scale(1.12)}}
+  @keyframes d2{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-6vmax,9vmax) scale(1.08)}}
+  @keyframes d3{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-7vmax,-8vmax) scale(1.16)}}
+  #spark{position:absolute;inset:0;width:100%;height:100%}
+  .grain{position:absolute;inset:0;opacity:.05;mix-blend-mode:soft-light;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+
+  .app{position:relative;z-index:1;height:100dvh;max-width:var(--maxw);margin:0 auto;
+       display:flex;flex-direction:column;padding:0 16px}
+
+  /* Header */
+  .head{display:flex;align-items:center;gap:11px;padding:18px 2px 14px}
+  .head .sq{width:30px;height:30px;border-radius:8px;background:var(--lime);position:relative;flex:none;box-shadow:0 0 16px rgba(209,255,26,.5)}
+  .head .sq::after{content:"";position:absolute;inset:9px;border-radius:50%;border:3px solid #0B0B0B}
+  .head .name{font-weight:800;letter-spacing:.02em;font-size:18px}
+  .head .name small{display:block;font-size:10px;letter-spacing:.22em;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:1px}
+
+  .scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding-bottom:24px}
+  .scroll::-webkit-scrollbar{display:none}
+
+  /* screens */
+  .screen{display:none;animation:fade .35s ease both}
+  .screen.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+  .eyebrow{font-size:11px;letter-spacing:.2em;color:var(--lime);font-weight:800;text-transform:uppercase}
+  h1.big{font-weight:900;font-size:34px;line-height:1.02;letter-spacing:-.03em;margin:7px 0 6px}
+  .lead{color:var(--muted);font-size:14.5px;font-weight:500;max-width:90%}
+
+  /* Hero card (g'ildirak) */
+  .hero{margin-top:18px;border-radius:22px;padding:22px;position:relative;overflow:hidden;
+        background:linear-gradient(150deg,#1c2206,#121212 60%);border:1px solid rgba(209,255,26,.25);
+        box-shadow:0 0 40px rgba(209,255,26,.06)}
+  .hero .tag{font-size:10.5px;letter-spacing:.2em;color:var(--lime);font-weight:800;text-transform:uppercase}
+  .hero h2{font-weight:900;font-size:25px;letter-spacing:-.02em;margin:6px 0 4px}
+  .hero p{color:var(--muted);font-size:13.5px;font-weight:500;margin-bottom:16px}
+  .hero .go{display:inline-flex;align-items:center;gap:8px;background:var(--lime);color:#0B0B0B;
+            font-weight:800;font-size:14.5px;border-radius:12px;padding:12px 18px}
+  .hero .deco{position:absolute;right:-24px;top:-24px;width:130px;height:130px;border-radius:50%;
+              border:2px dashed rgba(209,255,26,.35);opacity:.5}
+  .hero .deco::after{content:"";position:absolute;inset:20px;border-radius:50%;border:2px solid rgba(209,255,26,.25)}
+
+  /* grid cards */
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+  .promo{display:flex;align-items:center;gap:13px;margin-top:12px;padding:15px 16px;cursor:pointer;
+    border-radius:18px;background:linear-gradient(110deg,#241a05,#141414 70%);
+    border:1px solid rgba(209,255,26,.4);transition:.16s}
+  .promo:active{transform:scale(.98)}
+  .promo-ic{width:44px;height:44px;border-radius:12px;background:rgba(209,255,26,.14);
+    display:grid;place-items:center;font-size:23px;flex:none}
+  .promo-txt{flex:1;min-width:0;display:flex;flex-direction:column}
+  .promo-txt b{font-weight:800;font-size:15.5px}
+  .promo-txt span{font-size:12.5px;color:var(--muted)}
+  .promo-go{color:var(--lime);font-weight:800;font-size:20px}
+  .card{background:var(--charcoal);border:1px solid var(--line);border-radius:18px;padding:16px;
+        cursor:pointer;transition:.16s;display:flex;flex-direction:column;gap:10px;min-height:122px}
+  .card:active{transform:scale(.97);border-color:var(--line-2)}
+  .card .ic{width:42px;height:42px;border-radius:12px;background:var(--charcoal-3);display:grid;place-items:center;color:var(--lime)}
+  .card .ic svg{width:22px;height:22px}
+  .card .t{font-weight:800;font-size:15px;letter-spacing:-.01em}
+  .card .s{font-size:12px;color:var(--muted);font-weight:500;margin-top:-4px}
+  .card.soon{opacity:.6}
+  .card.soon .badge{font-size:9.5px;letter-spacing:.1em;color:var(--muted-2);font-weight:700;text-transform:uppercase}
+
+  .foot{text-align:center;color:var(--muted-2);font-size:11.5px;font-weight:600;margin:18px 0 6px;letter-spacing:.02em}
+
+  /* sub-screen header */
+  .sub-top{display:flex;align-items:center;gap:12px;padding-top:6px;margin-bottom:6px}
+  .iconbtn{width:40px;height:40px;border-radius:12px;background:var(--charcoal-2);border:1px solid var(--line);
+           display:grid;place-items:center;cursor:pointer;color:var(--white);flex:none}
+  .iconbtn:active{transform:scale(.94)}
+  .sub-top h3{font-weight:900;font-size:22px;letter-spacing:-.02em}
+
+  /* channels list */
+  .ch{display:flex;align-items:center;gap:13px;background:var(--charcoal);border:1px solid var(--line);
+      border-radius:14px;padding:13px 14px;margin-top:10px;cursor:pointer;transition:.15s}
+  .ch:active{transform:scale(.98);border-color:var(--line-2)}
+  .ch .dot{width:38px;height:38px;border-radius:10px;background:var(--charcoal-3);display:grid;place-items:center;color:var(--lime);flex:none;font-size:18px}
+  .ch .info{flex:1;min-width:0}
+  .ch .info b{font-weight:700;font-size:14.5px;display:block}
+  .ch .info span{font-size:12px;color:var(--muted)}
+  .ch .arr{color:var(--muted-2)}
+
+  /* form */
+  .field{margin-top:14px}
+  .field label{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+  .field input,.field textarea{width:100%;margin-top:7px;background:var(--charcoal);border:1px solid var(--line);
+      border-radius:12px;padding:13px 14px;color:var(--white);font-family:inherit;font-size:15px;font-weight:500;outline:none}
+  .field input:focus,.field textarea:focus{border-color:var(--lime)}
+  .field textarea{resize:none;min-height:90px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .chip{padding:9px 14px;border-radius:999px;background:var(--charcoal);border:1px solid var(--line);
+        font-size:13px;font-weight:700;cursor:pointer;transition:.14s}
+  .chip.sel{background:var(--lime);color:#0B0B0B;border-color:var(--lime)}
+  .submit{width:100%;margin-top:18px;background:var(--lime);color:#0B0B0B;border:none;font-family:inherit;
+          font-weight:800;font-size:16px;border-radius:14px;padding:16px;cursor:pointer}
+  .submit:active{transform:scale(.99)}
+  .submit:disabled{opacity:.45}
+
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);background:var(--lime);
+         color:#0B0B0B;font-weight:800;font-size:14px;padding:12px 20px;border-radius:12px;opacity:0;
+         transition:.3s;z-index:50;pointer-events:none}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="bg" aria-hidden="true">
+  <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+  <canvas id="spark"></canvas><div class="grain"></div>
+</div>
+
+<div class="app">
+  <div class="head">
+    <div class="sq"></div>
+    <div class="name">SAFAROV<small>Shaxsiy makon</small></div>
+  </div>
+
+  <div class="scroll">
+    <!-- ============ HOME ============ -->
+    <section class="screen on" id="home">
+      <div class="eyebrow">Assalomu alaykum 👋</div>
+      <h1 class="big">Xush kelibsiz</h1>
+      <p class="lead">O'z-o'zini rivojlantirish, kitob va ma'naviyat — bir joyda.</p>
+
+      <div class="hero" data-go="wheel">
+        <div class="deco"></div>
+        <div class="tag">Tavsiya etamiz</div>
+        <h2>Hayot G'ildiragi</h2>
+        <p>Hayotingizni 10 ta yo'nalish bo'yicha baholang.</p>
+        <span class="go">Boshlash →</span>
+      </div>
+
+      <div class="promo" data-act="contest">
+        <div class="promo-ic">🏆</div>
+        <div class="promo-txt"><b>1-Mini Konkurs</b><span>Kitob yutib oling — do'st taklif qiling</span></div>
+        <div class="promo-go">→</div>
+      </div>
+
+      <div class="promo" data-act="quiz">
+        <div class="promo-ic">🧩</div>
+        <div class="promo-txt"><b>Meni qanchalik bilasiz?</b><span>Yaqinlaringizni sinab ko'ring</span></div>
+        <div class="promo-go">→</div>
+      </div>
+
+      <div class="grid">
+        <div class="card" data-act="quote">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></div>
+          <div class="t">Kun hikmati</div>
+          <div class="s">Bugungi ilhom</div>
+        </div>
+        <div class="card" data-act="books">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
+          <div class="t">Kitob tavsiyasi</div>
+          <div class="s">Nima o'qiymiz?</div>
+        </div>
+        <div class="card" data-go="channels">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 0 1-5.8-1.6"/></svg></div>
+          <div class="t">Kanallar</div>
+          <div class="s">Barcha kanallarimiz</div>
+        </div>
+        <div class="card" data-go="join">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+          <div class="t">Jamoaga qo'shilish</div>
+          <div class="s">Bizga qo'shiling</div>
+        </div>
+        <div class="card soon">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+          <div class="t">Fikr bildirish</div>
+          <div class="badge">Tez orada</div>
+        </div>
+      </div>
+
+      <div class="foot">SAFAROV — shaxsiy blog · @safaroov_blog</div>
+    </section>
+
+    <!-- ============ CHANNELS ============ -->
+    <section class="screen" id="channels">
+      <div class="sub-top">
+        <div class="iconbtn" data-go="home">←</div>
+        <h3>Kanallar</h3>
+      </div>
+      <p class="lead">Qiziqishingizga mos birini tanlang.</p>
+      <div id="chList"></div>
+    </section>
+
+    <!-- ============ JOIN ============ -->
+    <section class="screen" id="join">
+      <div class="sub-top">
+        <div class="iconbtn" data-go="home">←</div>
+        <h3>Jamoaga qo'shilish</h3>
+      </div>
+      <p class="lead">Bizning kanallarimizni birga yuritamiz. O'zingiz haqingizda yozing.</p>
+
+      <div class="field">
+        <label>Ism va yosh</label>
+        <input id="jName" type="text" placeholder="Masalan: Muslim, 22">
+      </div>
+      <div class="field">
+        <label>Qaysi yo'nalishda yordam bera olasiz?</label>
+        <div class="chips" id="roles">
+          <div class="chip" data-r="Dizayn">Dizayn</div>
+          <div class="chip" data-r="Matn / Kontent">Matn / Kontent</div>
+          <div class="chip" data-r="SMM">SMM</div>
+          <div class="chip" data-r="Video">Video</div>
+          <div class="chip" data-r="Boshqa">Boshqa</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Nega qo'shilmoqchisiz?</label>
+        <textarea id="jReason" placeholder="Bir-ikki jumla..."></textarea>
+      </div>
+      <button class="submit" id="jSend">Arizani yuborish</button>
+    </section>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  var tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+  if(tg){ try{ tg.ready(); tg.expand();
+    tg.setHeaderColor && tg.setHeaderColor('#0B0B0B');
+    tg.setBackgroundColor && tg.setBackgroundColor('#0B0B0B'); }catch(e){} }
+
+  function haptic(t){ try{ if(tg&&tg.HapticFeedback){ t==='ok'?tg.HapticFeedback.notificationOccurred('success'):tg.HapticFeedback.impactOccurred('light'); } }catch(e){} }
+  function toast(m){ var t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); setTimeout(function(){t.classList.remove('show');},1800); }
+
+  // ---- Kanallar ----
+  var CH = [
+    ["✍️","Shaxsiy blog — Safarov","@safaroov_blog","safaroov_blog"],
+    ["📚","Fikr, adabiyot va hayot","@Sutuur_uz","Sutuur_uz"],
+    ["🤲","Ruhiy va ma'naviy yo'l","@Nurulyaqin_uz","Nurulyaqin_uz"],
+    ["🧠","Fikr va farosat maydoni","@farosatdaan","farosatdaan"],
+    ["📖","Kitoblar va mutolaa olami","@mutolaachidan","mutolaachidan"],
+    ["📕","Manfaatli kitoblar tavsiyasi","@sutuur_kitoblari","sutuur_kitoblari"],
+    ["🌙","She'r va tafakkur oqshomlari","@devonaiy_bedor","devonaiy_bedor"],
+    ["🎼","Satrlar ohangi","@satrlar_ohangi","satrlar_ohangi"],
+    ["💭","Xayol olami","@Xayol_Olamim","Xayol_Olamim"],
+    ["🤍","Samimiylik istab","@samimiylik_istab","samimiylik_istab"]
+  ];
+  var chList = document.getElementById('chList');
+  CH.forEach(function(c){
+    var el = document.createElement('div'); el.className='ch';
+    el.innerHTML = '<div class="dot">'+c[0]+'</div><div class="info"><b>'+c[1]+'</b><span>'+c[2]+'</span></div><div class="arr">→</div>';
+    el.onclick = function(){ haptic('light'); var url='https://t.me/'+c[3];
+      if(tg&&tg.openTelegramLink){ tg.openTelegramLink(url); } else { window.open(url,'_blank'); } };
+    chList.appendChild(el);
+  });
+
+  // ---- Navigatsiya ----
+  function show(id){
+    document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('on'); });
+    var t=document.getElementById(id); if(t){ t.classList.add('on'); }
+    document.querySelector('.scroll').scrollTop=0;
+    if(tg){ try{ if(id==='home'){ tg.BackButton.hide(); } else { tg.BackButton.show(); } }catch(e){} }
+  }
+  if(tg){ try{ tg.BackButton.onClick(function(){ show('home'); }); }catch(e){} }
+
+  // kartochka / tugma bosishlari
+  document.querySelectorAll('[data-go]').forEach(function(el){
+    el.addEventListener('click', function(){
+      haptic('light'); var d=el.getAttribute('data-go');
+      if(d==='wheel'){ location.href='gildirak.html'; return; }
+      show(d);
+    });
+  });
+  document.querySelectorAll('[data-act]').forEach(function(el){
+    el.addEventListener('click', function(){
+      var a=el.getAttribute('data-act'); haptic('ok');
+      if(tg){ try{ tg.sendData(JSON.stringify({action:a})); return; }catch(e){} }
+      toast('Bu funksiya Telegram ichida ishlaydi');
+    });
+  });
+  document.querySelectorAll('.card.soon').forEach(function(el){
+    el.addEventListener('click', function(){ toast('Tez orada qo\'shiladi 🚧'); });
+  });
+
+  // ---- Jamoa formasi ----
+  var role='';
+  document.querySelectorAll('#roles .chip').forEach(function(ch){
+    ch.addEventListener('click', function(){
+      document.querySelectorAll('#roles .chip').forEach(function(x){x.classList.remove('sel');});
+      ch.classList.add('sel'); role=ch.getAttribute('data-r'); haptic('light');
+    });
+  });
+  document.getElementById('jSend').addEventListener('click', function(){
+    var name=document.getElementById('jName').value.trim();
+    var reason=document.getElementById('jReason').value.trim();
+    if(!name){ toast('Ismingizni yozing'); return; }
+    if(!reason){ toast('Sababini yozing'); return; }
+    haptic('ok');
+    var payload={action:'join', name:name, role:role||'—', reason:reason};
+    if(tg){ try{ tg.sendData(JSON.stringify(payload)); return; }catch(e){} }
+    toast('Yuborildi (test)');
+  });
+
+  // ---- Fon uchqunlari ----
+  var c=document.getElementById('spark');
+  if(c){ var ctx=c.getContext('2d'),dpr=Math.min(window.devicePixelRatio||1,2),W,H,ps=[];
+    var rm=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function sz(){W=c.clientWidth;H=c.clientHeight;c.width=W*dpr;c.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);}
+    function mk(){ps=[];var n=Math.round(Math.min(48,Math.max(22,W*H/26000)));for(var i=0;i<n;i++){ps.push({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.3+.5,a:Math.random()*.35+.06,vy:-(Math.random()*.15+.04),sw:Math.random()*.5+.2,ph:Math.random()*6.28,l:Math.random()<.72});}}
+    function dr(){ctx.clearRect(0,0,W,H);for(var i=0;i<ps.length;i++){var p=ps[i];p.y+=p.vy;p.ph+=.01;var x=p.x+Math.sin(p.ph)*p.sw*6;if(p.y<-4){p.y=H+4;p.x=Math.random()*W;}ctx.beginPath();ctx.arc(x,p.y,p.r,0,6.2832);ctx.fillStyle='rgba('+(p.l?'209,255,26':'255,255,255')+','+p.a+')';ctx.fill();}}
+    var raf;function lp(){dr();raf=requestAnimationFrame(lp);}
+    function st(){cancelAnimationFrame(raf);if(rm){dr();return;}lp();}
+    sz();mk();st();
+    window.addEventListener('resize',function(){sz();mk();},{passive:true});
+    document.addEventListener('visibilitychange',function(){if(document.hidden)cancelAnimationFrame(raf);else if(!rm)st();});
+  }
+})();
+</script>
+</body>
+</html>

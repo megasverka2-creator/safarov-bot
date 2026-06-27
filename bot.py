@@ -59,6 +59,33 @@ CONTEST_CHANNEL = "safaroov_blog"          # qatnashish uchun shu kanalga obuna 
 REF_POINTS = 3                             # har bir taklif uchun ochko
 CONTEST_PHOTO = os.environ.get("CONTEST_PHOTO", "")  # ixtiyoriy: kitob rasmi URL
 
+# ----- "Meni qanchalik bilasiz?" (do'st testi) sozlamalari -----
+QUIZ_FILE = os.path.join(DATA_DIR, "quizzes.json")
+BLOG_URL = "https://t.me/safaroov_blog"   # blog/kanal — kuzatishga taklif
+
+QUIZ_QUESTIONS = [
+    ("Bo'sh vaqtimda nima qilishni yoqtiraman?",
+     ["🎬 Film/serial", "👥 Do'stlar bilan", "😴 Dam olish", "🎮 O'yin/telefon"]),
+    ("Men qanday insonman?",
+     ["🗣 Ekstravert", "🤫 Introvert", "⚖️ O'rtasi", "🎭 Vaziyatga qarab"]),
+    ("Sevimli taom turim?",
+     ["🍲 Milliy taom", "🍔 Fast food", "🍰 Shirinlik", "🥗 Sog'lom ovqat"]),
+    ("Dam olish kunimni qanday o'tkazaman?",
+     ["🏠 Uyda", "✈️ Sayohat/sayr", "👥 Do'stlar bilan", "💼 Ish/o'qish bilan"]),
+    ("Jahlimni nima chiqaradi?",
+     ["🤥 Yolg'on", "⏰ Kechikish", "🙄 E'tiborsizlik", "🫡 Buyruqbozlik"]),
+    ("Sevimli faslim?",
+     ["🌸 Bahor", "☀️ Yoz", "🍂 Kuz", "❄️ Qish"]),
+    ("Qanday musiqa tinglayman?",
+     ["🎧 Zamonaviy/pop", "🪕 Milliy", "🎤 Rep", "🎻 Tinch/klassik"]),
+    ("Stressda nima qilaman?",
+     ["🧘 Yolg'iz qolaman", "💬 Gaplashaman", "🎯 Mashg'ulot", "😴 Uxlayman"]),
+    ("Pul topsam birinchi nima?",
+     ["✈️ Sayohat", "🏦 Jamg'araman", "🎁 Sovg'a qilaman", "🛍 O'zimga"]),
+    ("Eng katta orzuim?",
+     ["🚗 Mashina/uy", "💼 O'z biznesim", "🌍 Chet el", "⭐️ Mashhurlik"]),
+]
+
 CHANNELS = [
     ("✍️ Shaxsiy blog — Safarov",      "safaroov_blog"),
     ("📚 Fikr, adabiyot va hayot",      "Sutuur_uz"),
@@ -357,6 +384,9 @@ async def start(update, context):
     user = update.effective_user
     track_user(user)
     args = context.args
+    if args and args[0].startswith("q_"):
+        await quiz_start_guess(update, context, args[0][2:])
+        return
     if args and args[0].startswith("ref_"):
         ref = args[0][4:]
         users = load_json(USERS_FILE, {})
@@ -424,10 +454,14 @@ async def stats(update, context):
     parts = sum(1 for u in users.values() if u.get("points", 0) > 0)
     top = ranking()[:1]
     top_line = f"\n🥇 Yetakchi: {top[0][1]['name']} ({top[0][1]['points']} ochko)" if top else ""
+    quizzes = load_json(QUIZ_FILE, {})
+    q_made = len(quizzes)
+    q_played = sum(len(z.get("attempts", [])) for z in quizzes.values())
     await update.message.reply_text(
         f"📊 *Statistika*\n\n👥 Jami foydalanuvchi: *{len(users)}*\n"
         f"🟢 Bugun faol: *{active}*\n🤝 Jamoaga arizalar: *{len(apps)}*\n"
-        f"🏆 Konkurs ishtirokchilari: *{parts}*{top_line}",
+        f"🏆 Konkurs ishtirokchilari: *{parts}*{top_line}\n"
+        f"🧩 Testlar: *{q_made}* yaratilgan · *{q_played}* o'ynalgan",
         parse_mode="Markdown")
 
 
@@ -531,11 +565,206 @@ async def on_webapp_data(update, context):
                 f"Yo'nalish: {role}\n\nIsm/yosh: {name}\nSabab: {reason}", reply_markup=kb)
         await update.message.reply_text("✅ Arizangiz qabul qilindi! Tez orada bog'lanamiz. Rahmat! 🤝")
 
+    elif action == "quiz":
+        await quiz_start_create(update, context)
+
     elif "areas" in data:
         await update.message.reply_text(format_result(data), parse_mode="Markdown")
         text, markup = build_advice(data)
         await update.message.reply_text(text, parse_mode="Markdown",
                                         reply_markup=markup, disable_web_page_preview=True)
+
+
+# ==================== "Meni qanchalik bilasiz?" (do'st testi) ====================
+import random
+import string
+
+
+def md_esc(t):
+    """ Markdown maxsus belgilaridan himoya (ism ichida _ * [ ] bo'lsa buzilmasin). """
+    return re.sub(r'([_*\[\]()`])', r'\\\1', str(t))
+
+
+def quiz_label(score):
+    if score >= 9:
+        return "Eng yaqin inson! 🏆"
+    if score >= 7:
+        return "Juda yaxshi bilarkansiz 😎"
+    if score >= 4:
+        return "O'rtacha 🤔"
+    return "Yaqinroq tanishish kerak 😅"
+
+
+def gen_quiz_code():
+    quizzes = load_json(QUIZ_FILE, {})
+    while True:
+        code = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        if code not in quizzes:
+            return code
+
+
+async def quiz_send_question(context, chat_id, message=None):
+    qz = context.user_data.get("quiz")
+    if not qz:
+        return
+    step = qz["step"]
+    question, opts = QUIZ_QUESTIONS[step]
+    if qz["mode"] == "c":
+        head = (f"🧩 *Test yaratish* — {step+1}/10\n\n*{question}*\n"
+                "_(o'zingiz haqingizda to'g'ri javobni tanlang)_")
+    else:
+        head = (f"🧩 *{md_esc(qz['target_name'])}ni qanchalik bilasiz?* — {step+1}/10\n\n"
+                f"*{question}*\n_(uning javobini taxmin qiling)_")
+    rows = [[InlineKeyboardButton(o, callback_data=f"qz:a:{i}")] for i, o in enumerate(opts)]
+    kb = InlineKeyboardMarkup(rows)
+    if message:
+        await message.edit_text(head, reply_markup=kb, parse_mode="Markdown")
+    else:
+        await context.bot.send_message(chat_id, head, reply_markup=kb, parse_mode="Markdown")
+
+
+async def quiz_start_create(update, context):
+    context.user_data["quiz"] = {"mode": "c", "step": 0, "answers": []}
+    await quiz_send_question(context, update.effective_chat.id)
+
+
+async def quiz_start_guess(update, context, code):
+    quizzes = load_json(QUIZ_FILE, {})
+    data = quizzes.get(code)
+    if not data:
+        await update.message.reply_text("😕 Bu test topilmadi yoki o'chirilgan.")
+        return
+    if data.get("creator_id") == update.effective_user.id:
+        await update.message.reply_text(
+            "🙂 Bu — sizning testingiz! Havolani yaqinlaringizga yuboring — ular sizni "
+            "qanchalik bilishini ko'rasiz.")
+        return
+    name = data.get("creator_name") or "Do'stingiz"
+    context.user_data["quiz"] = {
+        "mode": "g", "step": 0, "answers": [], "code": code, "target_name": name,
+    }
+    await update.message.reply_text(
+        f"🧩 *{md_esc(name)}* sizni sinab ko'rmoqchi!\n\n"
+        "10 ta savol bo'ladi — har birida uning javobini taxmin qiling. Tayyormisiz? 👇",
+        parse_mode="Markdown")
+    await quiz_send_question(context, update.effective_chat.id)
+
+
+async def quiz_finish_create(update, context):
+    q = update.callback_query
+    user = update.effective_user
+    qz = context.user_data["quiz"]
+    code = gen_quiz_code()
+    quizzes = load_json(QUIZ_FILE, {})
+    quizzes[code] = {
+        "creator_id": user.id,
+        "creator_name": user.first_name or user.full_name or "Do'stingiz",
+        "answers": qz["answers"],
+        "date": time.strftime("%Y-%m-%d %H:%M"),
+        "attempts": [],
+    }
+    save_json(QUIZ_FILE, quizzes)
+    link = f"https://t.me/{BOT_USERNAME}?start=q_{code}"
+    share_text = "Meni qanchalik yaxshi bilasiz? Sinab ko'ring 👀"
+    share_url = f"https://t.me/share/url?url={quote(link)}&text={quote(share_text)}"
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📤 Do'stlarga yuborish", url=share_url)],
+    ])
+    await q.edit_message_text(
+        "✅ *Testingiz tayyor!* 🎉\n\n"
+        "Endi quyidagi havolani yaqinlaringizga yuboring — ular sizni qanchalik "
+        "bilishini ko'rasiz:\n\n"
+        f"`{link}`\n\n"
+        "👇 yoki bevosita yuboring:",
+        reply_markup=kb, parse_mode="Markdown", disable_web_page_preview=True)
+
+
+async def quiz_finish_guess(update, context):
+    q = update.callback_query
+    user = update.effective_user
+    qz = context.user_data["quiz"]
+    quizzes = load_json(QUIZ_FILE, {})
+    data = quizzes.get(qz["code"])
+    if not data:
+        await q.edit_message_text("😕 Test topilmadi.")
+        return
+    correct = data.get("answers", [])
+    score = sum(1 for i, a in enumerate(qz["answers"]) if i < len(correct) and a == correct[i])
+    label = quiz_label(score)
+    name = data.get("creator_name") or "Do'stingiz"
+    guesser = user.first_name or user.full_name or "Do'stingiz"
+
+    data.setdefault("attempts", []).append({
+        "id": user.id, "name": guesser, "score": score,
+        "date": time.strftime("%Y-%m-%d %H:%M"),
+    })
+    save_json(QUIZ_FILE, quizzes)
+
+    result = (
+        "🧩 *Natija*\n\n"
+        f"Siz *{md_esc(name)}*ni *{score}/10* bilasiz!\n"
+        f"*{label}*\n\n"
+        "🌿 Rahmat, qatnashganingiz uchun!\n"
+        "Agar bunday qiziqarli o'yinlar yoqsa, blogni kuzatib boring 😊\n\n"
+        "🎡 Hayot G'ildiragi  ·  🏆 Yutuqli mini-konkurslar  ·  ✍️ Foydali postlar"
+    )
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("➕ O'z testingizni yarating", callback_data="qz:new")],
+        [InlineKeyboardButton("📩 Blogni kuzatish", url=BLOG_URL)],
+    ])
+    await q.edit_message_text(result, reply_markup=kb, parse_mode="Markdown",
+                              disable_web_page_preview=True)
+
+    # yaratuvchiga bildirishnoma
+    try:
+        await context.bot.send_message(
+            int(data["creator_id"]),
+            f"🔔 *{md_esc(guesser)}* sizni *{score}/10* bildi! {label}",
+            parse_mode="Markdown")
+    except Exception:
+        pass
+
+
+async def quiz_cmd(update, context):
+    """ /sinov — testni bevosita boshlash (Mini App'siz sinash uchun). """
+    track_user(update.effective_user)
+    await quiz_start_create(update, context)
+
+
+async def on_quiz_cb(update, context):
+    q = update.callback_query
+    data = q.data
+
+    if data == "qz:new":
+        await q.answer()
+        context.user_data["quiz"] = {"mode": "c", "step": 0, "answers": []}
+        await quiz_send_question(context, q.message.chat_id, message=q.message)
+        return
+
+    if not data.startswith("qz:a:"):
+        await q.answer()
+        return
+
+    qz = context.user_data.get("quiz")
+    if not qz:
+        await q.answer()
+        await q.edit_message_text("⏳ Sessiya tugagan. /sinov yozib qaytadan boshlang.")
+        return
+
+    await q.answer()
+    opt = int(data.split(":")[2])
+    qz["answers"].append(opt)
+    qz["step"] += 1
+
+    if qz["step"] < len(QUIZ_QUESTIONS):
+        await quiz_send_question(context, q.message.chat_id, message=q.message)
+        return
+
+    if qz["mode"] == "c":
+        await quiz_finish_create(update, context)
+    else:
+        await quiz_finish_guess(update, context)
+    context.user_data.pop("quiz", None)
 
 
 async def post_init(app):
@@ -559,8 +788,10 @@ def main():
     app.add_handler(CommandHandler("kanallar", kanallar))
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CommandHandler("xabar", xabar))
+    app.add_handler(CommandHandler("sinov", quiz_cmd))
     app.add_handler(CallbackQueryHandler(on_gen, pattern="^gen:"))
     app.add_handler(CallbackQueryHandler(on_contest_cb, pattern="^con_"))
+    app.add_handler(CallbackQueryHandler(on_quiz_cb, pattern="^qz:"))
     app.add_handler(CallbackQueryHandler(admin_decide, pattern="^(acc|rej):"))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
     print("Bot ishga tushdi...")
