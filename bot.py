@@ -86,6 +86,78 @@ QUIZ_QUESTIONS = [
      ["Mashina/uy", "O'z biznesim", "Chet el", "Mashhurlik"]),
 ]
 
+# ----- "Shaxsiyat / ichki kuch testi" -----
+# Har variant tur harfi bilan: Y=Yetakchi, D=Donishmand, I=Izlanuvchi, M=Mehribon
+PTEST_QUESTIONS = [
+    ("Do'stlar davrasida odatda men...", [
+        ("Suhbatni boshqaraman, yo'naltiraman", "Y"),
+        ("Ko'proq kuzataman, tahlil qilaman", "D"),
+        ("Yangi g'oya yoki mavzu tashlayman", "I"),
+        ("Tinglayman, hammani qo'llab-quvvatlayman", "M")]),
+    ("Muammoga duch kelganda...", [
+        ("Tez qaror qilib harakatga o'taman", "Y"),
+        ("O'ylab, har tomonini tahlil qilaman", "D"),
+        ("Yangi, kutilmagan yo'l izlayman", "I"),
+        ("Yaqinlarimdan maslahat so'rayman", "M")]),
+    ("Bo'sh vaqtimda ko'proq...", [
+        ("Reja tuzaman, maqsad qo'yaman", "Y"),
+        ("Kitob o'qiyman, fikr yuritaman", "D"),
+        ("Yangi narsa o'rganaman, sinab ko'raman", "I"),
+        ("Yaqinlarim bilan vaqt o'tkazaman", "M")]),
+    ("Meni eng ko'p ilhomlantiradigan narsa...", [
+        ("G'alaba va natija", "Y"),
+        ("Bilim va haqiqat", "D"),
+        ("Yangilik va o'sish", "I"),
+        ("Insonlar va munosabatlar", "M")]),
+    ("Jamoada men odatda...", [
+        ("Yetakchilik qilaman", "Y"),
+        ("Strategiya va rejani o'ylayman", "D"),
+        ("G'oyalar manbasiman", "I"),
+        ("Jamoani birlashtiraman", "M")]),
+    ("Qaror qabul qilishda asosan...", [
+        ("Maqsadga qarayman", "Y"),
+        ("Mantiq va faktlarga", "D"),
+        ("Sezgi va imkoniyatga", "I"),
+        ("Odamlarga ta'siriga", "M")]),
+    ("Men uchun muvaffaqiyat — bu...", [
+        ("Qo'ygan maqsadga erishish", "Y"),
+        ("Narsalarni chuqur tushunish", "D"),
+        ("Doimiy o'sib borish", "I"),
+        ("Atrofdagilarni baxtli qilish", "M")]),
+    ("Tanqidni qanday qabul qilaman?", [
+        ("Kuchli bo'lib, oldinga intilaman", "Y"),
+        ("Tahlil qilib, xulosa chiqaraman", "D"),
+        ("O'sish imkoni deb bilaman", "I"),
+        ("His bilan, lekin tushunaman", "M")]),
+    ("Yangi loyihada birinchi...", [
+        ("Maqsad va rejani belgilayman", "Y"),
+        ("Hamma narsani o'rganib chiqaman", "D"),
+        ("Eksperiment qilib ko'raman", "I"),
+        ("Jamoani yig'aman", "M")]),
+    ("Atrofdagilar meni ko'proq... deb biladi", [
+        ("Qat'iyatli va yetakchi", "Y"),
+        ("Aqlli va dono", "D"),
+        ("Qiziquvchan va ijodkor", "I"),
+        ("Mehribon va g'amxo'r", "M")]),
+]
+
+PTEST_RESULTS = {
+    "Y": ("🦅 Yetakchi",
+          "Siz tug'ma yetakchisiz! Qat'iyat, maqsadga intilish va boshqalarni "
+          "ergashtira olish — sizning kuchingiz. Qiyinchilikdan qo'rqmaysiz va "
+          "atrofdagilarga ilhom berasiz."),
+    "D": ("🧠 Donishmand",
+          "Siz — Donishmandsiz! Chuqur fikrlash, tahlil va bilimga chanqoqlik sizni "
+          "ajratib turadi. Shoshilmasdan, dono qarorlar qabul qilasiz — atrofdagilar "
+          "maslahatingizni qadrlaydi."),
+    "I": ("🌱 Izlanuvchi",
+          "Siz — Izlanuvchisiz! Qiziquvchanlik, ijod va doimiy o'sish — sizning "
+          "yo'lingiz. Yangilikdan qo'rqmaysiz, hayotni katta sarguzasht deb bilasiz."),
+    "M": ("❤️ Mehribon",
+          "Siz — Mehribonsiz! Hamdardlik, g'amxo'rlik va insonlarni tushunish — eng "
+          "katta kuchingiz. Atrofdagilarga iliqlik ulashasiz va haqiqiy do'stsiz."),
+}
+
 CHANNELS = [
     ("✍️ Shaxsiy blog — Safarov",      "safaroov_blog"),
     ("📚 Fikr, adabiyot va hayot",      "Sutuur_uz"),
@@ -384,6 +456,9 @@ async def start(update, context):
     user = update.effective_user
     track_user(user)
     args = context.args
+    if args and args[0] == "pt":
+        await ptest_start(update, context)
+        return
     if args and args[0].startswith("q_"):
         await quiz_start_guess(update, context, args[0][2:])
         return
@@ -564,6 +639,9 @@ async def on_webapp_data(update, context):
                 ADMIN_ID, f"🆕 Yangi ariza\n\n👤 {user.full_name} {uname}\n🆔 {user.id}\n"
                 f"Yo'nalish: {role}\n\nIsm/yosh: {name}\nSabab: {reason}", reply_markup=kb)
         await update.message.reply_text("✅ Arizangiz qabul qilindi! Tez orada bog'lanamiz. Rahmat! 🤝")
+
+    elif action == "ptest":
+        await ptest_start(update, context)
 
     elif action == "quiz_create":
         answers = [str(a).strip()[:80] for a in (data.get("answers") or []) if str(a).strip()][:10]
@@ -809,6 +887,74 @@ async def on_quiz_cb(update, context):
     context.user_data.pop("quiz", None)
 
 
+# ==================== Shaxsiyat / ichki kuch testi ====================
+async def ptest_send_question(context, chat_id, message=None):
+    pt = context.user_data.get("ptest")
+    if not pt:
+        return
+    step = pt["step"]
+    question, opts = PTEST_QUESTIONS[step]
+    head = f"🌟 *Shaxsiyat testi* — {step+1}/10\n\n*{question}*"
+    rows = [[InlineKeyboardButton(o[0], callback_data=f"pt:a:{i}")] for i, o in enumerate(opts)]
+    kb = InlineKeyboardMarkup(rows)
+    if message:
+        await message.edit_text(head, reply_markup=kb, parse_mode="Markdown")
+    else:
+        await context.bot.send_message(chat_id, head, reply_markup=kb, parse_mode="Markdown")
+
+
+async def ptest_start(update, context):
+    context.user_data["ptest"] = {"step": 0, "scores": {"Y": 0, "D": 0, "I": 0, "M": 0}}
+    await ptest_send_question(context, update.effective_chat.id)
+
+
+async def ptest_cmd(update, context):
+    track_user(update.effective_user)
+    await ptest_start(update, context)
+
+
+async def on_ptest_cb(update, context):
+    q = update.callback_query
+    if q.data == "pt:again":
+        await q.answer()
+        context.user_data["ptest"] = {"step": 0, "scores": {"Y": 0, "D": 0, "I": 0, "M": 0}}
+        await ptest_send_question(context, q.message.chat_id, message=q.message)
+        return
+    if not q.data.startswith("pt:a:"):
+        await q.answer()
+        return
+    pt = context.user_data.get("ptest")
+    if not pt:
+        await q.answer()
+        await q.edit_message_text("⏳ Sessiya tugagan. /shaxs yozib qaytadan boshlang.")
+        return
+    await q.answer()
+    opt = int(q.data.split(":")[2])
+    step = pt["step"]
+    typ = PTEST_QUESTIONS[step][1][opt][1]
+    pt["scores"][typ] += 1
+    pt["step"] += 1
+
+    if pt["step"] < len(PTEST_QUESTIONS):
+        await ptest_send_question(context, q.message.chat_id, message=q.message)
+        return
+
+    winner = max(pt["scores"], key=lambda k: pt["scores"][k])
+    name, desc = PTEST_RESULTS[winner]
+    link = f"https://t.me/{BOT_USERNAME}?start=pt"
+    share_text = f"Men shaxsiyat testida '{name}' chiqdim! 🌟 Sen qaysi turdasan?"
+    share_url = f"https://t.me/share/url?url={quote(link)}&text={quote(share_text)}"
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📤 Natijani ulashish", url=share_url)],
+        [InlineKeyboardButton("🔁 Qaytadan", callback_data="pt:again"),
+         InlineKeyboardButton("📩 Blog", url=BLOG_URL)],
+    ])
+    await q.edit_message_text(
+        f"🌟 *Sizning natijangiz:*\n\n*{name}*\n\n{desc}",
+        reply_markup=kb, parse_mode="Markdown", disable_web_page_preview=True)
+    context.user_data.pop("ptest", None)
+
+
 async def post_init(app):
     global BOT_USERNAME
     try:
@@ -831,9 +977,11 @@ def main():
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CommandHandler("xabar", xabar))
     app.add_handler(CommandHandler("sinov", quiz_cmd))
+    app.add_handler(CommandHandler("shaxs", ptest_cmd))
     app.add_handler(CallbackQueryHandler(on_gen, pattern="^gen:"))
     app.add_handler(CallbackQueryHandler(on_contest_cb, pattern="^con_"))
     app.add_handler(CallbackQueryHandler(on_quiz_cb, pattern="^qz:"))
+    app.add_handler(CallbackQueryHandler(on_ptest_cb, pattern="^pt:"))
     app.add_handler(CallbackQueryHandler(admin_decide, pattern="^(acc|rej):"))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
     print("Bot ishga tushdi...")
