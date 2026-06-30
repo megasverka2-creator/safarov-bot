@@ -19,7 +19,7 @@ import json
 import time
 import asyncio
 import httpx
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from urllib.parse import quote
 from bs4 import BeautifulSoup
 from telegram import (
@@ -162,7 +162,12 @@ PTEST_RESULTS = {
 K2_FILE = os.path.join(DATA_DIR, "k2.json")
 K2_CHANNELS = ["sutuur_uz", "sutuur_kitoblari"]   # bot bu kanallarda ADMIN bo'lishi SHART
 K2_PRIZE = "«O'tkan kunlar» — Abdulla Qodiriy (3 jildlik)"
-K2_DEADLINE = "2-iyul, 21:00"                      # e'lon uchun; g'olibni admin /golib2 bilan tanlaydi
+K2_DEADLINE = "2-iyul, 21:00"                      # e'lon uchun (ko'rsatiladigan matn)
+K2_DEADLINE_LOCAL = "2026-07-02 21:00"             # avtomatik tanlov vaqti (Toshkent, UTC+5)
+TASHKENT_TZ = timezone(timedelta(hours=5))
+
+def k2_deadline_dt():
+    return datetime.strptime(K2_DEADLINE_LOCAL, "%Y-%m-%d %H:%M").replace(tzinfo=TASHKENT_TZ)
 K2_POST_CHANNEL = "sutuur_uz"                       # e'lon shu kanalga joylanadi (bot 'Post' huquqli admin bo'lsin)
 K2_POST_CAPTION = (
     "📚 2-MINI KONKURS — «O'tkan kunlar» sovrin! 🎁\n\n"
@@ -1119,6 +1124,50 @@ async def k2_reset(update, context):
         "Endi /elon2 bilan e'lonni qaytadan joylang.")
 
 
+async def k2_auto_draw(context):
+    """ Belgilangan vaqtda avtomatik: tasodifiy g'olib + kanalga e'lon + g'olibga xabar. """
+    data = k2_load()
+    if not data.get("active") or data.get("winner"):
+        return  # allaqachon tanlangan yoki yopilgan — qayta tanlamaydi
+    parts = data["participants"]
+    if not parts:
+        data["active"] = False
+        save_json(K2_FILE, data)
+        if ADMIN_ID:
+            try:
+                await context.bot.send_message(ADMIN_ID, "ℹ️ 2-konkurs vaqti tugadi, lekin ishtirokchi bo'lmadi.")
+            except Exception:
+                pass
+        return
+    uid, rec = random.choice(list(parts.items()))
+    data["winner"] = {"id": int(uid), "number": rec["number"], "name": rec["name"]}
+    data["active"] = False
+    save_json(K2_FILE, data)
+    text = (f"🏆 *2-MINI KONKURS — G'OLIB!*\n\n"
+            f"Jami *{len(parts)}* ishtirokchi orasidan tasodifiy tanlandi:\n\n"
+            f"🎉 *{md_esc(rec['name'])}* — raqam #{rec['number']}\n\n"
+            f"🎁 Sovrin: {K2_PRIZE}\n\nTabriklaymiz! 🍀")
+    try:
+        await context.bot.send_message(f"@{K2_POST_CHANNEL}", text, parse_mode="Markdown")
+    except Exception:
+        pass
+    try:
+        await context.bot.send_message(
+            int(uid),
+            f"🎉 *Tabriklaymiz!* Siz 2-Mini Konkurs g'olibi bo'ldingiz!\n\n"
+            f"🏆 Sovrin: {K2_PRIZE}\n\nTez orada siz bilan bog'lanamiz.",
+            parse_mode="Markdown")
+    except Exception:
+        pass
+    if ADMIN_ID:
+        try:
+            await context.bot.send_message(
+                ADMIN_ID, f"✅ G'olib avtomatik tanlandi va @{K2_POST_CHANNEL} ga e'lon qilindi: "
+                          f"{rec['name']} #{rec['number']}")
+        except Exception:
+            pass
+
+
 async def k2_golib(update, context):
     """ /golib2 — admin tasodifiy g'olibni tanlaydi. """
     if update.effective_user.id != ADMIN_ID:
@@ -1161,6 +1210,16 @@ async def post_init(app):
         await app.bot.set_chat_menu_button(menu_button=MenuButtonDefault())
     except Exception:
         pass
+    # 2-Mini Konkurs: belgilangan vaqtda avtomatik g'olib tanlash taymeri
+    try:
+        jq = app.job_queue
+        if jq is not None:
+            jq.run_once(k2_auto_draw, when=k2_deadline_dt(), name="k2_draw")
+            print(f"[K2] Avtomatik g'olib taymeri o'rnatildi: {K2_DEADLINE_LOCAL} (Toshkent)")
+        else:
+            print("[K2] OGOHLANTIRISH: job_queue yo'q — requirements.txt da [job-queue] kerak.")
+    except Exception as e:
+        print(f"[K2] Taymer o'rnatilmadi: {e}")
 
 
 def main():
