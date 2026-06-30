@@ -158,6 +158,24 @@ PTEST_RESULTS = {
           "katta kuchingiz. Atrofdagilarga iliqlik ulashasiz va haqiqiy do'stsiz."),
 }
 
+# ----- 2-Mini Konkurs (obuna + tasodifiy g'olib) -----
+K2_FILE = os.path.join(DATA_DIR, "k2.json")
+K2_CHANNELS = ["sutuur_uz", "sutuur_kitoblari"]   # bot bu kanallarda ADMIN bo'lishi SHART
+K2_PRIZE = "«O'tkan kunlar» — Abdulla Qodiriy (3 jildlik)"
+K2_DEADLINE = "2-iyul, 21:00"                      # e'lon uchun; g'olibni admin /golib2 bilan tanlaydi
+K2_POST_CHANNEL = "sutuur_uz"                       # e'lon shu kanalga joylanadi (bot 'Post' huquqli admin bo'lsin)
+K2_POST_CAPTION = (
+    "📚 2-MINI KONKURS — «O'tkan kunlar» sovrin! 🎁\n\n"
+    "Abdulla Qodiriyning mashhur «O'tkan kunlar» asari (3 jildlik, Hilol Nashr) — "
+    "bir baxtli g'olibga sovg'a!\n\n"
+    "✅ Qatnashish shartlari:\n"
+    "1️⃣ @sutuur_uz va @sutuur_kitoblari kanallariga obuna bo'ling\n"
+    "2️⃣ Ushbu post izohiga «Kitob» deb yozing\n"
+    "3️⃣ Pastdagi tugma orqali raqamingizni oling 👇\n\n"
+    "📅 G'olib " + K2_DEADLINE + " dan so'ng TASODIFIY tanlanadi.\n\n"
+    "Omad tilaymiz! 🍀"
+)
+
 CHANNELS = [
     ("✍️ Shaxsiy blog — Safarov",      "safaroov_blog"),
     ("📚 Fikr, adabiyot va hayot",      "Sutuur_uz"),
@@ -456,6 +474,9 @@ async def start(update, context):
     user = update.effective_user
     track_user(user)
     args = context.args
+    if args and args[0] == "k2":
+        await k2_join(update, context)
+        return
     if args and args[0] == "pt":
         await ptest_start(update, context)
         return
@@ -639,6 +660,9 @@ async def on_webapp_data(update, context):
                 ADMIN_ID, f"🆕 Yangi ariza\n\n👤 {user.full_name} {uname}\n🆔 {user.id}\n"
                 f"Yo'nalish: {role}\n\nIsm/yosh: {name}\nSabab: {reason}", reply_markup=kb)
         await update.message.reply_text("✅ Arizangiz qabul qilindi! Tez orada bog'lanamiz. Rahmat! 🤝")
+
+    elif action == "k2":
+        await k2_join(update, context)
 
     elif action == "ptest":
         await ptest_start(update, context)
@@ -955,6 +979,163 @@ async def on_ptest_cb(update, context):
     context.user_data.pop("ptest", None)
 
 
+# ==================== 2-Mini Konkurs (obuna + tasodifiy g'olib) ====================
+async def k2_check_subs(bot, uid):
+    """ Foydalanuvchi K2_CHANNELS dagi BARCHA kanallarga obunami? """
+    for ch in K2_CHANNELS:
+        try:
+            m = await bot.get_chat_member(f"@{ch}", uid)
+            if m.status not in ("member", "administrator", "creator"):
+                return False
+        except Exception:
+            return False
+    return True
+
+
+def k2_load():
+    return load_json(K2_FILE, {"active": True, "counter": 0, "participants": {}, "winner": None})
+
+
+def k2_subscribe_kb():
+    rows = [[InlineKeyboardButton(f"📣 @{ch} ga obuna", url=f"https://t.me/{ch}")] for ch in K2_CHANNELS]
+    rows.append([InlineKeyboardButton("🔄 Tekshirish", callback_data="k2:check")])
+    return InlineKeyboardMarkup(rows)
+
+
+def k2_give_number(data, user):
+    """ Yangi raqam beradi va saqlaydi. Raqamni qaytaradi. """
+    data["counter"] += 1
+    num = data["counter"]
+    data["participants"][str(user.id)] = {
+        "number": num,
+        "name": user.first_name or user.full_name or "Ishtirokchi",
+        "date": time.strftime("%Y-%m-%d %H:%M"),
+    }
+    save_json(K2_FILE, data)
+    return num
+
+
+def k2_joined_text(num):
+    return (f"🎉 *Tabriklaymiz! Konkursga qo'shildingiz.*\n\n"
+            f"🎟 Tartib raqamingiz: *{num}*\n\n"
+            f"🏆 Sovrin: {K2_PRIZE}\n"
+            f"📅 G'olib {K2_DEADLINE} dan so'ng ishtirokchilar orasidan TASODIFIY tanlanadi.\n\n"
+            "Omad! 🍀")
+
+
+async def k2_join(update, context):
+    user = update.effective_user
+    track_user(user)
+    chat_id = update.effective_chat.id
+    data = k2_load()
+    if not data.get("active"):
+        await context.bot.send_message(chat_id, "⛔️ Konkurs yakunlangan. Keyingisini kuting!")
+        return
+    rec = data["participants"].get(str(user.id))
+    if rec:
+        await context.bot.send_message(
+            chat_id,
+            f"✅ Siz allaqachon qatnashgansiz!\n\n🎟 Sizning raqamingiz: *{rec['number']}*\n\n"
+            f"📅 G'olib {K2_DEADLINE} dan so'ng tasodifiy tanlanadi.",
+            parse_mode="Markdown")
+        return
+    if not await k2_check_subs(context.bot, user.id):
+        await context.bot.send_message(
+            chat_id,
+            "📋 *Qatnashish uchun:*\n\n"
+            "1️⃣ Quyidagi ikkala kanalga obuna bo'ling\n"
+            "2️⃣ E'lon postiga «Kitob» deb izoh yozing\n"
+            "3️⃣ «🔄 Tekshirish» tugmasini bosing\n\n"
+            "Obuna bo'lgach, sizga tartib raqami beriladi 👇",
+            reply_markup=k2_subscribe_kb(), parse_mode="Markdown")
+        return
+    num = k2_give_number(data, user)
+    await context.bot.send_message(chat_id, k2_joined_text(num), parse_mode="Markdown")
+
+
+async def k2_cmd(update, context):
+    await k2_join(update, context)
+
+
+async def on_k2_cb(update, context):
+    q = update.callback_query
+    if q.data != "k2:check":
+        await q.answer()
+        return
+    user = update.effective_user
+    data = k2_load()
+    if data["participants"].get(str(user.id)):
+        rec = data["participants"][str(user.id)]
+        await q.answer()
+        await q.edit_message_text(
+            f"✅ Siz allaqachon qatnashgansiz!\n🎟 Raqamingiz: *{rec['number']}*",
+            parse_mode="Markdown")
+        return
+    if not data.get("active"):
+        await q.answer()
+        await q.edit_message_text("⛔️ Konkurs yakunlangan.")
+        return
+    if await k2_check_subs(context.bot, user.id):
+        num = k2_give_number(data, user)
+        await q.answer("Qabul qilindi! 🎉")
+        await q.edit_message_text(k2_joined_text(num), parse_mode="Markdown")
+    else:
+        await q.answer("Hali ikkala kanalga ham obuna bo'lmagansiz ❌", show_alert=True)
+
+
+async def k2_elon(update, context):
+    """ /elon2 — admin kitob rasmiga reply qilsa, bot e'lonni tugma bilan kanalga joylaydi. """
+    if update.effective_user.id != ADMIN_ID:
+        return
+    msg = update.message.reply_to_message
+    if not msg or not msg.photo:
+        await update.message.reply_text(
+            "❗️ Avval menga kitob rasmini yuboring, keyin o'sha rasmga REPLY qilib /elon2 yozing.")
+        return
+    photo_id = msg.photo[-1].file_id
+    btn = InlineKeyboardMarkup([[InlineKeyboardButton(
+        "🤖 Raqam olish", url=f"https://t.me/{BOT_USERNAME}?start=k2")]])
+    try:
+        await context.bot.send_photo(
+            f"@{K2_POST_CHANNEL}", photo=photo_id,
+            caption=K2_POST_CAPTION, reply_markup=btn)
+        await update.message.reply_text(f"✅ E'lon @{K2_POST_CHANNEL} ga joylandi (tugma bilan)!")
+    except Exception as e:
+        await update.message.reply_text(
+            f"⚠️ Joylab bo'lmadi: {e}\n\n"
+            f"Bot @{K2_POST_CHANNEL} da 'Post Messages' huquqli admin ekanini tekshiring.")
+
+
+async def k2_golib(update, context):
+    """ /golib2 — admin tasodifiy g'olibni tanlaydi. """
+    if update.effective_user.id != ADMIN_ID:
+        return
+    data = k2_load()
+    parts = data["participants"]
+    if not parts:
+        await update.message.reply_text("Hozircha ishtirokchi yo'q.")
+        return
+    uid, rec = random.choice(list(parts.items()))
+    data["winner"] = {"id": int(uid), "number": rec["number"], "name": rec["name"]}
+    data["active"] = False
+    save_json(K2_FILE, data)
+    await update.message.reply_text(
+        f"🏆 *2-MINI KONKURS — G'OLIB!*\n\n"
+        f"Jami *{len(parts)}* ishtirokchi orasidan tasodifiy tanlandi:\n\n"
+        f"🎉 *{md_esc(rec['name'])}* — raqam #{rec['number']}\n\n"
+        f"🎁 Sovrin: {K2_PRIZE}\n\n"
+        f"_(Bu matnni kanalga e'lon qiling)_",
+        parse_mode="Markdown")
+    try:
+        await context.bot.send_message(
+            int(uid),
+            f"🎉 *Tabriklaymiz!* Siz 2-Mini Konkurs g'olibi bo'ldingiz!\n\n"
+            f"🏆 Sovrin: {K2_PRIZE}\n\nTez orada siz bilan bog'lanamiz.",
+            parse_mode="Markdown")
+    except Exception:
+        pass
+
+
 async def post_init(app):
     global BOT_USERNAME
     try:
@@ -978,10 +1159,14 @@ def main():
     app.add_handler(CommandHandler("xabar", xabar))
     app.add_handler(CommandHandler("sinov", quiz_cmd))
     app.add_handler(CommandHandler("shaxs", ptest_cmd))
+    app.add_handler(CommandHandler("raqam", k2_cmd))
+    app.add_handler(CommandHandler("elon2", k2_elon))
+    app.add_handler(CommandHandler("golib2", k2_golib))
     app.add_handler(CallbackQueryHandler(on_gen, pattern="^gen:"))
     app.add_handler(CallbackQueryHandler(on_contest_cb, pattern="^con_"))
     app.add_handler(CallbackQueryHandler(on_quiz_cb, pattern="^qz:"))
     app.add_handler(CallbackQueryHandler(on_ptest_cb, pattern="^pt:"))
+    app.add_handler(CallbackQueryHandler(on_k2_cb, pattern="^k2:"))
     app.add_handler(CallbackQueryHandler(admin_decide, pattern="^(acc|rej):"))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
     print("Bot ishga tushdi...")
