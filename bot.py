@@ -1106,6 +1106,19 @@ async def k2_elon(update, context):
             f"Bot @{K2_POST_CHANNEL} da 'Post Messages' huquqli admin ekanini tekshiring.")
 
 
+async def k2_reset(update, context):
+    """ /reset2 — admin konkursni toza holatga qaytaradi (raqamlar 1 dan boshlanadi). """
+    if update.effective_user.id != ADMIN_ID:
+        return
+    save_json(K2_FILE, {"active": True, "counter": 0, "participants": {}, "winner": None})
+    await update.message.reply_text(
+        "♻️ 2-Mini Konkurs tozalandi!\n\n"
+        "• Barcha test raqamlar o'chirildi\n"
+        "• Konkurs faol holatga qaytdi\n"
+        "• Keyingi raqam 1 dan boshlanadi\n\n"
+        "Endi /elon2 bilan e'lonni qaytadan joylang.")
+
+
 async def k2_golib(update, context):
     """ /golib2 — admin tasodifiy g'olibni tanlaydi. """
     if update.effective_user.id != ADMIN_ID:
@@ -1161,6 +1174,7 @@ def main():
     app.add_handler(CommandHandler("shaxs", ptest_cmd))
     app.add_handler(CommandHandler("raqam", k2_cmd))
     app.add_handler(CommandHandler("elon2", k2_elon))
+    app.add_handler(CommandHandler("reset2", k2_reset))
     app.add_handler(CommandHandler("golib2", k2_golib))
     app.add_handler(CallbackQueryHandler(on_gen, pattern="^gen:"))
     app.add_handler(CallbackQueryHandler(on_contest_cb, pattern="^con_"))
