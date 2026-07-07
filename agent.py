@@ -66,7 +66,8 @@ TZ = ZoneInfo("Asia/Tashkent")
 MODEL = "gpt-4o-mini"
 MIN_SCORE = 7
 MAX_POSTS_PER_DAY = 5
-MAX_API_CALLS_PER_DAY = 15
+MAX_API_CALLS_PER_DAY = 40     # kuniga ~$0.04 dan oshmaydi
+SCORING_RESERVE = MAX_POSTS_PER_DAY  # post yozish uchun doim zaxira chaqiruv qoladi
 ARTICLE_CHAR_LIMIT = 8000
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) AppleWebKit/537.36"
 
@@ -101,6 +102,11 @@ def db():
         created_at TEXT)""")
     conn.execute("""CREATE TABLE IF NOT EXISTS agent_meta(
         key TEXT PRIMARY KEY, value TEXT)""")
+    # Migratsiya: eski bazaga summary ustunini qo'shish
+    try:
+        conn.execute("ALTER TABLE agent_articles ADD COLUMN summary TEXT")
+    except sqlite3.OperationalError:
+        pass  # ustun allaqachon bor
     return conn
 
 
@@ -204,7 +210,8 @@ def ai_write_post(conn, url, article_text):
 # AGENT — ASOSIY OQIM
 # ======================================================================
 def fetch_new_articles(conn):
-    fresh = []
+    """RSS manbalardan bazada yo'q maqolalarni 'new' holatida saqlaydi."""
+    added = 0
     for source_name, feed_url in SOURCES:
         try:
             feed = feedparser.parse(feed_url, agent=USER_AGENT)
@@ -220,12 +227,12 @@ def fetch_new_articles(conn):
             title = entry.get("title", "(nomsiz)")
             summary = entry.get("summary", "") or entry.get("description", "")
             conn.execute(
-                "INSERT OR IGNORE INTO agent_articles(url,title,source,seen_at) VALUES(?,?,?,?)",
-                (url, title, source_name, datetime.now(TZ).isoformat()))
-            fresh.append({"url": url, "title": title,
-                          "summary": summary, "source": source_name})
+                "INSERT OR IGNORE INTO agent_articles(url,title,source,seen_at,summary) "
+                "VALUES(?,?,?,?,?)",
+                (url, title, source_name, datetime.now(TZ).isoformat(), summary[:2000]))
+            added += 1
     conn.commit()
-    return fresh
+    return added
 
 
 async def run_agent(context: ContextTypes.DEFAULT_TYPE):
@@ -234,44 +241,55 @@ async def run_agent(context: ContextTypes.DEFAULT_TYPE):
         conn.close()
         return
 
-    fresh = fetch_new_articles(conn)
-    log.info("Agent: yangi maqolalar %d", len(fresh))
-    if not fresh:
-        conn.close()
-        return
+    added = fetch_new_articles(conn)
+    log.info("Agent: yangi maqolalar %d", added)
 
-    for art in fresh:
-        score = ai_score(conn, art["title"], art["summary"])
-        art["score"] = score if score is not None else 0
+    # --- Bosqich A: saralash ('new' navbatidan; post yozish uchun zaxira qoladi) ---
+    queue = conn.execute(
+        "SELECT url, title, COALESCE(summary,'') FROM agent_articles "
+        "WHERE status='new' ORDER BY seen_at DESC LIMIT 30").fetchall()
+    for url, title, summary in queue:
+        if api_calls_today(conn) >= MAX_API_CALLS_PER_DAY - SCORING_RESERVE:
+            log.info("Saralash to'xtadi — zaxira limitiga yetildi, qolgani ertaga.")
+            break
+        score = ai_score(conn, title, summary)
+        if score is None:
+            break
         conn.execute("UPDATE agent_articles SET score=?, status='scored' WHERE url=?",
-                     (art["score"], art["url"]))
+                     (score, url))
     conn.commit()
 
-    candidates = sorted(
-        [a for a in fresh if a["score"] >= MIN_SCORE],
-        key=lambda a: a["score"], reverse=True)[:MAX_POSTS_PER_DAY]
+    # --- Bosqich B: nomzodlar bazadan (saralangan, hali post yozilmaganlar) ---
+    candidates = conn.execute(
+        "SELECT url, title, source, score, COALESCE(summary,'') FROM agent_articles "
+        "WHERE status='scored' AND score>=? "
+        "ORDER BY score DESC, seen_at DESC LIMIT ?",
+        (MIN_SCORE, MAX_POSTS_PER_DAY)).fetchall()
+    log.info("Nomzodlar: %d", len(candidates))
 
-    for art in candidates:
+    for url, title, source, score, summary in candidates:
         try:
-            downloaded = trafilatura.fetch_url(art["url"])
+            downloaded = trafilatura.fetch_url(url)
             text = trafilatura.extract(downloaded) if downloaded else None
             if not text:
-                text = art["title"] + "\n\n" + art["summary"]
-            post_text = ai_write_post(conn, art["url"], text)
+                text = title + "\n\n" + summary
+            post_text = ai_write_post(conn, url, text)
             if not post_text:
-                break  # kunlik API limiti tugadi
-            cur = conn.execute(
+                log.info("Kunlik API limiti tugadi — qolgan nomzodlar ertaga.")
+                break
+            conn.execute(
                 "INSERT INTO agent_posts(article_url,text,created_at) VALUES(?,?,?)",
-                (art["url"], post_text, datetime.now(TZ).isoformat()))
+                (url, post_text, datetime.now(TZ).isoformat()))
+            conn.execute("UPDATE agent_articles SET status='posted' WHERE url=?", (url,))
             conn.commit()
-            post_id = cur.lastrowid
+            post_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
             kb = InlineKeyboardMarkup([[
                 InlineKeyboardButton("✅ Kanalga jo'natish", callback_data=f"agpub:{post_id}"),
                 InlineKeyboardButton("❌ O'tkazish", callback_data=f"agskip:{post_id}"),
             ]])
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
-                text=f"📬 Yangi post-nomzod ({art['source']}, baho {art['score']}/10):"
+                text=f"📬 Yangi post-nomzod ({source}, baho {score}/10):"
                      f"\n\n{post_text}",
                 reply_markup=kb,
             )
@@ -279,7 +297,7 @@ async def run_agent(context: ContextTypes.DEFAULT_TYPE):
             log.exception("Agent xatosi: %s", e)
             try:
                 await context.bot.send_message(
-                    ADMIN_ID, f"⚠️ Agent xatosi ({art['url']}): {e}")
+                    ADMIN_ID, f"⚠️ Agent xatosi ({url}): {e}")
             except Exception:
                 pass
     conn.close()
