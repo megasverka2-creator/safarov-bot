@@ -1,0 +1,418 @@
+# -*- coding: utf-8 -*-
+"""
+agent.py — AI Yangiliklar Agenti (@safarovblog_bot uchun modul)
+================================================================
+
+Mavjud bot.py ga ULANADI, uni almashtirmaydi. Konkurs, testlar va boshqa
+funksiyalarga tegmaydi.
+
+Ulash — bot.py ga atigi 2 qator:
+
+    import agent                      # fayl boshidagi importlar yoniga
+
+    agent.register(app)               # run_polling(...) dan OLDIN
+                                      # (app — sizdagi Application o'zgaruvchisi;
+                                      #  agar u "application" deb nomlangan bo'lsa,
+                                      #  agent.register(application) yozing)
+
+requirements.txt ga qo'shiladi:
+    python-telegram-bot[job-queue]>=21,<22
+    openai
+    feedparser
+    trafilatura
+
+Railway → Variables ga qo'shiladi:
+    OPENAI_API_KEY = sk-...
+    ADMIN_ID       = sizning Telegram ID raqamingiz
+    CHANNEL_ID     = @safaroov_blog        (ixtiyoriy, default shu)
+    DB_PATH        = /data/agent.db        (volume ulangan bo'lsa — pastga qarang)
+
+Nima qiladi:
+  * Har kuni 07:00 (Toshkent): 3 manbadan yangiliklarni oladi, gpt-4o-mini
+    bilan saralaydi, eng yaxshi 3-5 tasidan o'zbekcha post yozib ADMINGA yuboradi.
+  * Admin ✅ bossa — kanalga chiqadi. ❌ — arxiv. Avtomatik hech narsa chiqmaydi.
+  * 20:00: ko'rilmagan postlar bo'lsa eslatma.
+  * Buyruqlar: /agent_status /agent_run /agent_pause /agent_resume /agent_sources
+"""
+
+import json
+import logging
+import os
+import sqlite3
+from datetime import datetime, time as dtime, date
+from zoneinfo import ZoneInfo
+
+import feedparser
+import trafilatura
+from openai import OpenAI
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+)
+
+# ======================================================================
+# SOZLAMALAR (hammasi Railway Variables orqali boshqariladi)
+# ======================================================================
+ADMIN_ID = int(os.environ.get("ADMIN_ID", "0") or "0")
+CHANNEL_ID = os.environ.get("CHANNEL_ID", "@safaroov_blog")
+# Baza botdagi boshqa fayllar (users.json) bilan bir joyda — Railway volume'da saqlanadi:
+DB_PATH = os.environ.get("DB_PATH",
+                         os.path.join(os.environ.get("DATA_DIR", "."), "agent.db"))
+
+TZ = ZoneInfo("Asia/Tashkent")
+MODEL = "gpt-4o-mini"
+MIN_SCORE = 7
+MAX_POSTS_PER_DAY = 5
+MAX_API_CALLS_PER_DAY = 15
+ARTICLE_CHAR_LIMIT = 8000
+USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) AppleWebKit/537.36"
+
+SOURCES = [
+    ("Google AI",     "https://blog.google/technology/ai/rss/"),
+    ("TechCrunch AI", "https://techcrunch.com/category/artificial-intelligence/feed/"),
+    ("HubSpot",       "https://blog.hubspot.com/marketing/rss.xml"),
+]
+
+log = logging.getLogger("agent")
+
+_ai = None  # OpenAI klienti kech yaratiladi (import paytida kalit talab qilinmasin)
+
+def ai_client():
+    global _ai
+    if _ai is None:
+        _ai = OpenAI()  # kalit OPENAI_API_KEY dan olinadi
+    return _ai
+
+
+# ======================================================================
+# BAZA (SQLite)
+# ======================================================================
+def db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("""CREATE TABLE IF NOT EXISTS agent_articles(
+        url TEXT PRIMARY KEY, title TEXT, source TEXT,
+        seen_at TEXT, score INTEGER, status TEXT DEFAULT 'new')""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS agent_posts(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        article_url TEXT, text TEXT, status TEXT DEFAULT 'draft',
+        created_at TEXT)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS agent_meta(
+        key TEXT PRIMARY KEY, value TEXT)""")
+    return conn
+
+
+def meta_get(conn, key, default=""):
+    row = conn.execute("SELECT value FROM agent_meta WHERE key=?", (key,)).fetchone()
+    return row[0] if row else default
+
+
+def meta_set(conn, key, value):
+    conn.execute(
+        "INSERT INTO agent_meta(key,value) VALUES(?,?) "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
+    conn.commit()
+
+
+def api_calls_today(conn):
+    today = date.today().isoformat()
+    if meta_get(conn, "api_day") != today:
+        meta_set(conn, "api_day", today)
+        meta_set(conn, "api_calls", "0")
+    return int(meta_get(conn, "api_calls", "0"))
+
+
+def api_call_inc(conn):
+    meta_set(conn, "api_calls", api_calls_today(conn) + 1)
+
+
+# ======================================================================
+# AI QATLAMI
+# ======================================================================
+SCORE_PROMPT = """Sen O'zbekistondagi AI va marketing mavzusidagi Telegram kanal \
+kuratorisan. Auditoriya: marketologlar, kichik biznes egalari, AI'ga qiziquvchilar.
+
+Quyidagi maqola sarlavhasi va annotatsiyasiga qarab baho ber.
+Yuqori baho mezoni: amaliy foyda, yangi vosita/model e'loni, real biznes keysi, \
+katta bozor yangiligi. Past baho: tor ilmiy mavzu, mahalliy ahamiyatsiz xabar, \
+reklama, takroriy mavzu.
+
+FAQAT JSON qaytar, boshqa hech narsa yozma:
+{"score": 0dan 10gacha butun son, "sabab": "bir gap"}"""
+
+POST_PROMPT = """Sen @safaroov_blog Telegram kanalining muharririsan. Kanal tili: \
+o'zbek. Ohang: professional, jonli, "siz"lab, ortiqcha rasmiyatchiliksiz.
+
+Quyidagi inglizcha maqola asosida kanal uchun POST yoz. Qat'iy qoidalar:
+1. Bu TARJIMA EMAS — o'z so'zing bilan qisqa xulosa. Asosiy matn 500 belgidan oshmasin.
+2. Maqolada bo'lmagan fakt yoki raqamni QO'SHMA.
+3. Terminlar: birinchi ishlatishda o'zbekcha + qavsda asli. \
+Masalan: "katta til modeli (LLM)", "moslash (fine-tuning)".
+4. Aynan shu shablonga rioya qil (kvadrat qavslarni o'z matning bilan almashtir):
+
+🗞 [Qiziqarli, lekin clickbait-siz sarlavha]
+
+[2-4 gap: nima bo'ldi va nega bu muhim]
+
+💡 Bu bizga nima beradi: [1-2 gap — O'zbekiston marketologi yoki kichik biznes \
+uchun amaliy foyda]
+
+🔗 Manba: {url}
+
+@safaroov_blog
+
+FAQAT tayyor post matnini qaytar, izohsiz."""
+
+
+def ai_score(conn, title, summary):
+    if api_calls_today(conn) >= MAX_API_CALLS_PER_DAY:
+        return None
+    api_call_inc(conn)
+    resp = ai_client().chat.completions.create(
+        model=MODEL,
+        response_format={"type": "json_object"},
+        max_tokens=100,
+        messages=[
+            {"role": "system", "content": SCORE_PROMPT},
+            {"role": "user", "content": f"Sarlavha: {title}\nAnnotatsiya: {summary[:1000]}"},
+        ],
+    )
+    try:
+        return int(json.loads(resp.choices[0].message.content).get("score", 0))
+    except (json.JSONDecodeError, ValueError, TypeError):
+        return 0
+
+
+def ai_write_post(conn, url, article_text):
+    if api_calls_today(conn) >= MAX_API_CALLS_PER_DAY:
+        return None
+    api_call_inc(conn)
+    resp = ai_client().chat.completions.create(
+        model=MODEL,
+        max_tokens=700,
+        messages=[
+            {"role": "system", "content": POST_PROMPT.format(url=url)},
+            {"role": "user", "content": article_text[:ARTICLE_CHAR_LIMIT]},
+        ],
+    )
+    return resp.choices[0].message.content.strip()
+
+
+# ======================================================================
+# AGENT — ASOSIY OQIM
+# ======================================================================
+def fetch_new_articles(conn):
+    fresh = []
+    for source_name, feed_url in SOURCES:
+        try:
+            feed = feedparser.parse(feed_url, agent=USER_AGENT)
+        except Exception as e:
+            log.warning("RSS xato (%s): %s", source_name, e)
+            continue
+        for entry in feed.entries[:10]:
+            url = entry.get("link", "")
+            if not url:
+                continue
+            if conn.execute("SELECT 1 FROM agent_articles WHERE url=?", (url,)).fetchone():
+                continue
+            title = entry.get("title", "(nomsiz)")
+            summary = entry.get("summary", "") or entry.get("description", "")
+            conn.execute(
+                "INSERT OR IGNORE INTO agent_articles(url,title,source,seen_at) VALUES(?,?,?,?)",
+                (url, title, source_name, datetime.now(TZ).isoformat()))
+            fresh.append({"url": url, "title": title,
+                          "summary": summary, "source": source_name})
+    conn.commit()
+    return fresh
+
+
+async def run_agent(context: ContextTypes.DEFAULT_TYPE):
+    conn = db()
+    if meta_get(conn, "paused") == "1":
+        conn.close()
+        return
+
+    fresh = fetch_new_articles(conn)
+    log.info("Agent: yangi maqolalar %d", len(fresh))
+    if not fresh:
+        conn.close()
+        return
+
+    for art in fresh:
+        score = ai_score(conn, art["title"], art["summary"])
+        art["score"] = score if score is not None else 0
+        conn.execute("UPDATE agent_articles SET score=?, status='scored' WHERE url=?",
+                     (art["score"], art["url"]))
+    conn.commit()
+
+    candidates = sorted(
+        [a for a in fresh if a["score"] >= MIN_SCORE],
+        key=lambda a: a["score"], reverse=True)[:MAX_POSTS_PER_DAY]
+
+    for art in candidates:
+        try:
+            downloaded = trafilatura.fetch_url(art["url"])
+            text = trafilatura.extract(downloaded) if downloaded else None
+            if not text:
+                text = art["title"] + "\n\n" + art["summary"]
+            post_text = ai_write_post(conn, art["url"], text)
+            if not post_text:
+                break  # kunlik API limiti tugadi
+            cur = conn.execute(
+                "INSERT INTO agent_posts(article_url,text,created_at) VALUES(?,?,?)",
+                (art["url"], post_text, datetime.now(TZ).isoformat()))
+            conn.commit()
+            post_id = cur.lastrowid
+            kb = InlineKeyboardMarkup([[
+                InlineKeyboardButton("✅ Kanalga jo'natish", callback_data=f"agpub:{post_id}"),
+                InlineKeyboardButton("❌ O'tkazish", callback_data=f"agskip:{post_id}"),
+            ]])
+            await context.bot.send_message(
+                chat_id=ADMIN_ID,
+                text=f"📬 Yangi post-nomzod ({art['source']}, baho {art['score']}/10):"
+                     f"\n\n{post_text}",
+                reply_markup=kb,
+            )
+        except Exception as e:
+            log.exception("Agent xatosi: %s", e)
+            try:
+                await context.bot.send_message(
+                    ADMIN_ID, f"⚠️ Agent xatosi ({art['url']}): {e}")
+            except Exception:
+                pass
+    conn.close()
+
+
+async def evening_reminder(context: ContextTypes.DEFAULT_TYPE):
+    conn = db()
+    n = conn.execute("SELECT COUNT(*) FROM agent_posts WHERE status='draft'").fetchone()[0]
+    conn.close()
+    if n:
+        await context.bot.send_message(
+            ADMIN_ID, f"⏰ Eslatma: {n} ta post hali ko'rilmagan. /agent_status")
+
+
+# ======================================================================
+# TUGMALAR (tasdiqlash)
+# ======================================================================
+async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if query.from_user.id != ADMIN_ID:
+        await query.answer("Bu tugma faqat admin uchun.", show_alert=True)
+        return
+    action, post_id = query.data.split(":")
+    conn = db()
+    row = conn.execute("SELECT text,status FROM agent_posts WHERE id=?", (post_id,)).fetchone()
+    if not row:
+        await query.answer("Post topilmadi.")
+        conn.close()
+        return
+    text, status = row
+    if status != "draft":
+        await query.answer("Bu post allaqachon ko'rilgan.")
+        conn.close()
+        return
+
+    if action == "agpub":
+        try:
+            await context.bot.send_message(chat_id=CHANNEL_ID, text=text)
+            conn.execute("UPDATE agent_posts SET status='published' WHERE id=?", (post_id,))
+            conn.commit()
+            await query.answer("Kanalga jo'natildi! ✅")
+            await query.edit_message_text(f"✅ KANALGA CHIQDI\n\n{text}")
+        except Exception as e:
+            await query.answer(f"Xato: {e}", show_alert=True)
+    else:  # agskip
+        conn.execute("UPDATE agent_posts SET status='skipped' WHERE id=?", (post_id,))
+        conn.commit()
+        await query.answer("O'tkazib yuborildi.")
+        await query.edit_message_text(f"❌ O'TKAZILDI\n\n{text}")
+    conn.close()
+
+
+# ======================================================================
+# ADMIN BUYRUQLARI
+# ======================================================================
+def admin_only(func):
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not update.effective_user or update.effective_user.id != ADMIN_ID:
+            return
+        return await func(update, context)
+    return wrapper
+
+
+@admin_only
+async def cmd_status(update, context):
+    conn = db()
+    today = date.today().isoformat()
+    seen = conn.execute("SELECT COUNT(*) FROM agent_articles WHERE seen_at LIKE ?",
+                        (today + "%",)).fetchone()[0]
+    drafts = conn.execute("SELECT COUNT(*) FROM agent_posts WHERE status='draft'").fetchone()[0]
+    pub = conn.execute("SELECT COUNT(*) FROM agent_posts WHERE status='published'").fetchone()[0]
+    calls = api_calls_today(conn)
+    paused = meta_get(conn, "paused") == "1"
+    conn.close()
+    await update.message.reply_text(
+        f"📊 Agent holati\n"
+        f"Holat: {'⏸ pauzada' if paused else '▶️ ishlamoqda'}\n"
+        f"Bugun ko'rilgan maqolalar: {seen}\n"
+        f"Kutayotgan postlar: {drafts}\n"
+        f"Jami chiqarilgan: {pub}\n"
+        f"Bugungi API chaqiruvlar: {calls}/{MAX_API_CALLS_PER_DAY}\n"
+        f"Taxminiy bugungi xarajat: ~${calls * 0.001:.3f}")
+
+
+@admin_only
+async def cmd_run(update, context):
+    await update.message.reply_text("🔍 Manbalarni tekshiryapman, biroz kuting...")
+    await run_agent(context)
+    await update.message.reply_text("Tekshiruv tugadi. /agent_status")
+
+
+@admin_only
+async def cmd_pause(update, context):
+    conn = db(); meta_set(conn, "paused", "1"); conn.close()
+    await update.message.reply_text("⏸ Agent pauzaga qo'yildi. /agent_resume — davom ettirish.")
+
+
+@admin_only
+async def cmd_resume(update, context):
+    conn = db(); meta_set(conn, "paused", "0"); conn.close()
+    await update.message.reply_text("▶️ Agent yana ishga tushdi.")
+
+
+@admin_only
+async def cmd_sources(update, context):
+    lines = "\n".join(f"• {name}" for name, _ in SOURCES)
+    await update.message.reply_text(f"📡 Manbalar (MVP):\n{lines}")
+
+
+# ======================================================================
+# ULASH NUQTASI — bot.py dan chaqiriladi
+# ======================================================================
+def register(app: Application):
+    """Mavjud Application ga agent buyruqlari, tugmalari va jadvalini qo'shadi."""
+    if not ADMIN_ID:
+        log.warning("ADMIN_ID berilmagan — agent o'chirilgan holda qoladi.")
+        return
+    if not os.environ.get("OPENAI_API_KEY"):
+        log.warning("OPENAI_API_KEY berilmagan — agent o'chirilgan holda qoladi.")
+        return
+
+    app.add_handler(CommandHandler("agent_status", cmd_status))
+    app.add_handler(CommandHandler("agent_run", cmd_run))
+    app.add_handler(CommandHandler("agent_pause", cmd_pause))
+    app.add_handler(CommandHandler("agent_resume", cmd_resume))
+    app.add_handler(CommandHandler("agent_sources", cmd_sources))
+    app.add_handler(CallbackQueryHandler(on_button, pattern=r"^(agpub|agskip):\d+$"))
+
+    if app.job_queue is None:
+        log.error("JobQueue yo'q! requirements.txt da "
+                  "python-telegram-bot[job-queue] bo'lishi kerak.")
+    else:
+        app.job_queue.run_daily(run_agent, time=dtime(7, 0, tzinfo=TZ), name="agent_morning")
+        app.job_queue.run_daily(evening_reminder, time=dtime(20, 0, tzinfo=TZ), name="agent_evening")
+
+    log.info("AI agent ulandi: 07:00 avtomatik, /agent_run — qo'lda.")

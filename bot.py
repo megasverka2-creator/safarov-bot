@@ -31,6 +31,8 @@ from telegram.ext import (
     filters, ContextTypes,
 )
 
+import agent  # AI Yangiliklar Agenti moduli
+
 try:
     from anthropic import AsyncAnthropic
 except Exception:
@@ -1242,6 +1244,7 @@ def main():
     app.add_handler(CallbackQueryHandler(on_k2_cb, pattern="^k2:"))
     app.add_handler(CallbackQueryHandler(admin_decide, pattern="^(acc|rej):"))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
+    agent.register(app)  # AI Yangiliklar Agenti (07:00 avtomatik, /agent_run)
     print("Bot ishga tushdi...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
