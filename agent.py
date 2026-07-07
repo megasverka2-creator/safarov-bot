@@ -64,7 +64,7 @@ DB_PATH = os.environ.get("DB_PATH",
 
 TZ = ZoneInfo("Asia/Tashkent")
 MODEL = "gpt-4o-mini"
-MIN_SCORE = 7
+MIN_SCORE = 6                  # nomzodlik chegarasi (siz baribir qo'lda tanlaysiz)
 MAX_POSTS_PER_DAY = 5
 MAX_API_CALLS_PER_DAY = 40     # kuniga ~$0.04 dan oshmaydi
 SCORING_RESERVE = MAX_POSTS_PER_DAY  # post yozish uchun doim zaxira chaqiruv qoladi
@@ -154,11 +154,19 @@ o'zbek. Ohang: professional, jonli, "siz"lab, ortiqcha rasmiyatchiliksiz.
 Quyidagi inglizcha maqola asosida kanal uchun POST yoz. Qat'iy qoidalar:
 1. Bu TARJIMA EMAS — o'z so'zing bilan qisqa xulosa. Asosiy matn 500 belgidan oshmasin.
 2. Maqolada bo'lmagan fakt yoki raqamni QO'SHMA.
-3. Terminlar: birinchi ishlatishda o'zbekcha + qavsda asli. \
+3. SARLAVHA to'liq tabiiy o'zbek tilida bo'lsin. Inglizcha gap tuzilishini \
+ko'chirma ("AI-enabled" → "AI-lekin" kabi so'zma-so'z tarjima TAQIQLANADI). \
+Sarlavhani o'zbek o'quvchi gazetada o'qigandek tabiiy tuz. \
+Yomon: "Yangi AI-lekin himoyada: Savi Security". \
+Yaxshi: "Savi Security: AI endi firibgarlardan himoya qiladi".
+4. Kompaniya, mahsulot va model nomlari asl holicha qoladi (Savi, GPT-5, Gemini).
+5. "Ushbu tadqiqotga asoslanib", "shuni ta'kidlash joizki" kabi quruq iboralar \
+ishlatilmasin — gaplar sodda, aniq va gazetadagidek ravon bo'lsin.
+6. Terminlar: birinchi ishlatishda o'zbekcha + qavsda asli. \
 Masalan: "katta til modeli (LLM)", "moslash (fine-tuning)".
-4. Aynan shu shablonga rioya qil (kvadrat qavslarni o'z matning bilan almashtir):
+7. Aynan shu shablonga rioya qil (kvadrat qavslarni o'z matning bilan almashtir):
 
-🗞 [Qiziqarli, lekin clickbait-siz sarlavha]
+🗞 [Tabiiy o'zbekcha sarlavha]
 
 [2-4 gap: nima bo'ldi va nega bu muhim]
 
@@ -402,6 +410,19 @@ async def cmd_resume(update, context):
 
 
 @admin_only
+async def cmd_requeue(update, context):
+    """0 baho olib qolgan maqolalarni navbatga qaytaradi (bir martalik tiklash)."""
+    conn = db()
+    n = conn.execute(
+        "UPDATE agent_articles SET status='new', score=NULL "
+        "WHERE status='scored' AND score=0").rowcount
+    conn.commit()
+    conn.close()
+    await update.message.reply_text(
+        f"♻️ {n} ta maqola navbatga qaytarildi. Endi /agent_run bosing.")
+
+
+@admin_only
 async def cmd_sources(update, context):
     lines = "\n".join(f"• {name}" for name, _ in SOURCES)
     await update.message.reply_text(f"📡 Manbalar (MVP):\n{lines}")
@@ -423,6 +444,7 @@ def register(app: Application):
     app.add_handler(CommandHandler("agent_run", cmd_run))
     app.add_handler(CommandHandler("agent_pause", cmd_pause))
     app.add_handler(CommandHandler("agent_resume", cmd_resume))
+    app.add_handler(CommandHandler("agent_requeue", cmd_requeue))
     app.add_handler(CommandHandler("agent_sources", cmd_sources))
     app.add_handler(CallbackQueryHandler(on_button, pattern=r"^(agpub|agskip):\d+$"))
 
