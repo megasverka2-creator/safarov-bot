@@ -317,7 +317,9 @@ async def tts_generate(text):
         path = r.json().get("audio_path", "")
         if not path:
             raise RuntimeError("Aisha javobida audio_path kelmadi")
-        a = await cli.get(AISHA_BASE + path)
+        # audio_path ba'zan to'liq URL, ba'zan nisbiy yo'l bo'lib keladi
+        audio_url = path if path.startswith("http") else AISHA_BASE + path
+        a = await cli.get(audio_url)
         a.raise_for_status()
         return a.content
 
@@ -414,34 +416,48 @@ def ai_voice_router(conn, question, digest):
 
 
 async def publish_article(context, conn, url, ovozli):
-    """Bazadagi maqoladan post yasab, darhol kanalga chiqaradi. Post matnini qaytaradi."""
+    """Bazadagi maqoladan post yasab, darhol kanalga chiqaradi.
+    (post_text, audio_note) qaytaradi — audio xatosi jarayonni yiqitmaydi."""
     row = conn.execute(
         "SELECT title, COALESCE(summary,''), COALESCE(rubrika,'ai') "
         "FROM agent_articles WHERE url=?", (url,)).fetchone()
     if not row:
         raise RuntimeError("Bu maqola bazada topilmadi")
     title, summary, rubrika = row
-    downloaded = trafilatura.fetch_url(url)
-    text = trafilatura.extract(downloaded) if downloaded else None
+    try:
+        downloaded = trafilatura.fetch_url(url)
+        text = trafilatura.extract(downloaded) if downloaded else None
+    except Exception:
+        text = None
     if not text:
         text = title + "\n\n" + summary
     post_text = ai_write_post(conn, url, text, rubrika)
     if not post_text:
         raise RuntimeError("Kunlik AI limiti tugadi")
+
+    # 1) Matn kanalga + darhol bazaga yoziladi
     await context.bot.send_message(chat_id=CHANNEL_ID, text=post_text)
-    if ovozli:
-        audio = await tts_generate(post_text)
-        if audio:
-            audio_title = post_text.splitlines()[0].strip()[:60] or "Safarov blog"
-            await context.bot.send_audio(
-                chat_id=CHANNEL_ID, audio=audio, filename="post.wav",
-                title=audio_title, performer="Safarov blog")
     conn.execute(
         "INSERT INTO agent_posts(article_url,text,status,created_at) "
         "VALUES(?,?,'published',?)", (url, post_text, datetime.now(TZ).isoformat()))
     conn.execute("UPDATE agent_articles SET status='posted' WHERE url=?", (url,))
     conn.commit()
-    return post_text
+
+    # 2) Audio alohida — xatosi postga ta'sir qilmaydi
+    audio_note = ""
+    if ovozli:
+        try:
+            audio = await tts_generate(post_text)
+            if audio:
+                audio_title = post_text.splitlines()[0].strip()[:60] or "Safarov blog"
+                await context.bot.send_audio(
+                    chat_id=CHANNEL_ID, audio=audio, filename="post.wav",
+                    title=audio_title, performer="Safarov blog")
+                audio_note = " + 🎙 OVOZ"
+        except Exception as e:
+            log.exception("Kanal audio xatosi: %s", e)
+            audio_note = f"\n⚠️ Matn chiqdi, lekin ovoz chiqmadi: {e}"
+    return post_text, audio_note
 
 
 async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -490,9 +506,10 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(
                     f"⏳ {n}-yangilikdan post tayyorlab kanalga chiqaryapman"
                     f"{' (ovoz bilan 🎙)' if ovozli else ''}...")
-                post_text = await publish_article(context, conn, urls[n-1], ovozli)
+                post_text, audio_note = await publish_article(
+                    context, conn, urls[n-1], ovozli)
                 await update.message.reply_text(
-                    f"✅ KANALGA CHIQDI{' + 🎙 OVOZ' if ovozli else ''}\n\n{post_text}")
+                    f"✅ KANALGA CHIQDI{audio_note}\n\n{post_text}")
             conn.close()
             return
 
