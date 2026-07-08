@@ -38,14 +38,23 @@ Nima qiladi:
 import json
 import logging
 import os
+import re
 import sqlite3
 from datetime import datetime, time as dtime, date
 from zoneinfo import ZoneInfo
 
 import feedparser
+import httpx
 import trafilatura
 from openai import OpenAI
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    BotCommand,
+    BotCommandScopeDefault,
+    BotCommandScopeChat,
+)
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -61,6 +70,9 @@ CHANNEL_ID = os.environ.get("CHANNEL_ID", "@safaroov_blog")
 # Baza botdagi boshqa fayllar (users.json) bilan bir joyda — Railway volume'da saqlanadi:
 DB_PATH = os.environ.get("DB_PATH",
                          os.path.join(os.environ.get("DATA_DIR", "."), "agent.db"))
+# Aisha AI (o'zbekcha ovoz) — kalit berilsa postlarda 🎙 Ovozli tugmasi paydo bo'ladi
+AISHA_API_KEY = os.environ.get("AISHA_API_KEY", "")
+AISHA_BASE = "https://back.aisha.group"
 
 TZ = ZoneInfo("Asia/Tashkent")
 MODEL = "gpt-4o-mini"
@@ -271,6 +283,53 @@ def ai_write_post(conn, url, article_text, rubrika="ai"):
 
 
 # ======================================================================
+# AISHA AI — O'ZBEKCHA OVOZ (TTS)
+# ======================================================================
+def _clean_for_tts(text):
+    """Postni ovoz uchun tozalaydi: havolalar, teglar va emojilar olib tashlanadi."""
+    lines = []
+    for ln in text.splitlines():
+        if "http" in ln or "@safaroov_blog" in ln or ln.strip().startswith("🔗"):
+            continue
+        lines.append(ln)
+    t = "\n".join(lines)
+    t = re.sub(r"[^\w\s.,!?:;()'\-‘’ʻʼ«»%+]", "", t, flags=re.UNICODE)
+    return re.sub(r"\n{3,}", "\n\n", t).strip()[:950]  # Aisha limiti: 1000 belgi
+
+
+async def tts_generate(text):
+    """Aisha AI orqali o'zbekcha audio (WAV baytlari) qaytaradi."""
+    clean = _clean_for_tts(text)
+    if not AISHA_API_KEY or not clean:
+        return None
+    async with httpx.AsyncClient(timeout=90) as cli:
+        r = await cli.post(
+            AISHA_BASE + "/api/v1/tts/post/",
+            headers={"X-Api-Key": AISHA_API_KEY},
+            data={"transcript": clean, "language": "uz",
+                  "model": "Gulnoza", "mood": "Neutral", "speed": "1.0"})
+        if r.status_code == 402:
+            raise RuntimeError("Aisha balansi tugagan (402) — space.aisha.group da to'ldiring")
+        if r.status_code != 201:
+            raise RuntimeError(f"Aisha TTS xatosi {r.status_code}: {r.text[:150]}")
+        path = r.json().get("audio_path", "")
+        if not path:
+            raise RuntimeError("Aisha javobida audio_path kelmadi")
+        a = await cli.get(AISHA_BASE + path)
+        a.raise_for_status()
+        return a.content
+
+
+def draft_keyboard(post_id):
+    """Post-nomzod tugmalari. Aisha kaliti bo'lsa 🎙 ham chiqadi."""
+    row = [InlineKeyboardButton("✅ Kanalga", callback_data=f"agpub:{post_id}")]
+    if AISHA_API_KEY:
+        row.append(InlineKeyboardButton("🎙 Ovozli", callback_data=f"agpubv:{post_id}"))
+    row.append(InlineKeyboardButton("❌", callback_data=f"agskip:{post_id}"))
+    return InlineKeyboardMarkup([row])
+
+
+# ======================================================================
 # AGENT — ASOSIY OQIM
 # ======================================================================
 def fetch_new_articles(conn):
@@ -358,17 +417,13 @@ async def run_agent(context: ContextTypes.DEFAULT_TYPE):
             conn.execute("UPDATE agent_articles SET status='posted' WHERE url=?", (url,))
             conn.commit()
             post_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-            kb = InlineKeyboardMarkup([[
-                InlineKeyboardButton("✅ Kanalga jo'natish", callback_data=f"agpub:{post_id}"),
-                InlineKeyboardButton("❌ O'tkazish", callback_data=f"agskip:{post_id}"),
-            ]])
             emoji = RUBRIKA_EMOJI.get(rubrika, "📬")
             nomi = RUBRIKA_NOMI.get(rubrika, rubrika)
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
                 text=f"{emoji} {nomi} · {source} · baho {score}/10:"
                      f"\n\n{post_text}",
-                reply_markup=kb,
+                reply_markup=draft_keyboard(post_id),
             )
         except Exception as e:
             log.exception("Agent xatosi: %s", e)
@@ -410,15 +465,36 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.close()
         return
 
-    if action == "agpub":
+    if action in ("agpub", "agpubv"):
         try:
             await context.bot.send_message(chat_id=CHANNEL_ID, text=text)
             conn.execute("UPDATE agent_posts SET status='published' WHERE id=?", (post_id,))
             conn.commit()
-            await query.answer("Kanalga jo'natildi! ✅")
-            await query.edit_message_text(f"✅ KANALGA CHIQDI\n\n{text}")
         except Exception as e:
             await query.answer(f"Xato: {e}", show_alert=True)
+            conn.close()
+            return
+
+        audio_note = ""
+        if action == "agpubv":
+            await query.answer("Matn chiqdi, ovoz tayyorlanmoqda... 🎙")
+            try:
+                audio = await tts_generate(text)
+                if audio:
+                    title = text.splitlines()[0].strip()[:60] or "Safarov blog"
+                    await context.bot.send_audio(
+                        chat_id=CHANNEL_ID, audio=audio,
+                        filename="post.wav", title=title,
+                        performer="Safarov blog")
+                    audio_note = " + 🎙 OVOZ"
+                else:
+                    audio_note = " (ovoz o'tkazildi: matn bo'sh)"
+            except Exception as e:
+                log.exception("TTS xatosi: %s", e)
+                audio_note = f"\n⚠️ Ovoz chiqmadi: {e}"
+        else:
+            await query.answer("Kanalga jo'natildi! ✅")
+        await query.edit_message_text(f"✅ KANALGA CHIQDI{audio_note}\n\n{text}")
     else:  # agskip
         conn.execute("UPDATE agent_posts SET status='skipped' WHERE id=?", (post_id,))
         conn.commit()
@@ -501,6 +577,45 @@ async def cmd_sources(update, context):
 
 
 # ======================================================================
+# BUYRUQLAR MENYUSI (Telegram'da avtomatik ko'rinadi)
+# ======================================================================
+PUBLIC_COMMANDS = [
+    BotCommand("start",   "🏠 Bosh menyu"),
+    BotCommand("konkurs", "🏆 Konkurs haqida"),
+    BotCommand("raqam",   "🔢 Konkursdagi raqamim"),
+    BotCommand("sinov",   "🧩 Bilim testi"),
+    BotCommand("shaxs",   "🧠 Shaxsiyat testi"),
+    BotCommand("kanallar","📣 Kanallarimiz"),
+]
+ADMIN_COMMANDS = PUBLIC_COMMANDS + [
+    BotCommand("agent_status",  "📊 Agent holati"),
+    BotCommand("agent_run",     "🔍 Agentni hozir ishga tushirish"),
+    BotCommand("agent_sources", "📡 Agent manbalari"),
+    BotCommand("agent_requeue", "♻️ Maqolalarni navbatga qaytarish"),
+    BotCommand("agent_pause",   "⏸ Agentni to'xtatish"),
+    BotCommand("agent_resume",  "▶️ Agentni davom ettirish"),
+    BotCommand("stats",  "📈 Bot statistikasi"),
+    BotCommand("xabar",  "📢 Hammaga xabar yuborish"),
+    BotCommand("elon2",  "📚 Konkurs e'lonini joylash"),
+    BotCommand("golib2", "🎉 Konkurs g'olibini tanlash"),
+    BotCommand("reset2", "🧹 Konkursni tozalash"),
+]
+
+
+async def _setup_commands(context: ContextTypes.DEFAULT_TYPE):
+    """Menyu: hammaga ommaviy buyruqlar, adminga to'liq ro'yxat."""
+    try:
+        await context.bot.set_my_commands(
+            PUBLIC_COMMANDS, scope=BotCommandScopeDefault())
+        await context.bot.set_my_commands(
+            ADMIN_COMMANDS, scope=BotCommandScopeChat(chat_id=ADMIN_ID))
+        log.info("Buyruqlar menyusi o'rnatildi (%d ommaviy, %d admin).",
+                 len(PUBLIC_COMMANDS), len(ADMIN_COMMANDS))
+    except Exception as e:
+        log.warning("Menyu o'rnatishda xato: %s", e)
+
+
+# ======================================================================
 # ULASH NUQTASI — bot.py dan chaqiriladi
 # ======================================================================
 def register(app: Application):
@@ -518,7 +633,7 @@ def register(app: Application):
     app.add_handler(CommandHandler("agent_resume", cmd_resume))
     app.add_handler(CommandHandler("agent_requeue", cmd_requeue))
     app.add_handler(CommandHandler("agent_sources", cmd_sources))
-    app.add_handler(CallbackQueryHandler(on_button, pattern=r"^(agpub|agskip):\d+$"))
+    app.add_handler(CallbackQueryHandler(on_button, pattern=r"^(agpub|agpubv|agskip):\d+$"))
 
     if app.job_queue is None:
         log.error("JobQueue yo'q! requirements.txt da "
@@ -526,5 +641,7 @@ def register(app: Application):
     else:
         app.job_queue.run_daily(run_agent, time=dtime(7, 0, tzinfo=TZ), name="agent_morning")
         app.job_queue.run_daily(evening_reminder, time=dtime(20, 0, tzinfo=TZ), name="agent_evening")
+        app.job_queue.run_once(_setup_commands, when=3, name="setup_commands")
 
-    log.info("AI agent ulandi: 07:00 avtomatik, /agent_run — qo'lda.")
+    log.info("AI agent ulandi: 07:00 avtomatik, /agent_run — qo'lda. Aisha TTS: %s",
+             "yoqilgan 🎙" if AISHA_API_KEY else "o'chiq (AISHA_API_KEY berilmagan)")
