@@ -65,17 +65,32 @@ DB_PATH = os.environ.get("DB_PATH",
 TZ = ZoneInfo("Asia/Tashkent")
 MODEL = "gpt-4o-mini"
 MIN_SCORE = 6                  # nomzodlik chegarasi (siz baribir qo'lda tanlaysiz)
-MAX_POSTS_PER_DAY = 5
-MAX_API_CALLS_PER_DAY = 40     # kuniga ~$0.04 dan oshmaydi
+MAX_POSTS_PER_DAY = 6          # kunlik post-nomzodlar
+MAX_PER_RUBRIKA = 2            # bitta yo'nalish kunni bosib ketmasligi uchun
+MAX_API_CALLS_PER_DAY = 60     # 9 manba uchun; baribir kuniga ~$0.02 atrofida
 SCORING_RESERVE = MAX_POSTS_PER_DAY  # post yozish uchun doim zaxira chaqiruv qoladi
 ARTICLE_CHAR_LIMIT = 8000
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) AppleWebKit/537.36"
 
+# Rubrikalar: ai (AI/marketing) · rivojlanish (shaxsiy rivojlanish) · podcast (audio/video)
 SOURCES = [
-    ("Google AI",     "https://blog.google/technology/ai/rss/"),
-    ("TechCrunch AI", "https://techcrunch.com/category/artificial-intelligence/feed/"),
-    ("HubSpot",       "https://blog.hubspot.com/marketing/rss.xml"),
+    # --- 🗞 AI va marketing ---
+    ("Google AI",     "https://blog.google/technology/ai/rss/",                        "ai"),
+    ("TechCrunch AI", "https://techcrunch.com/category/artificial-intelligence/feed/", "ai"),
+    ("HubSpot",       "https://blog.hubspot.com/marketing/rss.xml",                    "ai"),
+    # --- 🌱 Shaxsiy rivojlanish ---
+    ("Farnam Street", "https://fs.blog/feed/",                                         "rivojlanish"),
+    ("Mark Manson",   "https://markmanson.net/feed",                                   "rivojlanish"),
+    ("HBR",           "http://feeds.hbr.org/harvardbusiness",                          "rivojlanish"),
+    # --- 🎧 Podcast va video ---
+    ("TED Talks",     "https://feeds.feedburner.com/TEDTalks_audio",                   "podcast"),
+    ("Huberman Lab",  "https://feeds.megaphone.fm/hubermanlab",                        "podcast"),
+    ("Tim Ferriss",   "https://rss.art19.com/tim-ferriss-show",                        "podcast"),
 ]
+
+RUBRIKA_EMOJI = {"ai": "🗞", "rivojlanish": "🌱", "podcast": "🎧"}
+RUBRIKA_NOMI = {"ai": "AI va marketing", "rivojlanish": "Shaxsiy rivojlanish",
+                "podcast": "Podcast va video"}
 
 log = logging.getLogger("agent")
 
@@ -102,11 +117,12 @@ def db():
         created_at TEXT)""")
     conn.execute("""CREATE TABLE IF NOT EXISTS agent_meta(
         key TEXT PRIMARY KEY, value TEXT)""")
-    # Migratsiya: eski bazaga summary ustunini qo'shish
-    try:
-        conn.execute("ALTER TABLE agent_articles ADD COLUMN summary TEXT")
-    except sqlite3.OperationalError:
-        pass  # ustun allaqachon bor
+    # Migratsiya: eski bazaga yangi ustunlarni qo'shish
+    for col in ("summary TEXT", "rubrika TEXT DEFAULT 'ai'"):
+        try:
+            conn.execute(f"ALTER TABLE agent_articles ADD COLUMN {col}")
+        except sqlite3.OperationalError:
+            pass  # ustun allaqachon bor
     return conn
 
 
@@ -137,47 +153,86 @@ def api_call_inc(conn):
 # ======================================================================
 # AI QATLAMI
 # ======================================================================
-SCORE_PROMPT = """Sen O'zbekistondagi AI va marketing mavzusidagi Telegram kanal \
-kuratorisan. Auditoriya: marketologlar, kichik biznes egalari, AI'ga qiziquvchilar.
+SCORE_PROMPT = """Sen @safaroov_blog Telegram kanalining kuratorisan. Kanal ikki \
+yo'nalishda: (1) AI va marketing, (2) shaxsiy rivojlanish. Auditoriya: O'zbekistondagi \
+marketologlar, kichik biznes egalari, o'z ustida ishlaydigan yoshlar.
 
-Quyidagi maqola sarlavhasi va annotatsiyasiga qarab baho ber.
-Yuqori baho mezoni: amaliy foyda, yangi vosita/model e'loni, real biznes keysi, \
-katta bozor yangiligi. Past baho: tor ilmiy mavzu, mahalliy ahamiyatsiz xabar, \
-reklama, takroriy mavzu.
+Quyidagi material sarlavhasi va annotatsiyasiga qarab baho ber.
+Yuqori baho: amaliy foyda, yangi vosita/model, real keys, kuchli hayotiy saboq, \
+ilmiy asosli maslahat, mashhur mehmon bilan chuqur suhbat. \
+Past baho: tor ilmiy mavzu, mahalliy ahamiyatsiz xabar, reklama, takror, suv quyilgan umumiy gap.
 
 FAQAT JSON qaytar, boshqa hech narsa yozma:
 {"score": 0dan 10gacha butun son, "sabab": "bir gap"}"""
 
-POST_PROMPT = """Sen @safaroov_blog Telegram kanalining muharririsan. Kanal tili: \
-o'zbek. Ohang: professional, jonli, "siz"lab, ortiqcha rasmiyatchiliksiz.
-
-Quyidagi inglizcha maqola asosida kanal uchun POST yoz. Qat'iy qoidalar:
+_UMUMIY_QOIDALAR = """Qat'iy qoidalar:
 1. Bu TARJIMA EMAS — o'z so'zing bilan qisqa xulosa. Asosiy matn 500 belgidan oshmasin.
-2. Maqolada bo'lmagan fakt yoki raqamni QO'SHMA.
+2. Materialda bo'lmagan fakt yoki raqamni QO'SHMA.
 3. SARLAVHA to'liq tabiiy o'zbek tilida bo'lsin. Inglizcha gap tuzilishini \
 ko'chirma ("AI-enabled" → "AI-lekin" kabi so'zma-so'z tarjima TAQIQLANADI). \
-Sarlavhani o'zbek o'quvchi gazetada o'qigandek tabiiy tuz. \
 Yomon: "Yangi AI-lekin himoyada: Savi Security". \
 Yaxshi: "Savi Security: AI endi firibgarlardan himoya qiladi".
-4. Kompaniya, mahsulot va model nomlari asl holicha qoladi (Savi, GPT-5, Gemini).
+4. Kompaniya, mahsulot, model va odam nomlari asl holicha qoladi.
 5. "Ushbu tadqiqotga asoslanib", "shuni ta'kidlash joizki" kabi quruq iboralar \
-ishlatilmasin — gaplar sodda, aniq va gazetadagidek ravon bo'lsin.
+ishlatilmasin — gaplar sodda, aniq va ravon bo'lsin.
 6. Terminlar: birinchi ishlatishda o'zbekcha + qavsda asli. \
-Masalan: "katta til modeli (LLM)", "moslash (fine-tuning)".
-7. Aynan shu shablonga rioya qil (kvadrat qavslarni o'z matning bilan almashtir):
+Masalan: "katta til modeli (LLM)".
+FAQAT tayyor post matnini qaytar, izohsiz."""
+
+POST_PROMPTS = {
+    "ai": """Sen @safaroov_blog Telegram kanalining muharririsan. Kanal tili: o'zbek. \
+Ohang: professional, jonli, "siz"lab.
+
+Quyidagi inglizcha maqola asosida AI/marketing rubrikasi uchun POST yoz.
+""" + _UMUMIY_QOIDALAR + """
+Shablon (kvadrat qavslarni o'z matning bilan almashtir):
 
 🗞 [Tabiiy o'zbekcha sarlavha]
 
 [2-4 gap: nima bo'ldi va nega bu muhim]
 
-💡 Bu bizga nima beradi: [1-2 gap — O'zbekiston marketologi yoki kichik biznes \
-uchun amaliy foyda]
+💡 Bu bizga nima beradi: [1-2 gap — O'zbekiston marketologi yoki kichik biznes uchun amaliy foyda]
 
 🔗 Manba: {url}
 
-@safaroov_blog
+@safaroov_blog""",
 
-FAQAT tayyor post matnini qaytar, izohsiz."""
+    "rivojlanish": """Sen @safaroov_blog Telegram kanalining muharririsan. Kanal tili: \
+o'zbek. Ohang: samimiy, ilhomlantiruvchi, lekin quruq motivatsiyasiz — aniq fikr va amaliy xulosa muhim.
+
+Quyidagi inglizcha maqola asosida Shaxsiy rivojlanish rubrikasi uchun POST yoz.
+""" + _UMUMIY_QOIDALAR + """
+Shablon (kvadrat qavslarni o'z matning bilan almashtir):
+
+🌱 [Tabiiy o'zbekcha sarlavha]
+
+[2-4 gap: maqolaning asosiy g'oyasi — hayotiy va tushunarli tilda]
+
+💡 Bugunoq sinab ko'ring: [1-2 gap — bitta aniq amaliy qadam]
+
+🔗 Manba: {url}
+
+@safaroov_blog""",
+
+    "podcast": """Sen @safaroov_blog Telegram kanalining muharririsan. Kanal tili: \
+o'zbek. Ohang: do'stona tavsiya beruvchi.
+
+Quyida yangi podcast/video epizodining sarlavhasi va tavsifi berilgan. Sen epizodni \
+to'liq eshitmagansan — shuning uchun bu TAVSIYA POSTI: tavsifga tayanib nima haqida \
+ekanini va kimga foydali bo'lishini ayt, mazmunni to'qib chiqarma.
+""" + _UMUMIY_QOIDALAR + """
+Shablon (kvadrat qavslarni o'z matning bilan almashtir):
+
+🎧 [Epizod mavzusi — tabiiy o'zbekcha]
+
+[2-3 gap: nima haqida va nega eshitishga arziydi]
+
+👥 Kimga foydali: [1 gap]
+
+🔗 Tinglash: {url}
+
+@safaroov_blog""",
+}
 
 
 def ai_score(conn, title, summary):
@@ -199,15 +254,16 @@ def ai_score(conn, title, summary):
         return 0
 
 
-def ai_write_post(conn, url, article_text):
+def ai_write_post(conn, url, article_text, rubrika="ai"):
     if api_calls_today(conn) >= MAX_API_CALLS_PER_DAY:
         return None
     api_call_inc(conn)
+    prompt = POST_PROMPTS.get(rubrika, POST_PROMPTS["ai"])
     resp = ai_client().chat.completions.create(
         model=MODEL,
         max_tokens=700,
         messages=[
-            {"role": "system", "content": POST_PROMPT.format(url=url)},
+            {"role": "system", "content": prompt.format(url=url)},
             {"role": "user", "content": article_text[:ARTICLE_CHAR_LIMIT]},
         ],
     )
@@ -220,7 +276,7 @@ def ai_write_post(conn, url, article_text):
 def fetch_new_articles(conn):
     """RSS manbalardan bazada yo'q maqolalarni 'new' holatida saqlaydi."""
     added = 0
-    for source_name, feed_url in SOURCES:
+    for source_name, feed_url, rubrika in SOURCES:
         try:
             feed = feedparser.parse(feed_url, agent=USER_AGENT)
         except Exception as e:
@@ -235,9 +291,10 @@ def fetch_new_articles(conn):
             title = entry.get("title", "(nomsiz)")
             summary = entry.get("summary", "") or entry.get("description", "")
             conn.execute(
-                "INSERT OR IGNORE INTO agent_articles(url,title,source,seen_at,summary) "
-                "VALUES(?,?,?,?,?)",
-                (url, title, source_name, datetime.now(TZ).isoformat(), summary[:2000]))
+                "INSERT OR IGNORE INTO agent_articles"
+                "(url,title,source,seen_at,summary,rubrika) VALUES(?,?,?,?,?,?)",
+                (url, title, source_name, datetime.now(TZ).isoformat(),
+                 summary[:2000], rubrika))
             added += 1
     conn.commit()
     return added
@@ -267,21 +324,31 @@ async def run_agent(context: ContextTypes.DEFAULT_TYPE):
                      (score, url))
     conn.commit()
 
-    # --- Bosqich B: nomzodlar bazadan (saralangan, hali post yozilmaganlar) ---
-    candidates = conn.execute(
-        "SELECT url, title, source, score, COALESCE(summary,'') FROM agent_articles "
+    # --- Bosqich B: nomzodlar (har rubrikadan ko'pi bilan MAX_PER_RUBRIKA ta) ---
+    rows = conn.execute(
+        "SELECT url, title, source, score, COALESCE(summary,''), "
+        "COALESCE(rubrika,'ai') FROM agent_articles "
         "WHERE status='scored' AND score>=? "
-        "ORDER BY score DESC, seen_at DESC LIMIT ?",
-        (MIN_SCORE, MAX_POSTS_PER_DAY)).fetchall()
-    log.info("Nomzodlar: %d", len(candidates))
+        "ORDER BY score DESC, seen_at DESC LIMIT 30",
+        (MIN_SCORE,)).fetchall()
+    candidates, taken = [], {}
+    for row in rows:
+        rub = row[5]
+        if taken.get(rub, 0) >= MAX_PER_RUBRIKA:
+            continue
+        taken[rub] = taken.get(rub, 0) + 1
+        candidates.append(row)
+        if len(candidates) >= MAX_POSTS_PER_DAY:
+            break
+    log.info("Nomzodlar: %d (%s)", len(candidates), taken)
 
-    for url, title, source, score, summary in candidates:
+    for url, title, source, score, summary, rubrika in candidates:
         try:
             downloaded = trafilatura.fetch_url(url)
             text = trafilatura.extract(downloaded) if downloaded else None
             if not text:
                 text = title + "\n\n" + summary
-            post_text = ai_write_post(conn, url, text)
+            post_text = ai_write_post(conn, url, text, rubrika)
             if not post_text:
                 log.info("Kunlik API limiti tugadi — qolgan nomzodlar ertaga.")
                 break
@@ -295,9 +362,11 @@ async def run_agent(context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton("✅ Kanalga jo'natish", callback_data=f"agpub:{post_id}"),
                 InlineKeyboardButton("❌ O'tkazish", callback_data=f"agskip:{post_id}"),
             ]])
+            emoji = RUBRIKA_EMOJI.get(rubrika, "📬")
+            nomi = RUBRIKA_NOMI.get(rubrika, rubrika)
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
-                text=f"📬 Yangi post-nomzod ({source}, baho {score}/10):"
+                text=f"{emoji} {nomi} · {source} · baho {score}/10:"
                      f"\n\n{post_text}",
                 reply_markup=kb,
             )
@@ -424,8 +493,11 @@ async def cmd_requeue(update, context):
 
 @admin_only
 async def cmd_sources(update, context):
-    lines = "\n".join(f"• {name}" for name, _ in SOURCES)
-    await update.message.reply_text(f"📡 Manbalar (MVP):\n{lines}")
+    parts = []
+    for rub in ("ai", "rivojlanish", "podcast"):
+        names = ", ".join(n for n, _, r in SOURCES if r == rub)
+        parts.append(f"{RUBRIKA_EMOJI[rub]} {RUBRIKA_NOMI[rub]}: {names}")
+    await update.message.reply_text("📡 Manbalar:\n" + "\n".join(parts))
 
 
 # ======================================================================
