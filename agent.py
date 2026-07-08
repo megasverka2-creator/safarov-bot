@@ -355,15 +355,30 @@ async def stt_transcribe(audio_bytes, filename="voice.ogg"):
         return str(text).strip()
 
 
-ANSWER_PROMPT = """Sen @safaroov_blog kanalining yordamchisisan. Admin senga savol berdi.
-Quyida agent bazasidagi so'nggi materiallar ro'yxati (sarlavha, rubrika, havola).
+ROUTER_PROMPT = """Sen @safaroov_blog kanalining ovozli yordamchisisan. Admin senga \
+ovozli buyruq berdi (matnga o'girilgan). Ikki xil niyat bo'lishi mumkin:
 
-Vazifang:
-1. Savolga FAQAT mos keladigan materiallarni tanla (masalan, "marketing yangiliklari" \
-deb so'ralsa — faqat marketing/AI-marketing; "rivojlanish" desa — faqat shaxsiy rivojlanish).
-2. O'zbek tilida qisqa, jonli javob ber: har mos material uchun 1 gap + havola.
-3. Mos material bo'lmasa, ochiq ayt: "Bu mavzuda hozircha yangilik yo'q".
-4. Javob 800 belgidan oshmasin. Hech narsa to'qib chiqarma."""
+1) "savol" — yangiliklar haqida so'rayapti ("marketingda nima yangiliklar", \
+"rivojlanish bo'yicha nima bor"). Bunda:
+   - Quyidagi materiallar ro'yxatidan FAQAT savolga mos keladiganlarini tanla.
+   - Javobni raqamlangan ro'yxat qilib yoz (1. 2. 3. ...), har biriga 1 gap. \
+Havolalarni javob matniga QO'SHMA — ular alohida ko'rsatiladi.
+   - "urls" massivida tanlagan materiallaring havolalarini AYNAN javobdagi raqamlar \
+tartibida ber.
+   - Mos material bo'lmasa: javob "Bu mavzuda hozircha yangilik yo'q", urls bo'sh.
+   - Javob 700 belgidan oshmasin. Hech narsa to'qima.
+
+2) "chiqarish" — oldingi ro'yxatdagi yangilikni kanalga chiqarishni buyuryapti \
+("birinchi yangilikni kanalga chiqar", "2-chisini ovozli qilib chiqaraylik", \
+"shu maqolani ham matnli ham ovozli chiqar"). Bunda:
+   - "raqam": nechanchi yangilik (aytilmasa 1).
+   - "ovozli": "ovozli", "audio", "ovoz bilan", "ham ovozli ham matnli" desa true, \
+aks holda false.
+
+FAQAT JSON qaytar:
+{"intent":"savol","javob":"...","urls":["...","..."]}
+yoki
+{"intent":"chiqarish","raqam":1,"ovozli":true}"""
 
 
 def _recent_articles_digest(conn, limit=40):
@@ -376,24 +391,61 @@ def _recent_articles_digest(conn, limit=40):
         for t, r, u, s in rows)
 
 
-def ai_answer(conn, question, digest):
+def ai_voice_router(conn, question, digest):
+    """Ovozli buyruqning niyatini aniqlaydi va kerak bo'lsa javob tayyorlaydi."""
     if api_calls_today(conn) >= MAX_API_CALLS_PER_DAY:
-        return "Bugungi AI limiti tugadi — ertaga qayta so'rang."
+        return {"intent": "savol",
+                "javob": "Bugungi AI limiti tugadi — ertaga qayta so'rang.", "urls": []}
     api_call_inc(conn)
     resp = ai_client().chat.completions.create(
         model=MODEL,
-        max_tokens=500,
+        response_format={"type": "json_object"},
+        max_tokens=700,
         messages=[
-            {"role": "system", "content": ANSWER_PROMPT},
+            {"role": "system", "content": ROUTER_PROMPT},
             {"role": "user",
-             "content": f"Savol: {question}\n\nMateriallar:\n{digest}"},
+             "content": f"Buyruq: {question}\n\nMateriallar:\n{digest}"},
         ],
     )
-    return resp.choices[0].message.content.strip()
+    try:
+        return json.loads(resp.choices[0].message.content)
+    except json.JSONDecodeError:
+        return {"intent": "savol", "javob": "Tushunmadim, qayta so'rang.", "urls": []}
+
+
+async def publish_article(context, conn, url, ovozli):
+    """Bazadagi maqoladan post yasab, darhol kanalga chiqaradi. Post matnini qaytaradi."""
+    row = conn.execute(
+        "SELECT title, COALESCE(summary,''), COALESCE(rubrika,'ai') "
+        "FROM agent_articles WHERE url=?", (url,)).fetchone()
+    if not row:
+        raise RuntimeError("Bu maqola bazada topilmadi")
+    title, summary, rubrika = row
+    downloaded = trafilatura.fetch_url(url)
+    text = trafilatura.extract(downloaded) if downloaded else None
+    if not text:
+        text = title + "\n\n" + summary
+    post_text = ai_write_post(conn, url, text, rubrika)
+    if not post_text:
+        raise RuntimeError("Kunlik AI limiti tugadi")
+    await context.bot.send_message(chat_id=CHANNEL_ID, text=post_text)
+    if ovozli:
+        audio = await tts_generate(post_text)
+        if audio:
+            audio_title = post_text.splitlines()[0].strip()[:60] or "Safarov blog"
+            await context.bot.send_audio(
+                chat_id=CHANNEL_ID, audio=audio, filename="post.wav",
+                title=audio_title, performer="Safarov blog")
+    conn.execute(
+        "INSERT INTO agent_posts(article_url,text,status,created_at) "
+        "VALUES(?,?,'published',?)", (url, post_text, datetime.now(TZ).isoformat()))
+    conn.execute("UPDATE agent_articles SET status='posted' WHERE url=?", (url,))
+    conn.commit()
+    return post_text
 
 
 async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin ovozli xabar tashlasa: STT → AI javob → matn + ovozli javob."""
+    """Admin ovozli xabar tashlasa: STT → niyat → javob YOKI kanalga chiqarish."""
     if not update.effective_user or update.effective_user.id != ADMIN_ID:
         return
     if not AISHA_API_KEY:
@@ -413,14 +465,52 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         conn = db()
         digest = _recent_articles_digest(conn)
-        answer = ai_answer(conn, question, digest) if digest else \
-            "Bazada hali materiallar yo'q — avval /agent_run bosing."
+        if not digest:
+            await update.message.reply_text(
+                "Bazada hali materiallar yo'q — avval /agent_run bosing.")
+            conn.close()
+            return
+
+        data = ai_voice_router(conn, question, digest)
+
+        # --- Buyruq: N-yangilikni kanalga chiqarish ---
+        if data.get("intent") == "chiqarish":
+            urls = json.loads(meta_get(conn, "last_urls", "[]"))
+            n = int(data.get("raqam") or 1)
+            ovozli = bool(data.get("ovozli"))
+            if not urls:
+                await update.message.reply_text(
+                    "Qaysi yangilik ekanini bilmayapman — avval savol bering "
+                    "(masalan: «marketingda nima yangiliklar?»), keyin raqamini ayting.")
+            elif n < 1 or n > len(urls):
+                await update.message.reply_text(
+                    f"Ro'yxatda {len(urls)} ta yangilik bor edi, "
+                    f"{n}-raqamlisi yo'q. Qayta ayting.")
+            else:
+                await update.message.reply_text(
+                    f"⏳ {n}-yangilikdan post tayyorlab kanalga chiqaryapman"
+                    f"{' (ovoz bilan 🎙)' if ovozli else ''}...")
+                post_text = await publish_article(context, conn, urls[n-1], ovozli)
+                await update.message.reply_text(
+                    f"✅ KANALGA CHIQDI{' + 🎙 OVOZ' if ovozli else ''}\n\n{post_text}")
+            conn.close()
+            return
+
+        # --- Savol: javob + ro'yxatni eslab qolish ---
+        answer = data.get("javob", "Tushunmadim, qayta so'rang.")
+        urls = data.get("urls") or []
+        meta_set(conn, "last_urls", json.dumps(urls))
+        if urls:
+            answer += "\n\n" + "\n".join(
+                f"{i+1}) {u}" for i, u in enumerate(urls))
+            answer += ("\n\n🎙 Chiqarish uchun ayting: "
+                       "«N-yangilikni kanalga chiqar» (+ «ovozli» desangiz audio bilan)")
         conn.close()
         await update.message.reply_text(answer, disable_web_page_preview=True)
 
-        # Javobni ovozda ham qaytaramiz (havolalarsiz)
+        # Javobni ovozda ham qaytaramiz (ro'yxat va havolalarsiz, faqat asosiy matn)
         try:
-            audio = await tts_generate(answer)
+            audio = await tts_generate(data.get("javob", ""))
             if audio:
                 await update.message.reply_voice(voice=audio)
         except Exception as e:
