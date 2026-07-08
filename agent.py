@@ -59,6 +59,8 @@ from telegram.ext import (
     Application,
     CommandHandler,
     CallbackQueryHandler,
+    MessageHandler,
+    filters,
     ContextTypes,
 )
 
@@ -327,6 +329,105 @@ def draft_keyboard(post_id):
         row.append(InlineKeyboardButton("🎙 Ovozli", callback_data=f"agpubv:{post_id}"))
     row.append(InlineKeyboardButton("❌", callback_data=f"agskip:{post_id}"))
     return InlineKeyboardMarkup([row])
+
+
+# ======================================================================
+# OVOZLI YORDAMCHI (Aisha STT + AI javob + Aisha TTS)
+# ======================================================================
+async def stt_transcribe(audio_bytes, filename="voice.ogg"):
+    """Aisha AI orqali ovozni o'zbekcha matnga o'giradi."""
+    async with httpx.AsyncClient(timeout=120) as cli:
+        r = await cli.post(
+            AISHA_BASE + "/api/v1/stt/post/",
+            headers={"X-Api-Key": AISHA_API_KEY},
+            files={"audio": (filename, audio_bytes, "audio/ogg")},
+            data={"has_diarization": "false", "language": "uz"})
+        if r.status_code == 402:
+            raise RuntimeError("Aisha balansi tugagan (402)")
+        if r.status_code not in (200, 201):
+            raise RuntimeError(f"Aisha STT xatosi {r.status_code}: {r.text[:150]}")
+        data = r.json()
+        # Turli versiyalarda kalit nomi farq qilishi mumkin — himoyali o'qiymiz
+        text = (data.get("transcript") or data.get("text")
+                or data.get("result") or "")
+        if isinstance(text, dict):
+            text = text.get("text", "")
+        return str(text).strip()
+
+
+ANSWER_PROMPT = """Sen @safaroov_blog kanalining yordamchisisan. Admin senga savol berdi.
+Quyida agent bazasidagi so'nggi materiallar ro'yxati (sarlavha, rubrika, havola).
+
+Vazifang:
+1. Savolga FAQAT mos keladigan materiallarni tanla (masalan, "marketing yangiliklari" \
+deb so'ralsa — faqat marketing/AI-marketing; "rivojlanish" desa — faqat shaxsiy rivojlanish).
+2. O'zbek tilida qisqa, jonli javob ber: har mos material uchun 1 gap + havola.
+3. Mos material bo'lmasa, ochiq ayt: "Bu mavzuda hozircha yangilik yo'q".
+4. Javob 800 belgidan oshmasin. Hech narsa to'qib chiqarma."""
+
+
+def _recent_articles_digest(conn, limit=40):
+    rows = conn.execute(
+        "SELECT title, COALESCE(rubrika,'ai'), url, COALESCE(score,0) "
+        "FROM agent_articles WHERE score IS NOT NULL "
+        "ORDER BY seen_at DESC LIMIT ?", (limit,)).fetchall()
+    return "\n".join(
+        f"- [{RUBRIKA_NOMI.get(r,'?')}] {t} (baho {s}) — {u}"
+        for t, r, u, s in rows)
+
+
+def ai_answer(conn, question, digest):
+    if api_calls_today(conn) >= MAX_API_CALLS_PER_DAY:
+        return "Bugungi AI limiti tugadi — ertaga qayta so'rang."
+    api_call_inc(conn)
+    resp = ai_client().chat.completions.create(
+        model=MODEL,
+        max_tokens=500,
+        messages=[
+            {"role": "system", "content": ANSWER_PROMPT},
+            {"role": "user",
+             "content": f"Savol: {question}\n\nMateriallar:\n{digest}"},
+        ],
+    )
+    return resp.choices[0].message.content.strip()
+
+
+async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin ovozli xabar tashlasa: STT → AI javob → matn + ovozli javob."""
+    if not update.effective_user or update.effective_user.id != ADMIN_ID:
+        return
+    if not AISHA_API_KEY:
+        await update.message.reply_text(
+            "🎙 Ovozli so'rovlar uchun Railway'da AISHA_API_KEY berilishi kerak.")
+        return
+    try:
+        await update.message.reply_text("🎧 Eshityapman...")
+        tg_file = await update.message.voice.get_file()
+        audio_bytes = bytes(await tg_file.download_as_bytearray())
+        question = await stt_transcribe(audio_bytes)
+        if not question:
+            await update.message.reply_text(
+                "Ovozdan matn chiqmadi — yaqinroqdan, ravshanroq gapirib ko'ring.")
+            return
+        await update.message.reply_text(f"🗣 Sizni eshitdim: «{question}»")
+
+        conn = db()
+        digest = _recent_articles_digest(conn)
+        answer = ai_answer(conn, question, digest) if digest else \
+            "Bazada hali materiallar yo'q — avval /agent_run bosing."
+        conn.close()
+        await update.message.reply_text(answer, disable_web_page_preview=True)
+
+        # Javobni ovozda ham qaytaramiz (havolalarsiz)
+        try:
+            audio = await tts_generate(answer)
+            if audio:
+                await update.message.reply_voice(voice=audio)
+        except Exception as e:
+            log.warning("Javob ovozi chiqmadi: %s", e)
+    except Exception as e:
+        log.exception("Ovozli so'rov xatosi: %s", e)
+        await update.message.reply_text(f"⚠️ Xato: {e}")
 
 
 # ======================================================================
@@ -634,6 +735,8 @@ def register(app: Application):
     app.add_handler(CommandHandler("agent_requeue", cmd_requeue))
     app.add_handler(CommandHandler("agent_sources", cmd_sources))
     app.add_handler(CallbackQueryHandler(on_button, pattern=r"^(agpub|agpubv|agskip):\d+$"))
+    app.add_handler(MessageHandler(
+        filters.VOICE & filters.User(user_id=ADMIN_ID), on_voice))
 
     if app.job_queue is None:
         log.error("JobQueue yo'q! requirements.txt da "
