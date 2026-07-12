@@ -31,6 +31,8 @@ from telegram.ext import (
     filters, ContextTypes,
 )
 
+import agent  # AI Yangiliklar Agenti moduli
+
 try:
     from anthropic import AsyncAnthropic
 except Exception:
@@ -45,6 +47,7 @@ MODEL = "claude-haiku-4-5-20251001"
 DATA_DIR = os.environ.get("DATA_DIR", ".")
 USERS_FILE = os.path.join(DATA_DIR, "users.json")
 APPS_FILE = os.path.join(DATA_DIR, "applications.json")
+STATS_FILE = os.path.join(DATA_DIR, "stats.json")   # kunlik funksiya statistikasi
 
 aclient = AsyncAnthropic(api_key=ANTHROPIC_KEY) if (ANTHROPIC_KEY and AsyncAnthropic) else None
 WEBAPP_URL = "https://starlit-arithmetic-7b0c9e.netlify.app/"
@@ -243,6 +246,41 @@ def track_user(user):
     rec["last_seen"] = today
     users[uid] = rec
     save_json(USERS_FILE, users)
+
+
+# ---------------- Statistika yordamchilari ----------------
+EVENT_LABELS = {
+    "menyu":      "🏠 Menyu (start)",
+    "konkurs1":   "🏆 1-Konkurs",
+    "konkurs2":   "🎲 2-Konkurs",
+    "test_dost":  "🧩 Do'st testi",
+    "test_shaxs": "💪 Shaxs testi",
+    "gildirak":   "🎯 Hayot g'ildiragi",
+}
+
+def track_event(name):
+    """ Funksiya ishlatilishini kun bo'yicha sanab boradi: {"2026-07-12": {"menyu": 5}} """
+    d = load_json(STATS_FILE, {})
+    day = time.strftime("%Y-%m-%d")
+    d.setdefault(day, {})
+    d[day][name] = d[day].get(name, 0) + 1
+    save_json(STATS_FILE, d)
+
+def last_days(n=7):
+    """ Oxirgi n kun ro'yxati (bugungi kun oxirida): ['2026-07-06', ...] """
+    today = datetime.now()
+    return [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(n - 1, -1, -1)]
+
+UZ_WEEKDAYS = ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"]
+
+def bar_chart(pairs, width=10):
+    """ pairs = [(label, son), ...] → matnli grafik qatorlari """
+    mx = max((v for _, v in pairs), default=0) or 1
+    lines = []
+    for label, v in pairs:
+        n = round(v / mx * width) if v else 0
+        lines.append(f"{label} {'▇' * n if n else '·'} {v}")
+    return "\n".join(lines)
 
 
 # ---------------- Konkurs yordamchilari ----------------
@@ -503,6 +541,7 @@ async def start(update, context):
                                            f"🎉 Havolangiz orqali yangi do'st qo'shildi! +{REF_POINTS} ochko.")
         except Exception:
             pass
+    track_event("menyu")
     extra = ""
     if CONTEST_ACTIVE and not contest_over():
         extra = f"\n\n🏆 *{CONTEST_TITLE}* ketyapti — sovrin: {CONTEST_PRIZE}! Qatnashish: /konkurs"
@@ -512,6 +551,7 @@ async def start(update, context):
         + extra, reply_markup=menu_kb(), parse_mode="Markdown")
 
 async def konkurs(update, context):
+    track_event("konkurs1")
     await send_contest(context.bot, update.effective_chat.id, update.effective_user)
 
 async def xabar(update, context):
@@ -551,18 +591,54 @@ async def stats(update, context):
     users = load_json(USERS_FILE, {})
     apps = load_json(APPS_FILE, [])
     today = time.strftime("%Y-%m-%d")
+    days7 = last_days(7)
+
     active = sum(1 for u in users.values() if u.get("last_seen") == today)
+    active7 = sum(1 for u in users.values() if u.get("last_seen", "") in days7)
     parts = sum(1 for u in users.values() if u.get("points", 0) > 0)
     top = ranking()[:1]
     top_line = f"\n🥇 Yetakchi: {top[0][1]['name']} ({top[0][1]['points']} ochko)" if top else ""
     quizzes = load_json(QUIZ_FILE, {})
     q_made = len(quizzes)
     q_played = sum(len(z.get("attempts", [])) for z in quizzes.values())
+
+    # --- Yangi foydalanuvchilar grafigi (first_seen bo'yicha, oxirgi 7 kun) ---
+    new_by_day = {d: 0 for d in days7}
+    for u in users.values():
+        fs = u.get("first_seen", "")
+        if fs in new_by_day:
+            new_by_day[fs] += 1
+    week_new = sum(new_by_day.values())
+    chart_pairs = []
+    for d in days7:
+        dt = datetime.strptime(d, "%Y-%m-%d")
+        chart_pairs.append((f"{dt.strftime('%d.%m')} {UZ_WEEKDAYS[dt.weekday()]}", new_by_day[d]))
+    chart = bar_chart(chart_pairs)
+
+    # --- Funksiyalar reytingi (stats.json, oxirgi 7 kun) ---
+    ev = load_json(STATS_FILE, {})
+    totals = {}
+    for d in days7:
+        for name, cnt in ev.get(d, {}).items():
+            totals[name] = totals.get(name, 0) + cnt
+    if totals:
+        ranked = sorted(totals.items(), key=lambda x: -x[1])
+        feat_pairs = [(EVENT_LABELS.get(n, n), c) for n, c in ranked[:8]]
+        feats = "\n".join(f"{i+1}. {lbl} — *{c}*" for i, (lbl, c) in enumerate(feat_pairs))
+    else:
+        feats = "_Hali ma'lumot yig'ilmagan (yangi versiya ishga tushgandan boshlab yig'iladi)_"
+
     await update.message.reply_text(
-        f"📊 *Statistika*\n\n👥 Jami foydalanuvchi: *{len(users)}*\n"
-        f"🟢 Bugun faol: *{active}*\n🤝 Jamoaga arizalar: *{len(apps)}*\n"
+        f"📊 *Statistika*\n\n"
+        f"👥 Jami foydalanuvchi: *{len(users)}*\n"
+        f"🟢 Bugun faol: *{active}* · Haftada: *{active7}*\n"
+        f"🆕 Haftada yangi: *{week_new}*\n"
+        f"🤝 Jamoaga arizalar: *{len(apps)}*\n"
         f"🏆 Konkurs ishtirokchilari: *{parts}*{top_line}\n"
-        f"🧩 Testlar: *{q_made}* yaratilgan · *{q_played}* o'ynalgan",
+        f"🧩 Testlar: *{q_made}* yaratilgan · *{q_played}* o'ynalgan\n\n"
+        f"📈 *Yangi foydalanuvchilar (7 kun):*\n"
+        f"```\n{chart}\n```\n"
+        f"🔥 *Eng ko'p ishlatilgan bo'limlar (7 kun):*\n{feats}",
         parse_mode="Markdown")
 
 
@@ -640,6 +716,10 @@ async def on_webapp_data(update, context):
         await update.message.reply_text("Ma'lumotni o'qib bo'lmadi.")
         return
     action = data.get("action")
+    if "areas" in data:
+        track_event("gildirak")
+    elif action:
+        track_event(f"app_{action}")
 
     if action in ("quote", "books"):
         await update.message.reply_text(f"{TITLES[action]}\n\n⏳ Tayyorlanmoqda...")
@@ -792,11 +872,13 @@ async def quiz_send_question(context, chat_id, message=None):
 
 
 async def quiz_start_create(update, context):
+    track_event("test_dost")
     context.user_data["quiz"] = {"mode": "c", "step": 0, "answers": []}
     await quiz_send_question(context, update.effective_chat.id)
 
 
 async def quiz_start_guess(update, context, code):
+    track_event("test_dost")
     quizzes = load_json(QUIZ_FILE, {})
     data = quizzes.get(code)
     if not data:
@@ -933,6 +1015,7 @@ async def ptest_send_question(context, chat_id, message=None):
 
 
 async def ptest_start(update, context):
+    track_event("test_shaxs")
     context.user_data["ptest"] = {"step": 0, "scores": {"Y": 0, "D": 0, "I": 0, "M": 0}}
     await ptest_send_question(context, update.effective_chat.id)
 
@@ -1029,6 +1112,7 @@ def k2_joined_text(num):
 
 
 async def k2_join(update, context):
+    track_event("konkurs2")
     user = update.effective_user
     track_user(user)
     chat_id = update.effective_chat.id
@@ -1242,6 +1326,7 @@ def main():
     app.add_handler(CallbackQueryHandler(on_k2_cb, pattern="^k2:"))
     app.add_handler(CallbackQueryHandler(admin_decide, pattern="^(acc|rej):"))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
+    agent.register(app)  # AI Yangiliklar Agenti (07:00 avtomatik, /agent_run)
     print("Bot ishga tushdi...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
