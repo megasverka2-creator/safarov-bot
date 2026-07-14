@@ -20,6 +20,7 @@ requirements.txt ga qo'shiladi:
     openai
     feedparser
     trafilatura
+    pillow>=10.1
 
 Railway → Variables ga qo'shiladi:
     OPENAI_API_KEY = sk-...
@@ -40,6 +41,7 @@ import logging
 import os
 import re
 import sqlite3
+from io import BytesIO
 from datetime import datetime, time as dtime, date
 from zoneinfo import ZoneInfo
 
@@ -47,10 +49,17 @@ import feedparser
 import httpx
 import trafilatura
 from openai import OpenAI
+
+try:  # Pillow — post uchun rasm-karta chizadi. Bo'lmasa agent rasmsiz ishlayveradi.
+    from PIL import Image, ImageDraw, ImageFont
+except Exception:
+    Image = None
+
 from telegram import (
     Update,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    InputMediaPhoto,
     BotCommand,
     BotCommandScopeDefault,
     BotCommandScopeChat,
@@ -79,14 +88,14 @@ AISHA_BASE = "https://back.aisha.group"
 TZ = ZoneInfo("Asia/Tashkent")
 MODEL = "gpt-4o-mini"
 MIN_SCORE = 6                  # nomzodlik chegarasi (siz baribir qo'lda tanlaysiz)
-MAX_POSTS_PER_DAY = 6          # kunlik post-nomzodlar
+MAX_POSTS_PER_DAY = 8          # kunlik post-nomzodlar (5 rubrika uchun)
 MAX_PER_RUBRIKA = 2            # bitta yo'nalish kunni bosib ketmasligi uchun
-MAX_API_CALLS_PER_DAY = 60     # 9 manba uchun; baribir kuniga ~$0.02 atrofida
+MAX_API_CALLS_PER_DAY = 80     # 15 manba uchun; baribir kuniga ~$0.03 atrofida
 SCORING_RESERVE = MAX_POSTS_PER_DAY  # post yozish uchun doim zaxira chaqiruv qoladi
 ARTICLE_CHAR_LIMIT = 8000
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) AppleWebKit/537.36"
 
-# Rubrikalar: ai (AI/marketing) · rivojlanish (shaxsiy rivojlanish) · podcast (audio/video)
+# Rubrikalar: ai · rivojlanish · podcast · dunyo (jahon yangiliklari) · mutolaa (kitob)
 SOURCES = [
     # --- 🗞 AI va marketing ---
     ("Google AI",     "https://blog.google/technology/ai/rss/",                        "ai"),
@@ -100,11 +109,21 @@ SOURCES = [
     ("TED Talks",     "https://feeds.feedburner.com/TEDTalks_audio",                   "podcast"),
     ("Huberman Lab",  "https://feeds.megaphone.fm/hubermanlab",                        "podcast"),
     ("Tim Ferriss",   "https://rss.art19.com/tim-ferriss-show",                        "podcast"),
+    # --- 🌍 Dunyo yangiliklari (faqat nufuzli, tekshirilgan tahririyatlar) ---
+    ("BBC World",     "https://feeds.bbci.co.uk/news/world/rss.xml",                   "dunyo"),
+    ("Al Jazeera",    "https://www.aljazeera.com/xml/rss/all.xml",                     "dunyo"),
+    ("NYT World",     "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",        "dunyo"),
+    # --- 📚 Kitob va mutolaa ---
+    ("Literary Hub",  "https://lithub.com/feed/",                                      "mutolaa"),
+    ("Austin Kleon",  "https://austinkleon.com/feed/",                                 "mutolaa"),
+    ("Ryan Holiday",  "https://ryanholiday.net/feed/",                                 "mutolaa"),
 ]
 
-RUBRIKA_EMOJI = {"ai": "🗞", "rivojlanish": "🌱", "podcast": "🎧"}
+RUBRIKA_EMOJI = {"ai": "🗞", "rivojlanish": "🌱", "podcast": "🎧",
+                 "dunyo": "🌍", "mutolaa": "📚"}
 RUBRIKA_NOMI = {"ai": "AI va marketing", "rivojlanish": "Shaxsiy rivojlanish",
-                "podcast": "Podcast va video"}
+                "podcast": "Podcast va video", "dunyo": "Dunyo yangiliklari",
+                "mutolaa": "Kitob va mutolaa"}
 
 log = logging.getLogger("agent")
 
@@ -167,14 +186,19 @@ def api_call_inc(conn):
 # ======================================================================
 # AI QATLAMI
 # ======================================================================
-SCORE_PROMPT = """Sen @safaroov_blog Telegram kanalining kuratorisan. Kanal ikki \
-yo'nalishda: (1) AI va marketing, (2) shaxsiy rivojlanish. Auditoriya: O'zbekistondagi \
-marketologlar, kichik biznes egalari, o'z ustida ishlaydigan yoshlar.
+SCORE_PROMPT = """Sen @safaroov_blog Telegram kanalining kuratorisan. Kanal yo'nalishlari: \
+(1) AI va marketing, (2) shaxsiy rivojlanish, (3) muhim jahon yangiliklari, \
+(4) kitob va mutolaa, (5) podcast. Auditoriya: O'zbekistondagi marketologlar, kichik \
+biznes egalari, o'z ustida ishlaydigan yoshlar. Auditoriyaning asosiy qismi musulmonlar — \
+material hurmatli va ishonchli bo'lishi shart.
 
 Quyidagi material sarlavhasi va annotatsiyasiga qarab baho ber.
 Yuqori baho: amaliy foyda, yangi vosita/model, real keys, kuchli hayotiy saboq, \
-ilmiy asosli maslahat, mashhur mehmon bilan chuqur suhbat. \
-Past baho: tor ilmiy mavzu, mahalliy ahamiyatsiz xabar, reklama, takror, suv quyilgan umumiy gap.
+ilmiy asosli maslahat, dunyodagi chinakam muhim voqea (siyosat, iqtisod — keng ommaga \
+ta'sir qiladigan), mutolaa madaniyati va kitoblar haqida qiziqarli material. \
+Past baho: tor ilmiy mavzu, mahalliy ahamiyatsiz xabar, reklama, takror, suv quyilgan \
+umumiy gap, mish-mish yoki tasdiqlanmagan xabar, shov-shuvli sariq matbuot uslubi, \
+faqat dahshat va qo'rquvga qurilgan xabar.
 
 FAQAT JSON qaytar, boshqa hech narsa yozma:
 {"score": 0dan 10gacha butun son, "sabab": "bir gap"}"""
@@ -191,6 +215,14 @@ Yaxshi: "Savi Security: AI endi firibgarlardan himoya qiladi".
 ishlatilmasin — gaplar sodda, aniq va ravon bo'lsin.
 6. Terminlar: birinchi ishlatishda o'zbekcha + qavsda asli. \
 Masalan: "katta til modeli (LLM)".
+7. Tarjima sifati: har gapni yozib bo'lgach o'zbek kishi shunday gapiradimi deb tekshir. \
+Ruscha-inglizcha kalka, g'aliz so'z tartibi va sun'iy iboralar TAQIQLANADI. \
+Sonlar va sanalar o'zbekcha yoziladi (masalan: 15-iyul, 3 mln).
+8. Auditoriya asosan musulmonlar — ohang doim hurmatli. Behayo, haqoratli yoki \
+diniy tuyg'ularga tegadigan ifodalar ishlatilmasin. Diniy va siyosiy mavzularda \
+qat'iy betaraf pozitsiya, hech bir tomonga baho berilmasin.
+9. Matn oson o'qilsin: qisqa gaplar, qisqa xatboshilar (2-3 gapdan oshmasin), \
+bitta postda bitta asosiy fikr.
 FAQAT tayyor post matnini qaytar, izohsiz."""
 
 POST_PROMPTS = {
@@ -209,7 +241,7 @@ Shablon (kvadrat qavslarni o'z matning bilan almashtir):
 
 🔗 Manba: {url}
 
-@safaroov_blog""",
+#ai · @safaroov_blog""",
 
     "rivojlanish": """Sen @safaroov_blog Telegram kanalining muharririsan. Kanal tili: \
 o'zbek. Ohang: samimiy, ilhomlantiruvchi, lekin quruq motivatsiyasiz — aniq fikr va amaliy xulosa muhim.
@@ -226,7 +258,7 @@ Shablon (kvadrat qavslarni o'z matning bilan almashtir):
 
 🔗 Manba: {url}
 
-@safaroov_blog""",
+#rivojlanish · @safaroov_blog""",
 
     "podcast": """Sen @safaroov_blog Telegram kanalining muharririsan. Kanal tili: \
 o'zbek. Ohang: do'stona tavsiya beruvchi.
@@ -245,7 +277,51 @@ Shablon (kvadrat qavslarni o'z matning bilan almashtir):
 
 🔗 Tinglash: {url}
 
-@safaroov_blog""",
+#podkast · @safaroov_blog""",
+
+    "dunyo": """Sen @safaroov_blog Telegram kanalining xalqaro yangiliklar muharririsan. \
+Kanal tili: o'zbek. Ohang: xolis, vazmin, ishonchli — xuddi jiddiy axborot agentligi kabi.
+
+Quyidagi inglizcha maqola asosida Dunyo yangiliklari rubrikasi uchun POST yoz.
+
+QO'SHIMCHA QAT'IY TALABLAR (jahon yangiliklari uchun):
+- FAQAT manbada aniq tasdiqlangan faktlar. Taxmin, bashorat va mish-mish YO'Q.
+- Hech bir davlat, xalq, din yoki siyosiy tomonga baho berma, ayblama, oqlama — \
+faqat nima bo'lganini ayt.
+- Urush va fojia mavzularida dahshatli tafsilotlar (qon, jarohat tasviri) berilmasin — \
+voqea mohiyati yetarli.
+- Postda kim xabar berganini aniq ko'rsat (masalan: "BBC xabariga ko'ra...").
+""" + _UMUMIY_QOIDALAR + """
+Shablon (kvadrat qavslarni o'z matning bilan almashtir):
+
+🌍 [Xolis, aniq o'zbekcha sarlavha]
+
+[2-4 gap: nima bo'ldi — faqat tasdiqlangan faktlar, manba nomi bilan]
+
+📌 Nega muhim: [1-2 gap — bu voqea dunyoga yoki mintaqamizga qanday ta'sir qilishi mumkin]
+
+🔗 Manba: {url}
+
+#dunyo · @safaroov_blog""",
+
+    "mutolaa": """Sen @safaroov_blog Telegram kanalining kitob va mutolaa rubrikasi \
+muharririsan. Kanal tili: o'zbek. Ohang: iliq, kitobsevar do'st kabi — mutolaaga \
+mehr uyg'otadigan.
+
+Quyidagi inglizcha maqola asosida Kitob va mutolaa rubrikasi uchun POST yoz. \
+Maqola kitob, yozuvchi, o'qish odati yoki mutolaa madaniyati haqida bo'lishi mumkin.
+""" + _UMUMIY_QOIDALAR + """
+Shablon (kvadrat qavslarni o'z matning bilan almashtir):
+
+📚 [Qiziqarli o'zbekcha sarlavha]
+
+[2-3 gap: maqolaning asosiy g'oyasi — kitobxonga qiziq bo'ladigan tilda]
+
+✨ Mutolaa uchun: [1-2 gap — kitob tavsiyasi yoki o'qish odatiga oid amaliy maslahat]
+
+🔗 Manba: {url}
+
+#mutolaa · @safaroov_blog""",
 }
 
 
@@ -331,6 +407,156 @@ def draft_keyboard(post_id):
         row.append(InlineKeyboardButton("🎙 Ovozli", callback_data=f"agpubv:{post_id}"))
     row.append(InlineKeyboardButton("❌", callback_data=f"agskip:{post_id}"))
     return InlineKeyboardMarkup([row])
+
+
+# ======================================================================
+# RASM-AGENT — post uchun brendli karta (Pillow, bepul, API'siz)
+# ======================================================================
+CARD_W, CARD_H = 1280, 720
+CARD_VARIANTS = 4
+
+# Har rubrika uchun 4 ta dizayn: (yuqori rang, pastki rang, aksent rang)
+CARD_PALETTES = {
+    "dunyo":       [("#0f2027", "#2c5364", "#4fc3f7"), ("#141e30", "#243b55", "#ffd54f"),
+                    ("#232526", "#414345", "#80cbc4"), ("#1a2980", "#26d0ce", "#ffffff")],
+    "ai":          [("#41295a", "#2f0743", "#e040fb"), ("#0f0c29", "#302b63", "#7c4dff"),
+                    ("#1e3c72", "#2a5298", "#82b1ff"), ("#232526", "#414345", "#b388ff")],
+    "rivojlanish": [("#134e5e", "#71b280", "#ccff90"), ("#0f2027", "#2c5364", "#69f0ae"),
+                    ("#1d976c", "#093028", "#f4ff81"), ("#232526", "#414345", "#a5d6a7")],
+    "mutolaa":     [("#3e2723", "#795548", "#ffcc80"), ("#4e342e", "#212121", "#ffab91"),
+                    ("#5d4037", "#8d6e63", "#fff8e1"), ("#263238", "#37474f", "#ffe082")],
+    "podcast":     [("#0f2027", "#203a43", "#80deea"), ("#2c003e", "#512b58", "#ea80fc"),
+                    ("#000046", "#1cb5e0", "#ffffff"), ("#232526", "#414345", "#84ffff")],
+}
+
+_FONT_PATHS = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+]
+
+def _card_font(size):
+    for p in _FONT_PATHS:
+        if os.path.exists(p):
+            try:
+                return ImageFont.truetype(p, size)
+            except Exception:
+                pass
+    try:
+        return ImageFont.load_default(size=size)   # Pillow >= 10.1
+    except TypeError:
+        return ImageFont.load_default()
+
+def _hex_rgb(h):
+    h = h.lstrip("#")
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+def _card_title(post_text):
+    """Postning birinchi qatoridan toza sarlavha oladi (emojisiz)."""
+    for ln in post_text.splitlines():
+        t = re.sub(r"[^\w\s.,!?:;()'’ʻʼ«»%+\-–—]", "", ln, flags=re.UNICODE).strip()
+        if len(t) >= 8:
+            return t[:120]
+    return "Safarov blog"
+
+def _wrap(draw, text, font, max_w):
+    lines, cur = [], ""
+    for word in text.split():
+        trial = (cur + " " + word).strip()
+        if draw.textlength(trial, font=font) <= max_w:
+            cur = trial
+        else:
+            if cur:
+                lines.append(cur)
+            cur = word
+    if cur:
+        lines.append(cur)
+    return lines
+
+def make_card(post_text, rubrika, variant=0):
+    """Post uchun 1280x720 brendli karta. PNG baytlari qaytadi."""
+    if Image is None:
+        return None
+    pal = CARD_PALETTES.get(rubrika, CARD_PALETTES["ai"])
+    top, bottom, accent = pal[variant % len(pal)]
+    top, bottom, accent = _hex_rgb(top), _hex_rgb(bottom), _hex_rgb(accent)
+
+    img = Image.new("RGB", (CARD_W, CARD_H), top)
+    d = ImageDraw.Draw(img, "RGBA")
+    # Gradient fon
+    for y in range(CARD_H):
+        k = y / CARD_H
+        d.line([(0, y), (CARD_W, y)],
+               fill=tuple(int(top[i] + (bottom[i] - top[i]) * k) for i in range(3)))
+    # Bezak doiralar (shaffof)
+    d.ellipse([CARD_W - 380, -220, CARD_W + 160, 320], fill=accent + (26,))
+    d.ellipse([-180, CARD_H - 260, 260, CARD_H + 180], fill=accent + (18,))
+
+    # Rubrika yorlig'i (yuqorida)
+    label = RUBRIKA_NOMI.get(rubrika, "YANGILIK").upper()
+    f_lbl = _card_font(30)
+    lw = d.textlength(label, font=f_lbl)
+    d.rounded_rectangle([70, 70, 70 + lw + 48, 128], radius=29, fill=accent + (46,))
+    d.rounded_rectangle([70, 70, 70 + lw + 48, 128], radius=29, outline=accent, width=2)
+    d.text((94, 84), label, font=f_lbl, fill=accent)
+
+    # Sarlavha (o'rtada, avtomatik o'lcham)
+    title = _card_title(post_text)
+    for fsize in (76, 64, 54, 46):
+        f_t = _card_font(fsize)
+        lines = _wrap(d, title, f_t, CARD_W - 190)
+        if len(lines) <= 4:
+            break
+    lh = int(fsize * 1.25)
+    y0 = max(200, (CARD_H - lh * len(lines)) // 2 - 30)
+    d.rectangle([70, y0 + 8, 82, y0 + lh * len(lines) - 8], fill=accent)  # aksent chiziq
+    for i, ln in enumerate(lines):
+        d.text((108, y0 + i * lh), ln, font=f_t, fill=(255, 255, 255))
+
+    # Pastki panel: brend + sana
+    f_b = _card_font(36)
+    f_s = _card_font(26)
+    d.text((70, CARD_H - 96), "SAFAROV BLOG", font=f_b, fill=(255, 255, 255))
+    sana = datetime.now(TZ).strftime("%d.%m.%Y")
+    handle = "t.me/safaroov_blog"
+    d.text((70, CARD_H - 50), handle, font=f_s, fill=accent)
+    sw = d.textlength(sana, font=f_s)
+    d.text((CARD_W - 70 - sw, CARD_H - 56), sana, font=f_s, fill=(255, 255, 255, 210))
+
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+def preview_keyboard(post_id, variant):
+    """Rasm oldindan ko'rish tugmalari."""
+    nxt = (variant + 1) % CARD_VARIANTS
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🖼 Shu rasm bilan chiqarish",
+                              callback_data=f"agok:{post_id}:{variant}")],
+        [InlineKeyboardButton("🔄 Boshqa dizayn", callback_data=f"agrd:{post_id}:{nxt}"),
+         InlineKeyboardButton("📝 Rasmsiz", callback_data=f"agtxt:{post_id}")],
+        [InlineKeyboardButton("❌ Bekor qilish", callback_data=f"agno:{post_id}")],
+    ])
+
+def _post_rubrika(conn, post_id):
+    row = conn.execute(
+        "SELECT COALESCE(a.rubrika,'ai') FROM agent_posts p "
+        "LEFT JOIN agent_articles a ON a.url = p.article_url "
+        "WHERE p.id=?", (post_id,)).fetchone()
+    return row[0] if row else "ai"
+
+async def _send_to_channel(context, text, image_bytes=None):
+    """Kanalga chiqarish: rasm bo'lsa rasm+matn, bo'lmasa faqat matn."""
+    if image_bytes:
+        if len(text) <= 1024:
+            await context.bot.send_photo(chat_id=CHANNEL_ID, photo=image_bytes,
+                                         caption=text)
+        else:  # caption limiti — rasm alohida, matn alohida
+            await context.bot.send_photo(chat_id=CHANNEL_ID, photo=image_bytes)
+            await context.bot.send_message(chat_id=CHANNEL_ID, text=text)
+    else:
+        await context.bot.send_message(chat_id=CHANNEL_ID, text=text)
 
 
 # ======================================================================
@@ -660,7 +886,9 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.from_user.id != ADMIN_ID:
         await query.answer("Bu tugma faqat admin uchun.", show_alert=True)
         return
-    action, post_id = query.data.split(":")
+    parts = query.data.split(":")
+    action, post_id = parts[0], parts[1]
+    variant = int(parts[2]) if len(parts) > 2 else 0
     conn = db()
     row = conn.execute("SELECT text,status FROM agent_posts WHERE id=?", (post_id,)).fetchone()
     if not row:
@@ -673,37 +901,121 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.close()
         return
 
-    if action in ("agpub", "agpubv"):
+    # --- ✅ Kanalga: avval rasm taklif qilinadi ---
+    if action == "agpub":
+        rubrika = _post_rubrika(conn, post_id)
+        img = make_card(text, rubrika, 0)
+        if not img:  # Pillow yo'q — eski usul: to'g'ridan-to'g'ri matn
+            try:
+                await _send_to_channel(context, text)
+                conn.execute("UPDATE agent_posts SET status='published' WHERE id=?", (post_id,))
+                conn.commit()
+                await query.answer("Kanalga jo'natildi! ✅")
+                await query.edit_message_text(f"✅ KANALGA CHIQDI\n\n{text}")
+            except Exception as e:
+                await query.answer(f"Xato: {e}", show_alert=True)
+            conn.close()
+            return
+        await query.answer("Rasm tayyorlanmoqda... 🎨")
         try:
-            await context.bot.send_message(chat_id=CHANNEL_ID, text=text)
+            await context.bot.send_photo(
+                chat_id=ADMIN_ID, photo=img,
+                caption=f"🎨 Dizayn 1/{CARD_VARIANTS} — postga mos keladimi?",
+                reply_markup=preview_keyboard(post_id, 0))
+            await query.edit_message_text(f"🎨 RASM TANLANMOQDA (pastda)\n\n{text}")
+        except Exception as e:
+            await query.answer(f"Rasm xatosi: {e}", show_alert=True)
+        conn.close()
+        return
+
+    # --- 🔄 Boshqa dizayn ---
+    if action == "agrd":
+        rubrika = _post_rubrika(conn, post_id)
+        img = make_card(text, rubrika, variant)
+        try:
+            await query.edit_message_media(
+                InputMediaPhoto(img,
+                                caption=f"🎨 Dizayn {variant + 1}/{CARD_VARIANTS} — "
+                                        f"postga mos keladimi?"),
+                reply_markup=preview_keyboard(post_id, variant))
+            await query.answer()
+        except Exception as e:
+            await query.answer(f"Xato: {e}", show_alert=True)
+        conn.close()
+        return
+
+    # --- 🖼 Rasm bilan chiqarish ---
+    if action == "agok":
+        rubrika = _post_rubrika(conn, post_id)
+        img = make_card(text, rubrika, variant)
+        try:
+            await _send_to_channel(context, text, img)
+            conn.execute("UPDATE agent_posts SET status='published' WHERE id=?", (post_id,))
+            conn.commit()
+            await query.answer("Rasm bilan kanalga chiqdi! ✅")
+            await query.edit_message_caption(caption="✅ KANALGA CHIQDI (🖼 rasm bilan)")
+        except Exception as e:
+            await query.answer(f"Xato: {e}", show_alert=True)
+        conn.close()
+        return
+
+    # --- 📝 Rasmsiz chiqarish ---
+    if action == "agtxt":
+        try:
+            await _send_to_channel(context, text)
+            conn.execute("UPDATE agent_posts SET status='published' WHERE id=?", (post_id,))
+            conn.commit()
+            await query.answer("Kanalga jo'natildi! ✅")
+            await query.edit_message_caption(caption="✅ KANALGA CHIQDI (📝 rasmsiz)")
+        except Exception as e:
+            await query.answer(f"Xato: {e}", show_alert=True)
+        conn.close()
+        return
+
+    # --- ❌ Bekor (rasm bosqichidan orqaga) ---
+    if action == "agno":
+        try:
+            await query.edit_message_caption(caption="❌ Bekor qilindi.")
+            await context.bot.send_message(
+                chat_id=ADMIN_ID, text=text, reply_markup=draft_keyboard(post_id))
+        except Exception:
+            pass
+        await query.answer("Post nomzodlar qatoriga qaytdi.")
+        conn.close()
+        return
+
+    # --- 🎙 Ovozli: matn + audio (eski oqim, rasm bosqichisiz) ---
+    if action == "agpubv":
+        try:
+            await _send_to_channel(context, text)
             conn.execute("UPDATE agent_posts SET status='published' WHERE id=?", (post_id,))
             conn.commit()
         except Exception as e:
             await query.answer(f"Xato: {e}", show_alert=True)
             conn.close()
             return
-
         audio_note = ""
-        if action == "agpubv":
-            await query.answer("Matn chiqdi, ovoz tayyorlanmoqda... 🎙")
-            try:
-                audio = await tts_generate(text)
-                if audio:
-                    title = text.splitlines()[0].strip()[:60] or "Safarov blog"
-                    await context.bot.send_audio(
-                        chat_id=CHANNEL_ID, audio=audio,
-                        filename="post.wav", title=title,
-                        performer="Safarov blog")
-                    audio_note = " + 🎙 OVOZ"
-                else:
-                    audio_note = " (ovoz o'tkazildi: matn bo'sh)"
-            except Exception as e:
-                log.exception("TTS xatosi: %s", e)
-                audio_note = f"\n⚠️ Ovoz chiqmadi: {e}"
-        else:
-            await query.answer("Kanalga jo'natildi! ✅")
+        await query.answer("Matn chiqdi, ovoz tayyorlanmoqda... 🎙")
+        try:
+            audio = await tts_generate(text)
+            if audio:
+                title = text.splitlines()[0].strip()[:60] or "Safarov blog"
+                await context.bot.send_audio(
+                    chat_id=CHANNEL_ID, audio=audio,
+                    filename="post.wav", title=title,
+                    performer="Safarov blog")
+                audio_note = " + 🎙 OVOZ"
+            else:
+                audio_note = " (ovoz o'tkazildi: matn bo'sh)"
+        except Exception as e:
+            log.exception("TTS xatosi: %s", e)
+            audio_note = f"\n⚠️ Ovoz chiqmadi: {e}"
         await query.edit_message_text(f"✅ KANALGA CHIQDI{audio_note}\n\n{text}")
-    else:  # agskip
+        conn.close()
+        return
+
+    # --- ❌ O'tkazib yuborish ---
+    if action == "agskip":
         conn.execute("UPDATE agent_posts SET status='skipped' WHERE id=?", (post_id,))
         conn.commit()
         await query.answer("O'tkazib yuborildi.")
@@ -778,7 +1090,7 @@ async def cmd_requeue(update, context):
 @admin_only
 async def cmd_sources(update, context):
     parts = []
-    for rub in ("ai", "rivojlanish", "podcast"):
+    for rub in ("ai", "rivojlanish", "podcast", "dunyo", "mutolaa"):
         names = ", ".join(n for n, _, r in SOURCES if r == rub)
         parts.append(f"{RUBRIKA_EMOJI[rub]} {RUBRIKA_NOMI[rub]}: {names}")
     await update.message.reply_text("📡 Manbalar:\n" + "\n".join(parts))
@@ -841,7 +1153,7 @@ def register(app: Application):
     app.add_handler(CommandHandler("agent_resume", cmd_resume))
     app.add_handler(CommandHandler("agent_requeue", cmd_requeue))
     app.add_handler(CommandHandler("agent_sources", cmd_sources))
-    app.add_handler(CallbackQueryHandler(on_button, pattern=r"^(agpub|agpubv|agskip):\d+$"))
+    app.add_handler(CallbackQueryHandler(on_button, pattern=r"^(agpub|agpubv|agskip|agok|agrd|agtxt|agno):\d+"))
     app.add_handler(MessageHandler(
         filters.VOICE & filters.User(user_id=ADMIN_ID), on_voice))
 
