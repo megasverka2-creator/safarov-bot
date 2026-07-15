@@ -1630,5 +1630,212 @@ WEEKS = {
              "correct": 1},
         ],
     },
-    10: {"title": "Strategiya va yakuniy loyiha", "lessons": [], "test": []},
+    10: {
+        "title": "Yakuniy strategiya va bitiruv loyihasi",
+        "lessons": [
+            {
+                "id": "10.1",
+                "title": "Hammasini birlashtirish: bir varaqlik strategiya",
+                "free": False,
+                "text": (
+"📖 <b>10.1-dars. Hammasini birlashtirish: bir varaqlik "
+"strategiya</b>\n\n"
+"To'qqiz hafta davomida g'ishtlarni yig'dik: auditoriya, brend, "
+"kontent, reklama, raqamlar, funnel. Endi ulardan <b>bino</b> "
+"quramiz. Yaxshi yangilik: professional marketing strategiyasi "
+"100 betlik hujjat emas — u bitta varaqqa sig'adi. Yomon yangilik: "
+"o'sha bitta varaq uchun har savolga aniq javob kerak.\n\n"
+"<b>Bir varaqlik strategiya: 7 qator</b>\n\n"
+"1. <b>Kim?</b> — buyer persona, bir jumlada (2-hafta)\n"
+"2. <b>Nima va'da qilamiz?</b> — pozitsiya: nega aynan biz, bir "
+"jumlada (2-hafta)\n"
+"3. <b>Qayerda?</b> — 1+1 platforma formulasi (3-hafta)\n"
+"4. <b>Nima gapiramiz?</b> — 3-5 kontent ustuni va 40/30/20/10 "
+"nisbat (4-5-hafta)\n"
+"5. <b>Qanday topamiz?</b> — trafik manbalari: organik + pullik "
+"(6-7-hafta)\n"
+"6. <b>Qayerga yig'amiz?</b> — funnel va baza (9-hafta)\n"
+"7. <b>Qanday o'lchaymiz?</b> — 3 ta asosiy raqam: CAC, "
+"konversiya, LTV (8-hafta)\n\n"
+"Shu 7 javob bitta varaqda tursa — sizda strategiya bor. Qaysidir "
+"qator bo'sh bo'lsa — teshik o'sha yerda, byudjet o'sha teshikdan "
+"oqadi.\n\n"
+"<b>Byudjetni qavatlarga taqsimlash</b>\n\n"
+"Boshlovchi biznes uchun ishlaydigan boshlang'ich nisbat: ~60% — "
+"BOFU/MOFU (issiq auditoriya: retargeting, baza, mavjud "
+"obunachilar bilan ishlash — eng arzon savdo shu yerda), ~40% — "
+"TOFU (yangi auditoriya: sovuq reklama, blogerlar). Ko'pchilik "
+"teskarisini qiladi: bor pulni yangi olomonга quyadi, kelganlarni "
+"esa yig'may qo'yib yuboradi — teshik chelakda suv tashiydi.\n\n"
+"<b>90 kunlik ritm</b>\n\n"
+"Strategiya yiliga bir yozilib, choraklab yashaydi: 90 kunga 2-3 "
+"aniq maqsad qo'yiladi (masalan: bazada 500 odam, CAC 40 mingdan "
+"oshmasin), har oy raqamlar bilan taqqoslanadi, chorak oxirida "
+"strategiyaning bitta-ikkita qatori yangilanadi. Butun rejani "
+"har oy ag'dar-to'ntar qilish — strategiya emas, vahima.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> strategiya — bashorat emas, "
+"<b>qarorlar tartibi</b>: pul va vaqt kelganda qayerga ketishini "
+"oldindan hal qilib qo'yish. Varaq to'lgan bo'lsa, qarorlar o'zi "
+"chiqadi."
+                ),
+            },
+            {
+                "id": "10.2",
+                "title": "Keys tahlili: bitta kampaniyani boshdan-oxir yechamiz",
+                "free": False,
+                "text": (
+"📖 <b>10.2-dars. Keys tahlili: bitta kampaniyani boshdan-oxir "
+"yechamiz</b>\n\n"
+"Nazariya tugadi — endi kursdagi bilimlarni bitta yaxlit misolda "
+"\"jangda\" ko'ramiz. Keys jamoaviy tajribadan olingan tipik holat: "
+"<b>bolalar o'yinchoqlari onlayn-do'koni</b>, oyiga 5 mln so'm "
+"reklama byudjeti, shikoyat tanish: \"reklama ketyapti, foyda "
+"ko'rinmayapti\".\n\n"
+"<b>1-qadam. Tashxis (8-hafta quroli)</b>\n\n"
+"Raqamlar zanjirga terildi: CTR normal → e'lonlar yaxshi. Direct'ga "
+"so'rovlar bor, lekin savdoga aylanishi past. Va bosh kashfiyot: "
+"savdolarning 90% i <b>birinchi marta ko'rgan</b> odamlardan "
+"kutilayotgan edi — baza yo'q, retargeting yo'q, obunachi bilan "
+"ishlash yo'q. Klassik teshik chelak.\n\n"
+"<b>2-qadam. Strategiya (7 qator to'ldirildi)</b>\n\n"
+"Persona: 25-38 yoshli ona, bolasiga \"foydali o'yinchoq\" "
+"qidiradi, sifatdan cho'chiydi. Pozitsiya: \"yoshga mos rivojlantiruvchi "
+"o'yinchoqlar — pedagog tavsiyasi bilan\". Platforma: Instagram "
+"(ko'rsatish) + Telegram bot (baza va sotuv). Kontent ustunlari: "
+"yosh bo'yicha tavsiyalar, o'yin g'oyalari, mijoz videolari, yangi "
+"kelganlar.\n\n"
+"<b>3-qadam. Funnel qurildi</b>\n\n"
+"TOFU: \"3 yoshli bolaga qanday o'yinchoq?\" tipidagi foydali "
+"reels + shu mavzuda sovuq reklama. MOFU: har reels'da \"yosh "
+"bo'yicha to'liq tavsiyalar botda\" chaqirig'i — bot lead-magnit "
+"(bepul PDF: \"0-6 yosh o'yinchoq xaritasi\") evaziga obunachi "
+"yig'adi. BOFU: botda haftada 1-2 taklif (yangi kolleksiya, "
+"to'plamlar), qolgani foydali kontent; sayt o'rniga botning o'zida "
+"buyurtma.\n\n"
+"<b>4-qadam. Byudjet qayta taqsimlandi</b>\n\n"
+"Avval: 5 mln — 100% sovuq reklamaga. Endi: 3 mln sovuq (lekin "
+"endi savdoga emas, botga obuna maqsadiga), 1,5 mln retargeting "
+"(bot obunachilari va sahifaga kirganlarga), 500 ming — 2 ta "
+"micro ona-blogerga promo-kod bilan.\n\n"
+"<b>Natija (4 oydan keyin)</b>\n\n"
+"Bazada 3 200 obunachi. Savdoning 60% i endi bazadan — deyarli "
+"bepul kanaldan. CAC ikki barobardan ko'proq arzonlashdi, chunki "
+"bir marta \"sotib olingan\" obunachi qayta-qayta xarid qilyapti "
+"(LTV ishga tushdi). Eng muhimi: reklama o'chirilsa ham savdo "
+"nolga tushmaydi — biznesda endi <b>o'z aktivi</b> bor.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> mo''jiza bo'lgani yo'q — kursning "
+"har haftasi o'z joyida ishlatildi, xolos. Sizning loyihangizda ham "
+"xuddi shu ketma-ketlik ishlaydi: tashxis → strategiya → funnel → "
+"raqamlar."
+                ),
+            },
+            {
+                "id": "10.3",
+                "title": "Bitiruv loyihasi va keyingi yo'l",
+                "free": False,
+                "text": (
+"📖 <b>10.3-dars. Bitiruv loyihasi va keyingi yo'l</b>\n\n"
+"Tabriklaymiz — siz kursning oxirgi darsiga yetib keldingiz! 👏 "
+"Bu yo'lni boshlaganlarning ozchiligi shu yergacha keladi, va siz "
+"o'shalardansiz. Endi eng muhim qadam qoldi: bilimni <b>o'z</b> "
+"loyihangizga aylantirish.\n\n"
+"<b>🎓 BITIRUV LOYIHASI</b>\n\n"
+"Real yoki hayoliy biznes tanlang va u uchun to'liq marketing "
+"strategiyasi yozing. Tarkibi (hammasi kursda o'tildi):\n\n"
+"1. <b>Auditoriya</b>: bitta batafsil buyer persona (2-hafta)\n"
+"2. <b>Pozitsiya</b>: bir jumlalik va'da + 3 so'zlik brend ovozi "
+"(2-hafta)\n"
+"3. <b>Platformalar</b>: 1+1 formula va asoslash (3-hafta)\n"
+"4. <b>Kontent</b>: 3-5 ustun + 1 haftalik kalendar + har turdan "
+"bittadan yozilgan post (4-5-hafta)\n"
+"5. <b>Trafik</b>: qaysi reklama (Meta/Google/bloger), qaysi "
+"maqsad, taxminiy oylik byudjet taqsimoti (6-7, 9-hafta)\n"
+"6. <b>Funnel va baza</b>: TOFU-MOFU-BOFU sxemasi + bazaga birinchi "
+"500 odamni yig'ish rejasi (9-hafta)\n"
+"7. <b>Raqamlar</b>: qaysi 3 metrikani kuzatasiz + \"bitta mijoz "
+"menga necha so'mgacha tushsa foydali\" hisobi (8-hafta)\n\n"
+"Hajmi: 1-2 varaq yetadi (10.1-dars: strategiya qisqa bo'ladi). "
+"Tayyor bo'lgach botga yuboring — bu sizning portfoliongizdagi "
+"birinchi professional hujjat!\n\n"
+"<b>Portfolio: ishga kirish yoki mijoz olish</b>\n\n"
+"\"Tajribam yo'q\" degan to'siq shunday buziladi: bitiruv "
+"loyihangizning o'zi — birinchi ish namunasi. Keyin bepul yoki "
+"arzon 1-2 real mini-loyiha qiling (tanish do'kon sahifasini "
+"tartibga solish, bitta reklama kampaniyasi) — <b>raqamlarini "
+"yozib boring</b> (\"2 haftada obunachi X dan Y ga, so'rovlar 3 "
+"barobar\"). Uch keys — va sizda gapiradigan portfolio bor. "
+"Marketologni diplom emas, natija raqamlari sotadi.\n\n"
+"<b>O'sishning uch odati</b>\n\n"
+"Marketing tez o'zgaradi, lekin siz kursda olgan narsa — "
+"<b>poydevor</b>: 4P, funnel, niyat, LTV — bular o'n yildan keyin "
+"ham ishlaydi. Ustiga uch odat qo'shing: haftada bitta yangi keys "
+"o'qish, o'z raqamlaringizni oylik jadvalga yozish, va har oy "
+"bitta kichik tajriba (yangi format, yangi auditoriya, yangi "
+"hook). Bir yilda bu odatlar sizni bozordagi ko'pchilikdan oldinga "
+"olib chiqadi.\n\n"
+"Yakuniy testni topshiring — va 🎓 sertifikatingiz sizni kutmoqda!\n\n"
+"💡 <b>Kursning bosh fikri</b> (esda qolsin): marketing — "
+"baqirish san'ati emas, <b>tushunish san'ati</b>. Mijozni chin "
+"dildan tushungan odam uchun qolgan hammasi — texnika. Omad, "
+"do'stim! Endi maydonga chiqish vaqti. 💪"
+                ),
+            },
+        ],
+        "test": [
+            {"q": "Marketing va reklamaning to'g'ri munosabati qaysi?",
+             "opts": ["Bir xil tushunchalar",
+                      "Reklama — marketingning bir qismi",
+                      "Marketing — reklamaning bir turi",
+                      "Ular bog'liq emas"],
+             "correct": 1},
+            {"q": "\"Bizning mijoz — hamma\" yondashuvi nimaga olib keladi?",
+             "opts": ["Maksimal savdoga",
+                      "Xabar hech kimga tegmasligi va byudjet isrofiga",
+                      "Tez brend bo'lishga",
+                      "Algoritm sevgisiga"],
+             "correct": 1},
+            {"q": "Kichik biznes uchun platforma strategiyasi:",
+             "opts": ["Hamma joyda bo'lish",
+                      "Bitta asosiy + bitta yordamchi platforma",
+                      "Faqat sayt",
+                      "Platforma tanlash muhim emas"],
+             "correct": 1},
+            {"q": "Kontentda sotuvchi postlar ulushi taxminan qancha bo'lgani ma'qul?",
+             "opts": ["10%", "50%", "90%", "100%"],
+             "correct": 0},
+            {"q": "Algoritm uchun eng qimmatli signal:",
+             "opts": ["Layk", "Ulashish (share)", "Profil rasmi", "Post uzunligi"],
+             "correct": 1},
+            {"q": "Direct orqali sotuvchi do'kon uchun Meta'da to'g'ri maqsad:",
+             "opts": ["Xabardorlik", "Faollik", "Xabarlar", "App o'rnatish"],
+             "correct": 2},
+            {"q": "\"Konditsioner o'rnatish narxi Toshkent\" so'rovi qaysi niyat?",
+             "opts": ["Ma'lumot", "Taqqoslash", "Xarid", "Tasodifiy"],
+             "correct": 2},
+            {"q": "CAC nima?",
+             "opts": ["Bitta mijoz olish narxi",
+                      "Umumiy tushum",
+                      "Reklama byudjeti",
+                      "Kunlik ko'rishlar"],
+             "correct": 0},
+            {"q": "Sog'lom biznesda LTV va CAC nisbati:",
+             "opts": ["LTV ≥ 3 × CAC", "CAC ≥ 3 × LTV", "Teng bo'lishi shart", "Ahamiyati yo'q"],
+             "correct": 0},
+            {"q": "Sovuq auditoriya (TOFU) bilan to'g'ri ish:",
+             "opts": ["Darrov chegirma taklif qilish",
+                      "Qiziqtirish va tanishtirish, sotishga shoshilmaslik",
+                      "E'tibor bermaslik",
+                      "Faqat narx ko'rsatish"],
+             "correct": 1},
+            {"q": "O'zbekistonda mijozlar bazasining eng samarali vositasi:",
+             "opts": ["Email ro'yxati", "Telegram bot obunachilari", "Qog'oz daftar", "Faks"],
+             "correct": 1},
+            {"q": "Kursning bosh g'oyasi — marketing bu:",
+             "opts": ["Baqirish san'ati",
+                      "Mijozni tushunish san'ati",
+                      "Chegirmalar tizimi",
+                      "Omad o'yini"],
+             "correct": 1},
+        ],
+    },
 }
