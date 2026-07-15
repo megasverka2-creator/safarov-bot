@@ -543,7 +543,175 @@ WEEKS = {
              "correct": 1},
         ],
     },
-    4: {"title": "Kontent strategiyasi va copywriting", "lessons": [], "test": []},
+    4: {
+        "title": "Kontent strategiyasi va copywriting",
+        "lessons": [
+            {
+                "id": "4.1",
+                "title": "Kontent turlari: nega \"faqat sotuvchi post\" sahifani o'ldiradi",
+                "free": False,
+                "text": (
+"📖 <b>4.1-dars. Kontent turlari: nega \"faqat sotuvchi post\" "
+"sahifani o'ldiradi</b>\n\n"
+"Tasavvur qiling: bir tanishingiz har uchrashganda faqat bitta gap "
+"aytadi — \"mendan sotib ol\". Uchinchi uchrashuvda undan qocha "
+"boshlaysiz. Ijtimoiy tarmoqda ham xuddi shunday: faqat \"oling, "
+"chegirma, buyurtma bering\" deb turadigan sahifadan odamlar jimgina "
+"chiqib ketadi. Professional sahifa esa suhbatdoshga o'xshaydi: goh "
+"o'rgatadi, goh kuldiradi, goh isbot ko'rsatadi — va o'rni kelganda "
+"sotadi.\n\n"
+"<b>To'rt tur kontent va ularning vazifasi</b>\n\n"
+"1. 🎓 <b>Ta'limiy</b> — foyda beradi: maslahat, qo'llanma, xatolar "
+"tahlili. Vazifasi: \"bu odam o'z ishini biladi\" degan ishonch. "
+"Saqlanadi, demak algoritm ham yaxshi ko'radi.\n"
+"2. 😄 <b>Ko'ngilochar</b> — his beradi: hazil, sahna orti, hayotiy "
+"lavhalar. Vazifasi: brendni \"jonli odam\"ga aylantirish. Eng ko'p "
+"ulashiladi.\n"
+"3. ⭐ <b>Ijtimoiy isbot</b> — dalil beradi: mijoz izohlari, "
+"natijalar (oldin/keyin), raqamlar. Vazifasi: \"boshqalar olgan, "
+"demak menga ham bo'ladi\" degan xotirjamlik.\n"
+"4. 🛒 <b>Sotuvchi</b> — taklif beradi: mahsulot, narx, aksiya, aniq "
+"harakat chaqirig'i. Vazifasi: qaror qildirishning oxirgi turtkisi.\n\n"
+"<b>Muvozanat formulasi</b>\n\n"
+"Ishlaydigan taxminiy nisbat: 40% ta'limiy, 30% ko'ngilochar, 20% "
+"ijtimoiy isbot, 10% sotuvchi. Ha, sotuvchi post — eng kami! "
+"Paradoks shundaki, qolgan 90% aynan shu 10% ishlashi uchun zamin "
+"tayyorlaydi: o'rgatgan va ishontirgan sahifaning \"oling\" degani "
+"buyruq emas, do'st maslahatidek eshitiladi.\n\n"
+"<b>Hayotiy keys.</b> Bir stomatologiya klinikasi sahifasida faqat "
+"aksiya postlari turardi — oyiga 2-3 murojaat kelardi. SMM'chi "
+"strategiyani o'zgartirdi: haftasiga 2 ta ta'limiy post (\"bolada "
+"tish qachon olinadi\", \"og'riqsiz davolash qanday ishlaydi\"), 1 ta "
+"shifokor hayotidan lavha, 1 ta mijoz natijasi, va faqat 1 ta "
+"sotuvchi post. Uch oyda murojaatlar oyiga 40 tadan oshdi — reklama "
+"byudjeti o'zgarmagan holda. O'zgargan narsa — ishonch.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> kontent — sotuvdan oldingi suhbat. "
+"Suhbat qanchalik samimiy bo'lsa, sotuv shunchalik oson bo'ladi."
+                ),
+            },
+            {
+                "id": "4.2",
+                "title": "Copywriting: birinchi qator hamma narsani hal qiladi",
+                "free": False,
+                "text": (
+"📖 <b>4.2-dars. Copywriting: birinchi qator hamma narsani hal "
+"qiladi</b>\n\n"
+"Copywriting — chiroyli yozish emas, <b>natija uchun yozish</b>: "
+"o'qigan odam biror harakat qilsin. Va bu yo'lda eng katta to'siq "
+"shundaki, hech kim sizning matningizni o'qishga majbur emas. "
+"O'quvchining barmog'i lentani varaqlayapti — sizda uni to'xtatish "
+"uchun 1-2 soniya bor.\n\n"
+"<b>Hook — birinchi qator san'ati</b>\n\n"
+"Hook (ilgak) — matnning birinchi jumlasi. Uning bitta vazifasi bor: "
+"ikkinchi jumlani o'qitish. Ishlaydigan ilgak turlari:\n\n"
+"• <b>Savol</b>: \"Reklamaga pul quyib, natija ko'rmayapsizmi?\"\n"
+"• <b>Raqam</b>: \"Mijozlarning 70% i birinchi javob tezligiga qarab "
+"tanlaydi.\"\n"
+"• <b>Qarama-qarshilik</b>: \"Obunachi ko'p — savdo yo'q. Tanishmi?\"\n"
+"• <b>Xato</b>: \"Bio'ngizdagi mana bu bitta so'z mijozni "
+"qochiryapti.\"\n"
+"• <b>Hikoya boshi</b>: \"Kecha bir mijoz yig'lab qo'ng'iroq "
+"qildi...\"\n\n"
+"Yomon boshlanish: \"Assalomu alaykum, hurmatli obunachilar! Bugun "
+"sizlarga...\" — bu birinchi 2 soniyani isrof qilish. Salomlashish "
+"yomon emas, lekin u ilgakdan <i>keyin</i> kelsin.\n\n"
+"<b>Matn tanasi: soddalik qonuni</b>\n\n"
+"Qisqa jumlalar. Har xatboshida bitta fikr. Murakkab so'z o'rniga "
+"sodda so'z: \"amalga oshiramiz\" emas — \"qilamiz\". O'zingizni "
+"tekshirish usuli: matnni ovoz chiqarib o'qing — tilingiz "
+"qoqilgan joyda o'quvchi ham qoqiladi, o'sha jumlani qayta yozing.\n"
+"Va \"biz\" emas, \"siz\" tilida yozing: \"Bizda katta assortiment "
+"bor\" emas — \"Siz 200 xil modeldan tanlaysiz\".\n\n"
+"<b>CTA — harakatga chaqiriq</b>\n\n"
+"Matn oxirida o'quvchiga aniq bitta qadam ayting: \"Direktga «narx» "
+"deb yozing\", \"Havolani bosing\", \"Do'stingizga yuboring\". "
+"Qoidalar: bitta postda bitta CTA (ikkita chaqiriq — ikkilanish "
+"demakdir), va chaqiriq qanchalik oson bo'lsa, shunchalik ko'p odam "
+"bajaradi (\"saytga kirib ro'yxatdan o'ting\"dan ko'ra \"+ belgisini "
+"yozib qoldiring\" yengil).\n\n"
+"💡 <b>Esda qoladigan fikr:</b> odamlar matn o'qimaydi — o'zlariga "
+"tegishli narsani o'qiydi. Vazifangiz: birinchi qatordayoq \"bu men "
+"haqimda\" degan hisni berish."
+                ),
+            },
+            {
+                "id": "4.3",
+                "title": "Storytelling: hikoya sotadi, ma'lumot esa unutiladi",
+                "free": False,
+                "text": (
+"📖 <b>4.3-dars. Storytelling: hikoya sotadi, ma'lumot esa "
+"unutiladi</b>\n\n"
+"Ikkita postni solishtiring. Birinchisi: \"Mahsulotimiz sifatli, "
+"3 yil kafolat beramiz.\" Ikkinchisi: \"O'tgan hafta bir ota kirib "
+"keldi: o'g'liga olgan velosipedning pedali olti oyda singan, boshqa "
+"do'kon 'kafolat tugagan' debdi. Bizdan olgan velosipedga 3 yil "
+"kafolat yozib berdik — ota ishonmay qayta so'radi.\" Ikkalasi bir "
+"narsani aytyapti. Lekin birinchisini 2 soniyada unutasiz, "
+"ikkinchisi esa esda qoladi. Farq — hikoyada.\n\n"
+"Miya shunday qurilgan: quruq faktni \"ma'lumot\" bo'limiga tashlaydi, "
+"hikoyani esa <b>his</b> bilan birga saqlaydi. Odam esa qaror qilganda "
+"aynan hisga tayanadi.\n\n"
+"<b>Uch qismli hikoya skeleti</b>\n\n"
+"Har qanday sotuvchi hikoya uchta ustunda turadi:\n\n"
+"1. <b>Muammo</b> — qahramon qiynalayapti (o'quvchi o'zini tanishi "
+"kerak: \"e, bu men-ku!\")\n"
+"2. <b>Yo'l</b> — qidiruv, urinishlar, burilish nuqtasi (shu yerda "
+"mahsulotingiz tabiiy paydo bo'ladi — reklama sifatida emas, yechim "
+"sifatida)\n"
+"3. <b>Natija</b> — o'zgarish, imkon qadar raqam bilan (\"3 oyda "
+"mijozlar 2 barobar oshdi\")\n\n"
+"Muhim: qahramon — <b>mijozingiz</b>, siz emas. Siz hikoyada "
+"\"yo'lboshlovchi\" rolidasiz. \"Biz qanday zo'rmiz\" hikoyasi emas, "
+"\"mijozimiz qanday yutdi (bizning yordamda)\" hikoyasi ishlaydi.\n\n"
+"<b>Hikoyani qayerdan olish mumkin?</b>\n\n"
+"Hammasi atrofingizda: mijozning birinchi shubhasi va keyingi "
+"minnatdorchiligi, ishlab chiqarishdagi kulgili voqea, o'zingizning "
+"xatoingiz va undan olgan saboq (halollik ishonchni portlatadi — "
+"eng yaxshi ma'noda), \"nega bu ishni boshlaganman\" hikoyasi. "
+"Kichik biznesning kuchi aynan shunda: korporatsiyada bunday jonli "
+"hikoyalar yo'q, sizda har kuni bor.\n\n"
+"<b>Bitta ogohlantirish:</b> hikoya to'qimang. Bo'rttirilgan yoki "
+"yolg'on hikoya bir marta fosh bo'lsa, yillab yig'ilgan ishonch bir "
+"kunda ketadi. Haqiqiy kichik hikoya to'qilgan katta hikoyadan "
+"kuchli.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> faktlar ishontiradi, hikoyalar "
+"harakatga keltiradi. Ikkalasini birga ishlating: hikoya + raqam = "
+"eng kuchli post.\n\n"
+"✍️ <b>Haftalik topshiriq:</b> bitta mahsulot yoki xizmatingiz uchun "
+"3 xil post yozing: (1) ta'limiy — auditoriyangizga foydali bitta "
+"maslahat, (2) hikoya — muammo-yo'l-natija skeletida mijoz voqeasi, "
+"(3) sotuvchi — kuchli hook va bitta aniq CTA bilan. Uchalasini "
+"botga yuboring — bu haftaning eng muhim mashqi!"
+                ),
+            },
+        ],
+        "test": [
+            {"q": "Kontentda sotuvchi postlarning tavsiya etilgan ulushi qancha?",
+             "opts": ["Taxminan 10%", "Kamida 50%", "100% — sahifa sotish uchun ochilgan", "0% — hech qachon sotmaslik kerak"],
+             "correct": 0},
+            {"q": "Ta'limiy kontentning asosiy vazifasi nima?",
+             "opts": ["Kuldirish", "\"Bu odam ishini biladi\" degan ishonch qurish", "Narxni e'lon qilish", "Obunachini chalg'itish"],
+             "correct": 1},
+            {"q": "Hook (ilgak)ning vazifasi nima?",
+             "opts": ["Postni chiroyli yakunlash", "O'quvchini ikkinchi jumlaga o'tkazish", "Hashtag qo'shish", "Salomlashish"],
+             "correct": 1},
+            {"q": "CTA bo'yicha to'g'ri qoida qaysi?",
+             "opts": ["Bitta postda qancha ko'p chaqiriq bo'lsa, shuncha yaxshi",
+                      "CTA umuman kerak emas",
+                      "Bitta postda bitta aniq va oson chaqiriq",
+                      "CTA faqat sotuvchi postda bo'ladi"],
+             "correct": 2},
+            {"q": "Sotuvchi hikoyada qahramon kim bo'lishi kerak?",
+             "opts": ["Kompaniya rahbari", "Mahsulotning o'zi", "Mijoz (siz — yo'lboshlovchi)", "Raqobatchi"],
+             "correct": 2},
+            {"q": "Hikoya skeletining to'g'ri ketma-ketligi qaysi?",
+             "opts": ["Natija → Narx → Chegirma",
+                      "Muammo → Yo'l → Natija",
+                      "Salomlashish → Mahsulot → Xayrlashish",
+                      "Raqam → Fakt → Xulosa"],
+             "correct": 1},
+        ],
+    },
     5: {"title": "Vizual kontent va kontent kalendari", "lessons": [], "test": []},
     6: {"title": "Meta Ads: pullik reklama", "lessons": [], "test": []},
     7: {"title": "Google Ads asoslari", "lessons": [], "test": []},
