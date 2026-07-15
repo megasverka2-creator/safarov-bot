@@ -16,7 +16,7 @@ COURSE_INTRO = (
     "✅ Darslar toza o'zbek tilida, O'zbekiston bozori misollari bilan\n"
     "🔓 Birinchi dars — <b>bepul</b>, sinab ko'ring\n"
     "🏆 Kursni tugatganlarga shaxsiy sertifikat\n\n"
-    "Narx: <b>100 ⭐</b> (bir martalik, umrbod kirish)"
+    "Narx: <b>{price} ⭐</b> (bir martalik, umrbod kirish)"
 )
 
 WEEKS = {

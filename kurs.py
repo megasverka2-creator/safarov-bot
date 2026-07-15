@@ -28,14 +28,17 @@ try:
 except Exception:
     Image = None
 
-from kurs_content import COURSE_TITLE, COURSE_INTRO, WEEKS
+from kurs_content import COURSE_TITLE, COURSE_INTRO as _INTRO_RAW, WEEKS
+
+def COURSE_INTRO_TEXT():
+    return _INTRO_RAW.format(price=PRICE_STARS)
 
 log = logging.getLogger("kurs")
 
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 KURS_FILE = os.path.join(DATA_DIR, "kurs.json")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))
-PRICE_STARS = 100
+PRICE_STARS = 10
 PAYLOAD = "marketing_kurs_100"
 
 
@@ -133,7 +136,7 @@ def _unlocked(u, n, i):
 async def cmd_kurs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     d = _load()
     u = _user(d, update.effective_user.id)
-    intro = COURSE_INTRO
+    intro = COURSE_INTRO_TEXT()
     if u["paid"]:
         intro += f"\n\n📊 Sizning jarayoningiz: <b>{_progress(u)}%</b>"
     await update.message.reply_text(intro, parse_mode="HTML",
@@ -170,7 +173,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "krs_menu":
         await q.answer()
         if not u["paid"]:
-            await q.edit_message_text(COURSE_INTRO, parse_mode="HTML",
+            await q.edit_message_text(COURSE_INTRO_TEXT(), parse_mode="HTML",
                                       reply_markup=kb_home(False))
             return
         await q.edit_message_text(
