@@ -895,7 +895,188 @@ WEEKS = {
              "correct": 1},
         ],
     },
-    6: {"title": "Meta Ads: pullik reklama", "lessons": [], "test": []},
+    6: {
+        "title": "Meta Ads: pullik reklama",
+        "lessons": [
+            {
+                "id": "6.1",
+                "title": "Meta Ads: \"Boost\" tugmasi nega pulingizni yeydi",
+                "free": False,
+                "text": (
+"📖 <b>6.1-dars. Meta Ads: \"Boost\" tugmasi nega pulingizni "
+"yeydi</b>\n\n"
+"Ko'pchilikning pullik reklama bilan tanishuvi bir xil boshlanadi: "
+"post ostidagi ko'k \"Boost / Ko'tarish\" tugmasi bosiladi, 20-30 "
+"dollar ketadi, laykllar keladi... savdo kelmaydi. Xulosa: \"reklama "
+"ishlamaydi\". Aslida ishlamagan narsa reklama emas — <b>vosita "
+"noto'g'ri tanlangan</b>. Boost — soddalashtirilgan rejim: Meta "
+"o'zi \"faollik\" (layk, reaksiya) uchun optimallaydi, siz esa "
+"savdoni xohlagansiz. Professional ish Ads Manager kabinetida "
+"qilinadi — bu dars o'sha kabinetning xaritasi.\n\n"
+"<b>Uch qavatli tuzilma</b>\n\n"
+"Meta reklamasi uch qavatdan iborat, har qavatda bitta savolga "
+"javob berasiz:\n\n"
+"1. 🎯 <b>Kampaniya</b> — NIMA uchun? Bu yerda maqsad (objective) "
+"tanlanadi: xabardorlik (ko'proq odam ko'rsin), trafik (havolaga "
+"o'tsin), faollik, xabarlar (Direct/Telegram'ga yozsin), lidlar, "
+"savdo. Meta aynan tanlangan maqsadga mos odamlarni qidiradi — "
+"shuning uchun maqsadni xato tanlash = pulni xato joyga yuborish.\n"
+"2. 👥 <b>Reklama to'plami (Ad set)</b> — KIMGA va QANCHAGA? "
+"Auditoriya, joylashuv (Instagram lenta, stories, reels), byudjet "
+"va muddat shu qavatda.\n"
+"3. 🖼 <b>Reklamaning o'zi (Ad)</b> — NIMA ko'rsatamiz? Surat yoki "
+"video, matn, sarlavha va tugma (CTA).\n\n"
+"<b>Qaysi maqsadni tanlash kerak?</b>\n\n"
+"Oddiy yo'riq: Direct'da sotadigan kichik biznes uchun — "
+"\"Xabarlar\" maqsadi (odam to'g'ridan-to'g'ri yozadi, suhbatda "
+"sotasiz). Saytga yoki botga olib borish kerak bo'lsa — \"Trafik\". "
+"\"Xabardorlik\" faqat katta byudjetli brendlarga mos. Boshlovchining "
+"eng ko'p xatosi: \"Faollik\" tanlab, layk yig'ib, savdo kutish.\n\n"
+"<b>Hayotiy keys.</b> Poyabzal do'koni boost orqali oyiga 100$ "
+"sarflardi: minglab layk, oyiga 3-4 savdo. Ads Manager'ga o'tib "
+"\"Xabarlar\" maqsadini tanladi, o'sha 100$ bilan: laykllar kam, "
+"lekin Direct'ga oyiga 90-100 ta \"narxi qancha?\" so'rovi keldi, "
+"ulardan 25-30 tasi xaridga aylandi. Bir xil pul, bir xil mahsulot — "
+"faqat maqsad to'g'rilandi.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> Meta sizga so'raganingizni beradi. "
+"Layk so'rasangiz — layk beradi, mijoz so'rasangiz — mijoz. "
+"To'g'ri so'rashni o'rganish — shu haftaning maqsadi."
+                ),
+            },
+            {
+                "id": "6.2",
+                "title": "Auditoriya sozlash: to'g'ri odamga to'g'ri e'lon",
+                "free": False,
+                "text": (
+"📖 <b>6.2-dars. Auditoriya sozlash: to'g'ri odamga to'g'ri "
+"e'lon</b>\n\n"
+"2-haftada buyer persona yaratgan edik — endi o'sha portretni "
+"reklama kabinetiga \"ko'chirish\" vaqti keldi. Auditoriya "
+"sozlamalari — reklama muvaffaqiyatining kamida yarmi: eng zo'r "
+"e'lon ham noto'g'ri odamga ko'rsatilsa, pul kuyadi.\n\n"
+"<b>Uch xil auditoriya turi</b>\n\n"
+"1. ❄️ <b>Sovuq — qiziqishlar bo'yicha</b>. Geografiya (shahar, "
+"hatto radius), yosh, jins + qiziqishlar (Meta odamlarning xatti-"
+"harakatidan biladi: \"bolalar mahsulotlariga qiziqadi\", \"onlayn "
+"xarid qiladi\"). Sizni hali tanimaydigan yangi odamlar. Maslahat: "
+"qiziqishlarni haddan tashqari toraytirib yubormang — Meta'ning "
+"algoritmi keng auditoriya ichidan o'zi topishga ancha usta bo'lib "
+"qolgan; asosiy ishni yosh-geo-jins va kuchli e'lon qilsin.\n"
+"2. 🔥 <b>Issiq — retargeting</b>. Sizni allaqachon biladiganlar: "
+"sahifangizga kirganlar, videoni ko'rganlar, direct'ga yozganlar. "
+"Bu auditoriya eng arzon va eng ko'p sotib oladi — \"ko'rgan, lekin "
+"hali olmagan\" odamga eslatish savdoning eng oson turi. Ko'p kichik "
+"biznes shu bepul imkoniyatni umuman ishlatmaydi.\n"
+"3. 👯 <b>Lookalike — o'xshashlar</b>. Meta'ga mijozlaringiz "
+"ro'yxatini (yoki sahifa faollarini) berasiz, u \"shularga o'xshagan "
+"yana kimlar bor\" deb topib beradi. Mijoz bazangiz 500-1000 dan "
+"oshganda juda kuchli ishlaydi.\n\n"
+"<b>To'g'ri ketma-ketlik</b>\n\n"
+"Boshlovchi strategiyasi: avval sovuq auditoriyaga kichik byudjet "
+"bilan chiqasiz → sahifa va video ko'ruvchilar yig'iladi → ularga "
+"retargeting yoqasiz (\"hali ham o'ylayapsizmi? mana chegirma\") → "
+"vaqt o'tib mijozlar bazasidan lookalike qurasiz. Reklama tizimi "
+"bir martalik otishma emas, aylanuvchi g'ildirak.\n\n"
+"<b>Bitta amaliy sir: e'lon auditoriyaga gapirsin</b>\n\n"
+"Auditoriyani ajratdingizmi — e'lonni ham ajrating. Onalarga "
+"boshqa surat-matn, yigitlarga boshqa. \"25-45 hamma\"ga bitta "
+"e'lon — hech kimga tegmaydigan o'rtacha gap. 2-haftadagi qoida "
+"shu yerda pulga aylanadi: aniq odamga aniq gap.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> sovuq auditoriya — tanishuv, "
+"retargeting — eslatish, lookalike — ko'paytirish. Uchalasi birga "
+"ishlaganda reklama tizimga aylanadi."
+                ),
+            },
+            {
+                "id": "6.3",
+                "title": "Byudjet va raqamlar: reklama qachon o'zini oqlaydi",
+                "free": False,
+                "text": (
+"📖 <b>6.3-dars. Byudjet va raqamlar: reklama qachon o'zini "
+"oqlaydi</b>\n\n"
+"\"Reklamaga qancha pul kerak?\" — noto'g'ri savol. To'g'ri savol: "
+"\"bitta mijoz menga qanchaga tushyapti va u qancha foyda "
+"keltiryapti?\" Shu ikki raqamni bilgan odam reklamani xarajat deb "
+"emas, <b>investitsiya</b> deb boshqaradi.\n\n"
+"<b>Uchta asosiy o'lchov</b>\n\n"
+"• <b>CPM</b> — 1000 ko'rsatish narxi. Auditoriya qanchalik "
+"raqobatli ekanini ko'rsatadi.\n"
+"• <b>CPC</b> — bitta bosish narxi. E'lon qanchalik "
+"qiziqtirayotganini ko'rsatadi: CPC baland bo'lsa, ko'pincha aybdor "
+"auditoriya emas — zerikarli e'lon.\n"
+"• <b>CPA</b> — bitta natija narxi (bitta xabar, bitta buyurtma). "
+"Eng muhim raqam: qolgan hammasi shunga xizmat qiladi.\n\n"
+"Oddiy misol: 100 000 so'm sarfladingiz, 20 ta Direct so'rovi "
+"keldi → bitta so'rov 5 000 so'm. Shu 20 tadan 5 tasi sotib oldi → "
+"bitta mijoz (CPA) 20 000 so'm. Agar bitta savdodan foydangiz "
+"60 000 so'm bo'lsa — har 20 ming 60 ming bo'lib qaytyapti, "
+"reklamani kuchaytirish kerak. Foyda 15 000 bo'lsa — reklama zarar, "
+"to'xtatib sabab qidirish kerak.\n\n"
+"<b>Kichik byudjet bilan qanday boshlash kerak</b>\n\n"
+"Kuniga 3-5$ dan boshlash mumkin — lekin bitta shart bilan: "
+"<b>sabr</b>. Meta algoritmi dastlab \"o'rganadi\" (kimga ko'rsatsa "
+"yaxshi ishlashini sinaydi) — birinchi 2-3 kun natija qimmat "
+"ko'rinishi normal. Eng ko'p uchraydigan xato: har kuni sozlamani "
+"o'zgartirish yoki 2-kuni o'chirib qo'yish — bu algoritm o'qishini "
+"har safar noldan boshlatadi.\n\n"
+"<b>Test qilish madaniyati</b>\n\n"
+"Professional hech qachon \"bitta eng zo'r e'lon\"ga pul tikmaydi. "
+"U 2-3 variant tayyorlaydi (boshqa surat, boshqa hook), kichik "
+"byudjetda yonma-yon sinaydi, 3-4 kundan keyin raqamlarga qaraydi "
+"va g'olibga asosiy byudjetni beradi. Bitta o'zgaruvchini sinang: "
+"ikki e'lon faqat surati bilan farq qilsin — shunda nima ishlaganini "
+"aniq bilasiz.\n\n"
+"⚠️ <b>Ogohlantirish:</b> \"kabinetni sozlab beraman, 100% natija "
+"kafolat\" deguvchilardan ehtiyot bo'ling. Reklamada halol mutaxassis "
+"jarayonni kafolatlaydi (to'g'ri sozlash, test, hisobot), natijani "
+"esa bozor hal qiladi.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> reklamani his emas, raqam "
+"boshqarsin. CPA va foydani yonma-yon qo'ying — qolgan hamma qaror "
+"o'zi chiqadi.\n\n"
+"✍️ <b>Haftalik topshiriq:</b> o'z loyihangiz uchun qog'ozda "
+"reklama rejasini tuzing: (1) maqsad (objective) va nima uchun "
+"aynan u, (2) sovuq auditoriya tavsifi (geo, yosh, qiziqishlar), "
+"(3) kunlik byudjet va \"bitta mijoz menga necha so'mgacha tushsa "
+"foydali\" hisobingiz. Botga yuboring!"
+                ),
+            },
+        ],
+        "test": [
+            {"q": "\"Boost\" tugmasi bilan Ads Manager'ning asosiy farqi nimada?",
+             "opts": ["Farqi yo'q, ikkalasi bir xil",
+                      "Boost soddalashtirilgan bo'lib, maqsadni to'liq boshqarish imkonini bermaydi",
+                      "Ads Manager faqat katta kompaniyalar uchun",
+                      "Boost bepul ishlaydi"],
+             "correct": 1},
+            {"q": "Meta reklamasining uch qavati qaysi tartibda?",
+             "opts": ["Ad → Kampaniya → Ad set",
+                      "Kampaniya (maqsad) → Ad set (auditoriya, byudjet) → Ad (e'lon)",
+                      "Byudjet → Surat → Matn",
+                      "Auditoriya → Maqsad → Natija"],
+             "correct": 1},
+            {"q": "Direct orqali sotadigan kichik do'kon uchun eng mos maqsad?",
+             "opts": ["Xabardorlik", "Faollik (layk uchun)", "Xabarlar", "App o'rnatish"],
+             "correct": 2},
+            {"q": "Retargeting kimlarga ko'rsatiladi?",
+             "opts": ["Umuman yangi odamlarga",
+                      "Sizni allaqachon bilganlarga (sahifaga kirgan, video ko'rgan)",
+                      "Faqat raqobatchi mijozlariga",
+                      "Tasodifiy auditoriyaga"],
+             "correct": 1},
+            {"q": "CPA nima?",
+             "opts": ["1000 ko'rsatish narxi",
+                      "Bitta bosish narxi",
+                      "Bitta natija (xabar/buyurtma) narxi",
+                      "Kunlik byudjet"],
+             "correct": 2},
+            {"q": "Reklama yoqilgach 2-kuni natija qimmat ko'rinsa, nima qilish kerak?",
+             "opts": ["Darhol o'chirish",
+                      "Har kuni sozlamalarni o'zgartirish",
+                      "Algoritm o'rganishiga 3-4 kun vaqt berish, keyin raqamlarga qarab qaror qilish",
+                      "Byudjetni 10 barobar oshirish"],
+             "correct": 2},
+        ],
+    },
     7: {"title": "Google Ads asoslari", "lessons": [], "test": []},
     8: {"title": "Analitika va metrikalar", "lessons": [], "test": []},
     9: {"title": "Funnel, email va influencer marketing", "lessons": [], "test": []},
