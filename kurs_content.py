@@ -1443,6 +1443,192 @@ WEEKS = {
              "correct": 0},
         ],
     },
-    9: {"title": "Funnel, email va influencer marketing", "lessons": [], "test": []},
+    9: {
+        "title": "Funnel, email va influencer marketing",
+        "lessons": [
+            {
+                "id": "9.1",
+                "title": "Funnel: begonadan doimiy mijozgacha bo'lgan yo'l",
+                "free": False,
+                "text": (
+"📖 <b>9.1-dars. Funnel: begonadan doimiy mijozgacha bo'lgan "
+"yo'l</b>\n\n"
+"Nega birinchi ko'rgan odam darrov sotib olmaydi? Chunki xarid — "
+"sakrash emas, <b>zina</b>. Odam avval sizni ko'radi, keyin "
+"kuzatadi, keyin ishonadi, keyin oladi. Bu zinaning ilmiy nomi — "
+"marketing funnel (voronka): tepasi keng (ko'p odam ko'radi), pasti "
+"tor (kamchilik oladi). Va bu normal! Vazifa — har bosqichda "
+"odamni keyingisiga o'tkazish.\n\n"
+"<b>Uch qavat: TOFU — MOFU — BOFU</b>\n\n"
+"🔝 <b>TOFU (tepa)</b> — sizni endi ko'rganlar. Ular hech narsa "
+"sotib olmaydi va sotishga urinish ularni qochiradi. Bu qavatning "
+"kontenti: qiziqarli reels, foydali maslahatlar, hikoyalar — "
+"\"tanishib olaylik\" bosqichi. Kanal: reklama, TikTok, reels.\n\n"
+"⏸ <b>MOFU (o'rta)</b> — qiziqib qolganlar: obuna bo'ldi, kuzatyapti, "
+"taqqoslayapti. Kontent: chuqurroq foyda, mijoz natijalari, savol-"
+"javoblar, \"nega aynan biz\". Kanal: Telegram kanal, stories, "
+"baza. Aynan shu qavatda ishonch quriladi.\n\n"
+"🎯 <b>BOFU (past)</b> — olishga tayyor, kichik turtki yetadi. "
+"Kontent: aniq taklif, chegirma muddati, kafolat, oson buyurtma "
+"yo'li. Shu yergagina \"soting!\" — 4.1-darsdagi 10% sotuvchi "
+"kontent aynan shu qavat uchun edi.\n\n"
+"<b>Eng ko'p uchraydigan xato</b>\n\n"
+"Bosqichni sakrab o'tish: sovuq auditoriyaga (TOFU) to'g'ridan-"
+"to'g'ri \"oling, chegirma!\" deb reklama berish. Bu ko'chada notanish "
+"odamga uylanish taklif qilishdek gap. Har qavatga o'z gapi: "
+"TOFU'ga — qiziqtir, MOFU'ga — ishontir, BOFU'ga — taklif qil.\n\n"
+"<b>Hayotiy keys.</b> Ingliz tili kurslari sovuq auditoriyaga "
+"\"kursga yoziling, 20% chegirma\" reklamasini berardi — ariza "
+"qimmatga tushardi. Funnel qurildi: TOFU — \"5 daqiqada 5 ta xato\" "
+"reels'lari (arzon, keng); MOFU — reels'dan Telegram kanalga "
+"chaqiriq, kanalda bepul mini-darslar; BOFU — faqat kanal "
+"obunachilariga \"guruh ochilyapti, 10 o'rin\" e'loni. Natija: ariza "
+"narxi uch barobar arzonlashdi, guruhlar to'lib boshladi — chunki "
+"taklif endi \"tanish\"lardan kelayotgan edi.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> savdo — voronkaning oxirgi qavatidagi "
+"tabiiy hodisa. Yuqori qavatlarni to'g'ri qursangiz, pastda "
+"\"sotish\" shart bo'lmay qoladi — odamlar o'zi keladi."
+                ),
+            },
+            {
+                "id": "9.2",
+                "title": "Baza marketingi: eng arzon savdo — qaytgan mijoz",
+                "free": False,
+                "text": (
+"📖 <b>9.2-dars. Baza marketingi: eng arzon savdo — qaytgan "
+"mijoz</b>\n\n"
+"Marketingning eng qimmat siri aslida tekin: <b>yangi mijoz olish "
+"eskisini qaytarishdan bir necha barobar qimmat</b>. Shunga "
+"qaramay, ko'p biznes bor kuchini faqat yangilarga sarflaydi, "
+"eski mijozlar esa \"bir oldi-ketdi\" bo'lib qolaveradi. Ularning "
+"kontaktlari — ishlatilmayotgan xazina.\n\n"
+"<b>Baza nima va uni qanday yig'ish kerak</b>\n\n"
+"Baza — siz <b>xohlagan payt bepul yeta oladigan</b> odamlar "
+"ro'yxati: email, telefon, va bizning sharoitda eng kuchlisi — "
+"<b>Telegram bot obunachilari</b>. Dunyoda bu ishni email qiladi, "
+"O'zbekistonda email kam ochiladi — bot esa xabarni to'g'ridan-"
+"to'g'ri cho'ntakka yetkazadi.\n\n"
+"Yig'ish usullari: har mijozdan buyurtmada botga obuna so'rash "
+"(\"buyurtma holatini botda kuzating\"), qiymat evaziga kontakt "
+"(bepul qo'llanma, chegirma, test — \"lead magnit\"), konkurslar "
+"(botga kirish — ishtirok sharti; sizga tanish mexanika 😉).\n\n"
+"<b>Baza bilan nima qilinadi: segmentlar</b>\n\n"
+"Hammaga bir xil xabar — spam. Kuch segmentlashda:\n"
+"• <b>Yangi obunachi</b> → tanishuv zanjiri: kim ekaningiz, eng "
+"yaxshi mahsulot, birinchi xarid bonusi.\n"
+"• <b>Olgan mijoz</b> → minnatdorchilik + parvarish maslahati + "
+"vaqti kelganda \"to'ldirish\" taklifi.\n"
+"• <b>\"Uxlagan\"lar</b> (3-6 oy jim) → uyg'otish xabari: \"sizni "
+"sog'indik, mana maxsus taklif\".\n\n"
+"Oltin qoida (kanalda ham, bazada ham bir xil): har 3-4 foydali "
+"xabarga 1 ta sotuvchi xabar. Faqat \"oling-oling\" yozadigan "
+"botdan odamlar bir haftada chiqib ketadi.\n\n"
+"<b>Avtomatlashtirish</b>\n\n"
+"Eng go'zal tomoni: bu xabarlar bir marta yoziladi va avtomatik "
+"ishlaydi. Yangi obunachiga tanishuv zanjiri o'z-o'zidan ketadi, "
+"siz uxlaganingizda ham baza \"isib\" turadi. Kichik biznes uchun "
+"bu — yollanmaydigan, charchamaydigan sotuvchi.\n\n"
+"<b>Hayotiy keys.</b> Parfyumeriya do'koni har buyurtmada mijozni "
+"botga obuna qilardi. 8 oyda 2 000 kishilik baza yig'ildi. Yangi "
+"kolleksiya kelganda reklama byudjeti: nol — botga bitta chiroyli "
+"post yuborildi. Bir kunda 47 buyurtma. Xuddi shu e'lonni sovuq "
+"reklamada olish kamida bir necha million so'm turardi. Baza — "
+"yillar davomida yig'iladigan, keyin har safar bepul ishlaydigan "
+"aktiv.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> ijaradagi auditoriya (reklama) "
+"pulingiz tugashi bilan yo'qoladi. O'z bazangiz — umrbod sizniki. "
+"Har kuni bir g'isht qo'shib boring."
+                ),
+            },
+            {
+                "id": "9.3",
+                "title": "Influencer marketing: ishonchni ijaraga olish",
+                "free": False,
+                "text": (
+"📖 <b>9.3-dars. Influencer marketing: ishonchni ijaraga olish</b>\n\n"
+"Bloger reklamasi mohiyatan bitta narsa: u yillab qurgan "
+"<b>ishonchni ijaraga olish</b>. Auditoriya blogerga do'stidek "
+"ishonadi — u \"menga yoqdi\" desa, bu reklama emas, tavsiyadek "
+"qabul qilinadi. Lekin aynan shu kuch tufayli bu sohada pul "
+"kuydirish ham juda oson. Qoidalarni bilib olamiz.\n\n"
+"<b>Micro yoki macro: kim samaraliroq?</b>\n\n"
+"Million obunachili yulduz (macro) keng qamrov beradi, lekin: "
+"qimmat, auditoriyasi \"har xil\" (sizning mijozingiz ozchilik "
+"bo'lishi mumkin), va reklama ko'pligidan ishonch suyulgan. "
+"10-50 mingli micro-blogerlar esa: auditoriyasi tor va \"o'ziniki\" "
+"(ona-blogerning obunachisi — onalar), izohlarga o'zi javob "
+"beradi, narxi hamyonbop, ba'zan barter (mahsulot evaziga) ham "
+"yetadi. Kichik biznes uchun formula: <b>bitta macro o'rniga 5-10 "
+"ta to'g'ri micro</b> — xatar taqsimlanadi, jami samara odatda "
+"yuqori.\n\n"
+"<b>Blogerni qanday tekshirish kerak (pul berishdan OLDIN)</b>\n\n"
+"1. <b>ER'ini hisoblang</b> (8-haftadan bilasiz): o'rtacha layk+izoh "
+"÷ obunachi. 100 minglik sahifada postiga 300 layk? Obunachilar "
+"katta ehtimol sotib olingan.\n"
+"2. <b>Izohlarni o'qing</b>: jonli suhbatmi yoki \"🔥🔥\" botlarimi?\n"
+"3. <b>Auditoriyasini so'rang</b>: jinsi, yoshi, geografiyasi — "
+"bloger statistika skrinshotini bera oladi. Toshkentda sotasiz-u, "
+"auditoriyasining yarmi boshqa davlatdan bo'lsa — pul havoga.\n"
+"4. <b>Oldingi reklamalarini ko'ring</b>: har kuni 3 ta reklama "
+"chiqaradigan sahifada sizniki ham shovqinda yo'qoladi.\n\n"
+"<b>Natijani o'lchash</b>\n\n"
+"9.2 va 8.2-darslar shu yerda birlashadi: har blogerga <b>o'z "
+"promo-kodi</b> yoki UTM'li havola bering. Aks holda \"foyda "
+"bo'ldimi?\" savoli javobsiz qoladi. Va to'g'ri CTA bering: "
+"\"sahifamizga o'ting\" (sust) emas, \"botga NOMI so'zini yozing — "
+"sovg'a bor\" (o'lchanadigan harakat). Bloger reklamasidan kelgan "
+"trafikni darhol bazaga (9.2!) ulash — bir martalik qamrovni "
+"umrbod aktivga aylantiradi.\n\n"
+"⚠️ Halollik eslatmasi: blogerdan \"reklama\" deb belgilashni "
+"so'rashdan qo'rqmang. Yashirin reklama fosh bo'lsa, blogerning "
+"ham, sizning ham obro'yingizga uradi. Ochiq tavsiya yaxshi "
+"mahsulotga xalaqit bermaydi.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> blogerdan qamrov sotib olasiz, "
+"ishonchni esa u qo'shib beradi — agar to'g'ri tanlagan bo'lsangiz. "
+"Tanlov esa his emas, raqam ishi.\n\n"
+"✍️ <b>Haftalik topshiriq:</b> o'z loyihangiz uchun (1) uch qavatli "
+"funnel chizing: TOFU'da qanday kontent, MOFU qayerda yashaydi "
+"(kanal? bot?), BOFU'da qanday taklif; (2) bazaga birinchi 100 "
+"odamni yig'ish rejasini yozing; (3) 3 ta mos micro-bloger toping "
+"va nega aynan ular ekanini asoslang. Botga yuboring!"
+                ),
+            },
+        ],
+        "test": [
+            {"q": "TOFU bosqichidagi auditoriyaga qanday kontent kerak?",
+             "opts": ["Aniq taklif va chegirma",
+                      "Qiziqtiruvchi va foydali tanishuv kontenti",
+                      "Narxlar ro'yxati",
+                      "Shartnoma shartlari"],
+             "correct": 1},
+            {"q": "\"Sovuq auditoriyaga darrov 'oling, chegirma!' deyish\" qanday xato?",
+             "opts": ["Xato emas, eng tez usul",
+                      "Funnel bosqichini sakrab o'tish — ishonch qurilmasidan sotishga urinish",
+                      "Faqat byudjet xatosi",
+                      "Dizayn xatosi"],
+             "correct": 1},
+            {"q": "O'zbekistonda email o'rnini samarali bosadigan baza vositasi?",
+             "opts": ["Faks", "Telegram bot obunachilari", "Pochta qutisi", "QR-kod"],
+             "correct": 1},
+            {"q": "Bazaga xabar yuborishda oltin nisbat qaysi?",
+             "opts": ["Har xabar sotuvchi bo'lsin",
+                      "Har 3-4 foydali xabarga 1 ta sotuvchi",
+                      "Oyiga bitta xabar, faqat bayramda",
+                      "Kuniga 5 ta aksiya"],
+             "correct": 1},
+            {"q": "100 000 obunachili blogerda postiga 300 layk — bu nimadan darak?",
+             "opts": ["Juda yaxshi ko'rsatkich",
+                      "Obunachilar sotib olingan bo'lishi ehtimoli yuqori",
+                      "Bloger dam olishda",
+                      "Hech nimadan"],
+             "correct": 1},
+            {"q": "Bloger reklamasining natijasini qanday o'lchash to'g'ri?",
+             "opts": ["Bloger aytgan songa ishonish",
+                      "Har blogerga alohida promo-kod yoki UTM havola berish",
+                      "O'lchab bo'lmaydi",
+                      "Layklar sonini sanash"],
+             "correct": 1},
+        ],
+    },
     10: {"title": "Strategiya va yakuniy loyiha", "lessons": [], "test": []},
 }
