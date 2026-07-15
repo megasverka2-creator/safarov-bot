@@ -32,6 +32,7 @@ from telegram.ext import (
 )
 
 import agent  # AI Yangiliklar Agenti moduli
+import kurs   # Marketing kursi moduli (Stars to'lovi bilan)
 
 try:
     from anthropic import AsyncAnthropic
@@ -1368,6 +1369,7 @@ def main():
     app.add_handler(CallbackQueryHandler(admin_decide, pattern="^(acc|rej):"))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
     agent.register(app)  # AI Yangiliklar Agenti (07:00 avtomatik, /agent_run)
+    kurs.register(app)   # Marketing kursi (/kurs, 100 Stars)
     print("Bot ishga tushdi...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
