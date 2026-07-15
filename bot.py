@@ -573,12 +573,45 @@ async def xabar(update, context):
         try:
             await context.bot.send_message(int(uid), text, disable_web_page_preview=True)
             sent += 1
+            users[uid]["blocked"] = False
         except Exception:
             failed += 1
+            users[uid]["blocked"] = True   # bloklagan/o'chirgan deb belgilanadi
         if (sent + failed) % 25 == 0:
             await asyncio.sleep(1)
+    save_json(USERS_FILE, users)
     await update.message.reply_text(
         f"✅ Yetkazildi: {sent}\n🚫 Yetmadi (bloklagan/o'chirgan): {failed}")
+
+
+async def tekshir(update, context):
+    """ Faqat admin: barcha foydalanuvchilarni jimgina tekshiradi — kim botni
+    bloklagan/o'chirganini aniqlaydi. Foydalanuvchiga hech narsa bormaydi. """
+    if update.effective_user.id != ADMIN_ID:
+        return
+    users = load_json(USERS_FILE, {})
+    ids = list(users.keys())
+    await update.message.reply_text(
+        f"🔍 Tekshirilmoqda... ({len(ids)} foydalanuvchi, ~{len(ids)//20 + 1} soniya)")
+    ok, blocked = 0, 0
+    for i, uid in enumerate(ids):
+        try:
+            # 'typing' harakati xabar emas — foydalanuvchi hech narsa sezmaydi
+            await context.bot.send_chat_action(int(uid), "typing")
+            ok += 1
+            users[uid]["blocked"] = False
+        except Exception:
+            blocked += 1
+            users[uid]["blocked"] = True
+        if (i + 1) % 20 == 0:
+            await asyncio.sleep(1)
+    save_json(USERS_FILE, users)
+    pct = round(blocked / len(ids) * 100) if ids else 0
+    await update.message.reply_text(
+        f"🔍 Tekshiruv tugadi\n\n"
+        f"✅ Faol (bot ochiq): {ok}\n"
+        f"🚫 Bloklagan/o'chirgan: {blocked} ({pct}%)\n\n"
+        f"Endi /stats da ham ko'rinadi.")
 
 
 async def kanallar(update, context):
@@ -630,16 +663,21 @@ async def stats(update, context):
     else:
         feats = "<i>Hali ma'lumot yig'ilmagan (yangi versiya ishga tushgandan boshlab yig'iladi)</i>"
 
+    blocked = sum(1 for u in users.values() if u.get("blocked"))
+    blocked_line = (f"\n🚫 Bloklagan/o'chirgan: <b>{blocked}</b> · "
+                    f"Yetib boradi: <b>{len(users) - blocked}</b>") if blocked else \
+                   "\n🚫 Bloklaganlar: <i>aniqlash uchun /tekshir bosing</i>"
+
     await update.message.reply_text(
         f"📊 <b>Statistika</b>\n\n"
-        f"👥 Jami foydalanuvchi: <b>{len(users)}</b>\n"
+        f"👥 Jami foydalanuvchi: <b>{len(users)}</b>{blocked_line}\n"
         f"🟢 Bugun faol: <b>{active}</b> · Haftada: <b>{active7}</b>\n"
         f"🆕 Haftada yangi: <b>{week_new}</b>\n"
         f"🤝 Jamoaga arizalar: <b>{len(apps)}</b>\n"
         f"🏆 Konkurs ishtirokchilari: <b>{parts}</b>{top_line}\n"
         f"🧩 Testlar: <b>{q_made}</b> yaratilgan · <b>{q_played}</b> o'ynalgan\n\n"
         f"📈 <b>Yangi foydalanuvchilar (7 kun):</b>\n"
-        f"<pre>{chart}</pre>\n"
+        f"<pre>{chart}</pre>\n\n"
         f"🔥 <b>Eng ko'p ishlatilgan bo'limlar (7 kun):</b>\n{feats}",
         parse_mode="HTML")
 
@@ -1315,6 +1353,7 @@ def main():
     app.add_handler(CommandHandler("kanallar", kanallar))
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CommandHandler("xabar", xabar))
+    app.add_handler(CommandHandler("tekshir", tekshir))
     app.add_handler(CommandHandler("sinov", quiz_cmd))
     app.add_handler(CommandHandler("shaxs", ptest_cmd))
     app.add_handler(CommandHandler("raqam", k2_cmd))
