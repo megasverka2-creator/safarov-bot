@@ -53,7 +53,11 @@ def _save(d):
         json.dump(d, f, ensure_ascii=False)
 
 def _user(d, uid):
-    return d["users"].setdefault(str(uid), {"paid": False, "done": [], "scores": {}})
+    u = d["users"].setdefault(str(uid), {"paid": False, "done": [], "scores": {}})
+    if ADMIN_ID and int(uid) == ADMIN_ID and not u["paid"]:
+        u["paid"] = True          # admin uchun kurs doim ochiq (tekshirish uchun)
+        u["free_admin"] = True    # statistikada xaridor sifatida sanalmaydi
+    return u
 
 def _weeks_with_content():
     return [n for n in sorted(WEEKS) if WEEKS[n]["lessons"]]
@@ -350,7 +354,8 @@ async def cmd_kurs_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
     d = _load()
-    buyers = [u for u in d["users"].values() if u.get("paid")]
+    buyers = [u for u in d["users"].values()
+              if u.get("paid") and not u.get("free_admin")]
     total = len(buyers) * PRICE_STARS
     finished = sum(1 for u in buyers if _course_completed(u))
     avg = (round(sum(_progress(u) for u in buyers) / len(buyers)) if buyers else 0)
