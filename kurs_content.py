@@ -712,7 +712,189 @@ WEEKS = {
              "correct": 1},
         ],
     },
-    5: {"title": "Vizual kontent va kontent kalendari", "lessons": [], "test": []},
+    5: {
+        "title": "Vizual kontent va kontent kalendari",
+        "lessons": [
+            {
+                "id": "5.1",
+                "title": "Vizual uslub: dizayner bo'lmasdan professional ko'rinish",
+                "free": False,
+                "text": (
+"📖 <b>5.1-dars. Vizual uslub: dizayner bo'lmasdan professional "
+"ko'rinish</b>\n\n"
+"Yaxshi yangilik: professional ko'rinish uchun dizayner bo'lish "
+"shart emas. Yomon yangilik: <b>qoidasiz</b> ishlash — sahifani "
+"havaskorona ko'rsatadigan yagona narsa. Dizayn iste'dod emas, "
+"bir necha qoidaga rioya qilish masalasi.\n\n"
+"<b>Rang: 60-30-10 qoidasi</b>\n\n"
+"Uchta rang tanlang va nisbatni saqlang: 60% asosiy rang (fon, "
+"tinch), 30% ikkinchi rang (qo'shimcha), 10% aksent (tugma, muhim "
+"so'z — eng yorqini). Rang tanlashda psixologiyani hisobga oling: "
+"yashil — ishonch va tabiiylik (siz o'qiyotgan shu kurs kanali ham "
+"yashilda 😉), ko'k — professionallik (banklar sevadi), qizil — "
+"energiya va shoshilinch (chegirmalar), sariq-to'q sariq — iliqlik "
+"(taom, bolalar). Qoida: bir marta tanlang va <b>hamma joyda</b> "
+"ishlating — Instagram, Telegram, vizitka, qadoq.\n\n"
+"<b>Shrift: ikkitadan oshmasin</b>\n\n"
+"Bitta shrift sarlavhaga, bitta matnga — tamom. Uch va undan ortiq "
+"shrift bir rasmda — vizual shovqin. Va o'qilishi qiyin \"chiroyli\" "
+"shriftlardan qoching: odam 2 soniyada o'qiy olmasa, o'qimaydi.\n\n"
+"<b>Kompozitsiya: havo qoidasi</b>\n\n"
+"Havaskor dizaynning 1-belgisi: hamma joy to'ldirilgan — matn, "
+"stiker, ramka, yulduzcha... Professional dizaynning siri esa "
+"<b>bo'sh joy</b> (white space): elementlar \"nafas oladi\", ko'z "
+"muhim narsaga o'zi boradi. Shubha qilsangiz — olib tashlang, "
+"qo'shmang.\n\n"
+"<b>Amaliy vositalar</b>\n\n"
+"Canva — tayyor shablonlar, brend rang-shriftni bir marta sozlab "
+"olasiz; telefonning o'zi — mahsulot suratlari uchun yetarli, sir "
+"yorug'likda: tabiiy kunduzgi yorug'lik har qanday lampadan zo'r, "
+"deraza yoniga oling; bitta fon uslubi — mahsulot suratlarini bir "
+"xil fonda oling, lenta darrov \"jamlangan\" ko'rinadi.\n\n"
+"<b>Hayotiy keys.</b> Uy shirinliklari sotadigan bir opa suratlarni "
+"oshxonada, har xil fonda olardi — sahifa tartibsiz ko'rinardi. "
+"Bitta o'zgarish: deraza yonida bitta yog'och taxta + oq mato fon. "
+"Hamma surat shu joyda. Ikki haftada sahifa \"do'kon\" ko'rinishiga "
+"kirdi, direktda \"narxi qancha\" so'rovlari sezilarli oshdi — "
+"mahsulot o'zgarmadi, taqdimot o'zgardi.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> vizual izchillik — mahorat emas, "
+"intizom. 3 rang, 2 shrift, 1 uslub — va sahifangiz brendga "
+"o'xshaydi."
+                ),
+            },
+            {
+                "id": "5.2",
+                "title": "Kontent kalendari: ilhom kutmaydigan tizim",
+                "free": False,
+                "text": (
+"📖 <b>5.2-dars. Kontent kalendari: ilhom kutmaydigan tizim</b>\n\n"
+"SMM'dagi eng katta yolg'on: \"ilhom kelganda post qilaman\". Ilhom "
+"haftada bir keladi, algoritm esa har kuni ovqat so'raydi. "
+"Professional va havaskorni ajratadigan narsa iste'dod emas — "
+"<b>tizim</b>. Tizimning nomi: kontent kalendari.\n\n"
+"<b>Kontent ustunlari (content pillars)</b>\n\n"
+"Kalendar tuzishdan oldin 3-5 ta doimiy mavzu ustunini belgilang. "
+"Masalan, bolalar kiyimi do'koni uchun: (1) mahsulot va yangi "
+"kelganlar, (2) onalarga foydali maslahatlar, (3) mijozlar "
+"natijalari va izohlar, (4) sahna orti va jamoa. Ustunlar nima "
+"beradi? Har post \"nima yozsam ekan\" degan azobdan emas, tayyor "
+"katakdan boshlanadi. 4.1-darsdagi kontent turlari bilan "
+"birlashtirsangiz — mashina tayyor.\n\n"
+"<b>Haftalik jadval namunasi</b>\n\n"
+"Du — ta'limiy post (hafta foydali boshlanadi)\n"
+"Se — mahsulot / yangilik\n"
+"Chor — hikoya yoki sahna orti\n"
+"Pay — mijoz izohi / natija\n"
+"Ju — sotuvchi post (hafta oxiri — xarid kayfiyati)\n"
+"Shan — yengil / ko'ngilochar kontent\n\n"
+"Bu qolip emas, boshlang'ich nuqta — o'z auditoriyangizga qarab "
+"o'zgartirasiz. Muhimi: jadval <b>oldindan</b> to'ldirilgan bo'lsin.\n\n"
+"<b>Partiyalab tayyorlash (batching)</b>\n\n"
+"Eng samarali usul: haftada bir kun 2-3 soat ajratib, butun hafta "
+"kontentini birdaniga tayyorlash — suratlar bir seansda, matnlar "
+"ketma-ket. Har kuni \"endi nima qilay\" deb o'tirishdan 3-4 barobar "
+"tez. Qolgan kunlar faqat joylaysiz va izohlarga javob berasiz.\n\n"
+"<b>Qachon joylash kerak?</b>\n\n"
+"Universal javob yo'q, lekin O'zbekistonda ishlaydigan oraliqlar: "
+"ertalab 8-10 (ishga borishda), tushlik 13-14, kechqurun 20-22 "
+"(eng faol vaqt). Aniq javobni statistikangiz beradi: bir oy turli "
+"vaqtda joylab, qaysi soat ko'proq ko'rish berganini yozib boring. "
+"<b>Muntazamlik vaqtdan muhim</b>: har kuni 21:00da chiqadigan post "
+"tasodifiy \"zo'r vaqt\"dagi postdan kuchli — auditoriya sizni "
+"kutishga o'rganadi.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> kontent kalendari ijodni "
+"o'ldirmaydi — u ijodga vaqt bo'shatadi. Tizim oddiy kunlarni "
+"ushlab turadi, ilhom esa ustiga bonus bo'lib keladi."
+                ),
+            },
+            {
+                "id": "5.3",
+                "title": "UGC: mijozlaringiz — eng ishonchli marketologlaringiz",
+                "free": False,
+                "text": (
+"📖 <b>5.3-dars. UGC: mijozlaringiz — eng ishonchli "
+"marketologlaringiz</b>\n\n"
+"Savol: qaysi gapga ko'proq ishonasiz — do'kon \"mahsulotimiz zo'r\" "
+"desami, yoki tanishingiz \"shu yerdan oldim, juda yoqdi\" desami? "
+"Javob aniq. UGC (User Generated Content) — mijozlar yaratgan "
+"kontent: ularning suratlari, videolari, izohlari, stories'lari. "
+"Bu reklamaning eng ishonchli turi, chunki uni <b>manfaatdor "
+"bo'lmagan odam</b> aytyapti.\n\n"
+"<b>Nega UGC bunchalik kuchli</b>\n\n"
+"Birinchidan, ishonch: odamlar reklamaga emas, odamlarga ishonadi. "
+"Ikkinchidan, tekinlik: mijoz kontentni o'zi yaratadi. Uchinchidan, "
+"ko'paytiruvchi effekt: mijoz stories'ida sizni belgilasa, uning "
+"barcha obunachilari — sizning bepul auditoriyangiz. To'rtinchidan, "
+"kontent zaxirasi: 20 ta mijoz surati — 20 ta tayyor post.\n\n"
+"<b>Mijozni kontent yaratishga qanday undash mumkin</b>\n\n"
+"Hech kim o'z-o'zidan yozmaydi — sharoit yaratish kerak:\n\n"
+"1. <b>So'rang</b> — eng oddiy va eng unutiladigan usul. Buyurtma "
+"topshirilgach: \"Yoqsa, stories'da belgilab qo'ysangiz, xursand "
+"bo'lamiz!\" So'ragan oladi.\n"
+"2. <b>Rag'batlantiring</b> — \"belgilagan mijozlarga keyingi "
+"xaridga 10% chegirma\" yoki oylik o'yin: belgilaganlar orasidan "
+"sovg'a.\n"
+"3. <b>Sharoit yarating</b> — chiroyli qadoq odamning o'zini "
+"suratga tortadi; qadoq ichiga \"bizni belgilang: @...\" yozuvli "
+"kichik kartochka soling.\n"
+"4. <b>E'zozlang</b> — mijoz kontentini o'z sahifangizda repost "
+"qiling (ruxsati bilan) va minnatdorchilik bildiring. Boshqalar "
+"buni ko'rib \"meni ham chiqarishar ekan\" deb harakat qiladi.\n\n"
+"<b>Hayotiy keys.</b> Milliy taomlar yetkazadigan kichik oshxona "
+"har buyurtmaga qo'lda yozilgan bitta jumla qo'shdi: \"Yoqdimi? "
+"Bizni stories'da belgilang — keyingi buyurtmada shirinlik bizdan!\" "
+"Natija: haftasiga o'rtacha 15-20 ta belgilash, va yangi mijozlarning "
+"\"sizni falonchining storiesida ko'rdim\" deb kelishi odatiy holga "
+"aylandi. Reklama xarajati: qo'lda yozilgan kartochka va shirinlik.\n\n"
+"⚠️ Muhim: soxta izoh sotib olmang va o'zingizga o'zingiz izoh "
+"yozmang. Fosh bo'lishi oson, narxi — butun ishonch.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> eng zo'r reklama — mijozning "
+"tabassumi, kadrda. Sizning vazifangiz — o'sha kadr uchun sabab va "
+"sharoit yaratish.\n\n"
+"✍️ <b>Haftalik topshiriq:</b> (1) brendingiz uchun 3 rang + 2 "
+"shrift tanlang va nima uchunligini yozing, (2) o'z ustunlaringiz "
+"asosida 2 haftalik kontent kalendari tuzing (kamida 10 post "
+"g'oyasi), (3) mijozni UGC'ga undaydigan bitta mexanika o'ylab "
+"toping. Hammasini botga yuboring!"
+                ),
+            },
+        ],
+        "test": [
+            {"q": "60-30-10 qoidasi nimani anglatadi?",
+             "opts": ["Byudjet taqsimoti",
+                      "Ranglar nisbati: asosiy, ikkinchi, aksent",
+                      "Post chiqarish vaqtlari",
+                      "Chegirma foizlari"],
+             "correct": 1},
+            {"q": "Bitta dizaynda nechta shrift ishlatish tavsiya etiladi?",
+             "opts": ["Ko'pi bilan 2 ta", "Kamida 4 ta", "Faqat 1 ta, hamma joyda", "Cheklov yo'q"],
+             "correct": 0},
+            {"q": "Kontent ustunlari (content pillars) nima beradi?",
+             "opts": ["Ko'proq obunachi",
+                      "Har post uchun tayyor mavzu yo'nalishi — \"nima yozsam\" azobidan qutqaradi",
+                      "Algoritmda ustunlik",
+                      "Bepul reklama"],
+             "correct": 1},
+            {"q": "Post joylash vaqti bo'yicha eng to'g'ri tamoyil qaysi?",
+             "opts": ["Faqat yarim tunda joylash kerak",
+                      "Vaqtning umuman ahamiyati yo'q",
+                      "Muntazamlik aniq vaqtdan muhimroq, aniq vaqtni esa statistika aytadi",
+                      "Har soatda bittadan joylash kerak"],
+             "correct": 2},
+            {"q": "UGC nima?",
+             "opts": ["Pullik reklama turi",
+                      "Mijozlar yaratgan kontent (surat, video, izoh)",
+                      "Google'ning reklama xizmati",
+                      "Dizayn dasturi"],
+             "correct": 1},
+            {"q": "Nega soxta izoh sotib olish xavfli?",
+             "opts": ["Qimmat turadi",
+                      "Fosh bo'lsa, yig'ilgan butun ishonch ketadi",
+                      "Algoritm darhol bloklaydi",
+                      "Aslida xavfli emas"],
+             "correct": 1},
+        ],
+    },
     6: {"title": "Meta Ads: pullik reklama", "lessons": [], "test": []},
     7: {"title": "Google Ads asoslari", "lessons": [], "test": []},
     8: {"title": "Analitika va metrikalar", "lessons": [], "test": []},
