@@ -176,7 +176,179 @@ WEEKS = {
              "correct": 2},
         ],
     },
-    2: {"title": "Target auditoriya va brend", "lessons": [], "test": []},
+    2: {
+        "title": "Target auditoriya va brend",
+        "lessons": [
+            {
+                "id": "2.1",
+                "title": "Target auditoriya: \"hamma\" degan mijoz yo'q",
+                "free": False,
+                "text": (
+"📖 <b>2.1-dars. Target auditoriya: \"hamma\" degan mijoz yo'q</b>\n\n"
+"Yangi tadbirkordan \"mijozingiz kim?\" deb so'rasangiz, eng ko'p "
+"eshitiladigan javob: \"Hamma!\" Bu — marketingdagi eng qimmat xato. "
+"Hammaga gapirgan hech kimga gapirmaydi: reklamangiz hech kimning "
+"yuragiga tegmaydi, pul esa sovuriladi.\n\n"
+"<b>Hayotiy keys.</b> Toshkentdagi bir bolalar kiyimi do'koni "
+"reklamaga oyiga 3 mln so'm sarflab, \"18-55 yosh, Toshkent\" degan "
+"keng auditoriyaga ko'rsatardi — natija: 1 so'm reklamadan 2 so'm "
+"savdo. Keyin auditoriyani toraytirdi: \"25-40 yoshli onalar, "
+"farzandi 0-7 yosh, o'rtacha daromad\". Reklama matnini ham onalar "
+"tiliga o'zgartirdi (\"yuvishga chidamli, terga qichitmaydi\"). O'sha "
+"byudjet bilan natija: 1 so'mdan 7 so'm. Auditoriya torayai — daromad "
+"o'sdi. Bu paradoks emas, qoida.\n\n"
+"<b>Segmentatsiya: auditoriyani qanday bo'lish mumkin</b>\n\n"
+"1. <b>Demografik</b> — yosh, jins, daromad, kasb. Eng oddiy, lekin "
+"yuzaki.\n"
+"2. <b>Geografik</b> — shahar, tuman, hatto mahalla. Mahalliy biznes "
+"uchun oltin: Chilonzordagi go'zallik saloniga Sergeli reklamasi "
+"befoyda.\n"
+"3. <b>Psixografik</b> — qadriyatlar, turmush tarzi, qo'rquvlar, "
+"orzular. Eng chuqur va eng kuchli daraja: \"25-40 yoshli ona\" emas, "
+"\"bolam sog'lom kiyinsin deb sifat qidiradigan, vaqti tig'iz ona\".\n\n"
+"<b>Buyer persona — mijozning \"portreti\"</b>\n\n"
+"Professional marketologlar auditoriyani jonli odam qiyofasiga "
+"keltiradi. Formula: ism + yosh + kasb + kunlik hayoti + muammosi + "
+"orzusi + qayerda \"yashaydi\" (qaysi ijtimoiy tarmoq) + sotib olishga "
+"nima to'sqinlik qiladi.\n\n"
+"Misol: <i>\"Nilufar, 32 yosh, ikki farzandli ona, bankda ishlaydi. "
+"Kechqurun 30 daqiqa Instagram ko'radi. Muammosi: bolaga sifatli "
+"kiyimni qidirishga vaqt yo'q. Qo'rquvi: internetdan olsa o'lchami "
+"to'g'ri kelmasligi. Uni ishontirvchi narsa: real onalarning "
+"videolari va oson almashtirish kafolati.\"</i>\n\n"
+"Endi e'tibor bering: shu portret qo'lda bo'lsa, reklama matni ham, "
+"kontent ham, hatto qaytarish siyosati ham o'z-o'zidan aniq bo'lib "
+"qoladi. Persona — barcha marketing qarorlarining kompasi.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> auditoriyani toraytirish — mijozlarni "
+"yo'qotish emas. Bu \"aynan menga aytilgan\" degan hisni yaratish, va "
+"odamlar aynan shunday joyga pul to'laydi."
+                ),
+            },
+            {
+                "id": "2.2",
+                "title": "Brend: nima uchun bir xil mahsulot har xil narxda sotiladi",
+                "free": False,
+                "text": (
+"📖 <b>2.2-dars. Brend: nima uchun bir xil mahsulot har xil narxda "
+"sotiladi</b>\n\n"
+"Ikki sotuvchi bir xil tog' asalini sotadi. Birinchisi bankaga quyib "
+"\"Asal, 1 kg\" deb yozadi — 80 ming so'mga zo'rg'a oladi. Ikkinchisi "
+"chiroyli idishga quyadi, asalarichining otasi bilan suratini "
+"qo'yadi, \"Bobomning 40 yillik asalarichilik an'anasi\" deb hikoya "
+"yozadi, har buyurtmaga qo'lda yozilgan rahmat xati qo'shadi — 150 "
+"mingga navbat bilan sotadi. Mahsulot bitta. Farq — brendda.\n\n"
+"<b>Brend nima (va nima emas)</b>\n\n"
+"Brend — logo emas. Brend — odamlar sizni eslaganda paydo bo'ladigan "
+"<b>his va ishonch</b>. Logo, ranglar, nom — bular brendning "
+"ko'rinadigan qismi (identifikatsiya). Ko'rinmaydigan qismi esa "
+"muhimroq: va'dangiz (\"bizdan olsangiz — xotirjamsiz\") va uni har "
+"safar bajarishingiz. Brend har bir mijoz tajribasidan g'isht-g'isht "
+"quriladi: javob tezligingiz, qadoqlashingiz, xatoni qanday "
+"to'g'irlashingiz.\n\n"
+"<b>Brend ovozi (tone of voice)</b>\n\n"
+"Brendingiz \"gapirsa\", qanday gapiradi? Rasmiy va ishonchli "
+"(klinika, bank)? Samimiy va do'stona (kafe, bolalar mahsulotlari)? "
+"Qat'iy qoida: <b>ovoz hamma joyda bir xil bo'lsin</b> — postda "
+"hazilkash, direktda quruq rasmiy bo'lsangiz, mijoz ongida ikki xil "
+"odam paydo bo'ladi va ishonch sinadi.\n\n"
+"Ovozni aniqlashning sodda usuli — 3 ta sifat tanlang va hamma matnni "
+"shunga solishtiring. Masalan: \"samimiy, sodda, g'amxo'r\" yoki "
+"\"professional, aniq, ishonchli\". Shu uch so'z sizning tahririy "
+"qoidangiz bo'ladi.\n\n"
+"<b>Vizual izchillik</b>\n\n"
+"Odamlar brendni ongsiz taniydi: rang, shrift, rasm uslubi. Qoida "
+"oddiy: 2-3 asosiy rang, 1-2 shrift, bitta rasm uslubi — va hamma "
+"joyda bir xil. Instagram profilingizga qarang: 9 ta post bir "
+"\"oiladan\"mi yoki 9 xil do'kondan yig'ilgandekmi? Izchillik "
+"professionallikning birinchi belgisi va u bepul.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> odamlar mahsulotga pul to'laydi, "
+"brendga esa <b>ko'proq</b> pul to'laydi. Brend — narxingizga "
+"qo'shiladigan ishonch foizi."
+                ),
+            },
+            {
+                "id": "2.3",
+                "title": "Raqobatchilar tahlili: bepul razvedka san'ati",
+                "free": False,
+                "text": (
+"📖 <b>2.3-dars. Raqobatchilar tahlili: bepul razvedka san'ati</b>\n\n"
+"Ko'p tadbirkorlar raqobatchidan qo'rqadi yoki uni mensimaydi. "
+"Ikkalasi ham xato. Professional yondashuv: raqobatchi — sizga bepul "
+"ishlayotgan tajriba laboratoriyasi. U allaqachon pul sarflab nima "
+"ishlashini va nima ishlamasligini sinab bo'lgan — sizga faqat "
+"kuzatish qoladi.\n\n"
+"<b>Nimalarni kuzatamiz (razvedka ro'yxati)</b>\n\n"
+"Asosiy 3-5 raqobatchining: qaysi postlari eng ko'p izoh-layk "
+"olganini (bu — auditoriya nimani xohlashining bepul xaritasi), "
+"narxlari va aksiyalarini, mijozlar izohlaridagi <b>shikoyatlarni</b> "
+"— mana bu oltin kon: ularning zaif joyi sizning imkoniyatingiz. "
+"Raqibning mijozi \"yetkazib berish sekin\" deb yozayaptimi? Sizning "
+"reklamangiz tayyor: \"24 soatda yetkazamiz\".\n\n"
+"<b>SWOT — tahlilni tartibga soluvchi jadval</b>\n\n"
+"To'rt katakli sodda usul, o'zingizni raqobat muhitida ko'rish uchun:\n\n"
+"S — <b>Kuchli tomonlar</b>: nimada raqiblardan ustunsiz? (tajriba, "
+"narx, joylashuv, xizmat)\n"
+"W — <b>Zaif tomonlar</b>: nimada orqadasiz? (halol yozing — bu "
+"ro'yxat rivojlanish rejangiz)\n"
+"O — <b>Imkoniyatlar</b>: bozorda qanday ochiq eshiklar bor? "
+"(raqiblar e'tibor bermayotgan segment, yangi platforma)\n"
+"T — <b>Tahdidlar</b>: nima xavf solishi mumkin? (yangi raqib, "
+"narxlar urushi, ta'minot muammosi)\n\n"
+"<b>Hayotiy keys.</b> Toshkentda tort buyurtma qiladigan kichik "
+"studiya SWOT o'tkazdi. Kuchli tomoni: qo'lda ishlangan noyob "
+"dizayn. Zaifi: narxi raqiblardan 30% qimmat. Imkoniyat: raqiblar "
+"izohlarida \"aytilgan rasmga o'xshamadi\" degan shikoyat ko'p "
+"uchrardi. Studiya strategiyani shunga qurdi: \"rasmdagidek "
+"chiqmasa — pulni qaytaramiz\" kafolati. Qimmat narx endi kamchilik "
+"emas, sifat belgisiga aylandi — chunki kafolat unga asos berdi. "
+"Zaif tomonni kuchli tomon bilan yopish — SWOT'ning asl mohiyati "
+"shu.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> raqobatchini ko'chirmang — uning "
+"xatolaridan o'rganing. Ko'chirgan doim ikkinchi bo'ladi.\n\n"
+"✍️ <b>Haftalik topshiriq:</b> o'z biznesingiz (yoki tanlagan "
+"loyihangiz) uchun bitta buyer persona yozing (ism, yosh, muammo, "
+"qo'rquv, qayerda \"yashaydi\") va 2 ta raqobatchining izohlaridan "
+"kamida 3 ta shikoyat toping. Javobni shu botga xabar qilib "
+"yuboring!"
+                ),
+            },
+        ],
+        "test": [
+            {"q": "\"Bizning mijoz — hamma\" degan yondashuv nega xato?",
+             "opts": ["Chunki hamma pul topa olmaydi",
+                      "Hammaga qaratilgan xabar hech kimga ta'sir qilmaydi",
+                      "Reklama tizimlari bunga ruxsat bermaydi",
+                      "Aslida xato emas, to'g'ri yondashuv"],
+             "correct": 1},
+            {"q": "\"Qadriyatlar, qo'rquvlar va turmush tarzi bo'yicha bo'lish\" — bu qaysi segmentatsiya?",
+             "opts": ["Demografik", "Geografik", "Psixografik", "Iqtisodiy"],
+             "correct": 2},
+            {"q": "Buyer persona nima?",
+             "opts": ["Eng ko'p pul to'lagan mijoz",
+                      "Ideal mijozning jonli, batafsil portreti",
+                      "Kompaniya rahbarining tavsifi",
+                      "Reklama kabinetidagi sozlama nomi"],
+             "correct": 1},
+            {"q": "Brend — bu birinchi navbatda...",
+             "opts": ["Chiroyli logo va ranglar",
+                      "Qimmat narx",
+                      "Odamlardagi his va ishonch",
+                      "Ro'yxatdan o'tgan tovar belgisi"],
+             "correct": 2},
+            {"q": "Tone of voice bo'yicha to'g'ri qoida qaysi?",
+             "opts": ["Har platformada boshqacha ohang bo'lishi kerak",
+                      "Ohang hamma joyda bir xil bo'lishi kerak",
+                      "Faqat rasmiy ohang ishlaydi",
+                      "Ohangning ahamiyati yo'q"],
+             "correct": 1},
+            {"q": "Raqobatchi mijozlarining shikoyatlari nega qimmatli?",
+             "opts": ["Ularni raqibga qarshi ishlatish uchun",
+                      "Ularning zaif joyi — sizning imkoniyatingiz",
+                      "Shikoyatlarning ahamiyati yo'q",
+                      "Ularni o'z sahifangizga ko'chirish uchun"],
+             "correct": 1},
+        ],
+    },
     3: {"title": "SMM: Instagram va Telegram", "lessons": [], "test": []},
     4: {"title": "Kontent strategiyasi va copywriting", "lessons": [], "test": []},
     5: {"title": "Vizual kontent va kontent kalendari", "lessons": [], "test": []},
