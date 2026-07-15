@@ -1077,7 +1077,187 @@ WEEKS = {
              "correct": 2},
         ],
     },
-    7: {"title": "Google Ads asoslari", "lessons": [], "test": []},
+    7: {
+        "title": "Google Ads asoslari",
+        "lessons": [
+            {
+                "id": "7.1",
+                "title": "Google vs Meta: talab yaratish va talabni tutish",
+                "free": False,
+                "text": (
+"📖 <b>7.1-dars. Google vs Meta: talab yaratish va talabni "
+"tutish</b>\n\n"
+"O'tgan hafta Meta'ni o'rgandik, endi bir savol: ikkalasining tub "
+"farqi nimada? Javob bitta so'zda — <b>niyat</b>.\n\n"
+"Instagram'da odam dam olyapti: reklamangiz uni <i>to'xtatib</i>, "
+"qiziqtirishi kerak. Siz talab <b>yaratasiz</b> — odam konditsioner "
+"haqida o'ylamayotgan edi, e'loningiz o'ylatdi.\n"
+"Google'da esa odam <b>o'zi qidiryapti</b>: \"konditsioner o'rnatish "
+"Toshkent narxi\". U allaqachon xohlayapti — sizning vazifangiz "
+"shunchaki o'sha paytda ro'parasida bo'lish. Siz tayyor talabni "
+"<b>tutasiz</b>. Shu sababli Google'dan kelgan mijoz odatda "
+"\"pishganroq\" bo'ladi.\n\n"
+"<b>Google Ads turlari</b>\n\n"
+"1. 🔍 <b>Search (qidiruv)</b> — qidiruv natijalarining tepasidagi "
+"matnli e'lonlar. Eng \"issiq\" format: odam muammosini o'zi yozdi. "
+"Xizmatlar (usta, klinika, yuridik, ta'lim) uchun oltin.\n"
+"2. 🖼 <b>Display</b> — saytlardagi banner tarmog'i. Arzon va keng, "
+"lekin niyat past: brendni eslatish va retargeting uchun yaxshi, "
+"to'g'ridan-to'g'ri savdo uchun kuchsiz.\n"
+"3. ▶️ <b>YouTube</b> — video reklama. O'zbekistonda YouTube "
+"auditoriyasi juda katta; brend tanitish va murakkab mahsulotni "
+"tushuntirish uchun kuchli.\n"
+"4. 🛍 <b>Shopping</b> — mahsulot kartochkalari (rasm + narx "
+"qidiruvda). Internet-do'konlar uchun, saytdagi tovar katalogiga "
+"ulanadi.\n\n"
+"<b>Qaysi biznesga qaysi biri?</b>\n\n"
+"Oddiy test savoli: <i>odamlar sizning mahsulotingizni Google'da "
+"qidiradimi?</i> \"Santexnik chaqirish\", \"ingliz tili kurslari\", "
+"\"stomatolog narxlari\" — ha, qidiradi: Search birinchi tanlov. "
+"\"Qo'lda tikilgan noyob sumka\" — yo'q, buni hech kim qidirmaydi, "
+"buni ko'rsatish kerak: Instagram kuchliroq. Ko'p biznes uchun "
+"to'g'ri javob — ikkalasi birga: Meta talab uyg'otadi, Google "
+"pishgan talabni yig'ib oladi.\n\n"
+"<b>Hayotiy keys.</b> Konditsioner o'rnatish xizmati Instagram'da "
+"reklama berardi — qishda natija nolga yaqin edi (hech kim "
+"o'ylamaydi ham). Google Search'ga o'tdi: reklama faqat "
+"\"konditsioner o'rnatish\", \"konditsioner quvvati hisoblash\" kabi "
+"so'rovlarga chiqadigan bo'ldi. Iyun kelganda so'rovlar portladi va "
+"har bir reklama so'mi aynan izlayotgan odamga ketdi — mavsumda "
+"ustalar navbatga yozadigan bo'ldi.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> Meta — ehtiyoj uyg'otadi, Google — "
+"ehtiyojga javob beradi. Qaysi biri sizniki ekanini mijozingizning "
+"qidiruv odati aytadi."
+                ),
+            },
+            {
+                "id": "7.2",
+                "title": "Kalit so'zlar: mijozning boshidagi jumlani topish",
+                "free": False,
+                "text": (
+"📖 <b>7.2-dars. Kalit so'zlar: mijozning boshidagi jumlani "
+"topish</b>\n\n"
+"Search reklamasining yuragi — kalit so'zlar: odamlar Google'ga "
+"yozadigan so'rovlar. Bu yerda san'at bitta narsada: mijozning "
+"boshiga kirib, u <b>aynan qanday yozishini</b> topish. Siz "
+"\"ortopedik matras\" deysiz, mijoz \"beli og'riganga qattiq matras\" "
+"deb yozadi. Kim mijoz tilida o'ylasa — o'sha yutadi.\n\n"
+"<b>Niyat (intent) bo'yicha uch daraja</b>\n\n"
+"1. 🧊 <b>Ma'lumot niyati</b>: \"matras qanday tanlanadi\" — hali "
+"o'rganyapti, sotib olishga uzoq. Reklamaga arzimaydi (lekin blog/"
+"kontent uchun zo'r mavzu).\n"
+"2. 🌡 <b>Taqqoslash niyati</b>: \"qaysi matras yaxshi ortopedik yoki "
+"lateks\" — tanlayapti. O'rtacha issiq.\n"
+"3. 🔥 <b>Xarid niyati</b>: \"matras narxi Toshkent\", \"matras "
+"buyurtma berish\", \"arzon matras yetkazib berish\" — hamyon "
+"qo'lida! Byudjetning asosiy qismi shu guruhga.\n\n"
+"Belgilar: \"narxi\", \"buyurtma\", \"sotib olish\", \"yetkazib "
+"berish\", \"yaqin atrofda\", shahar nomi — bularning bari xarid "
+"niyatining bayroqlari.\n\n"
+"<b>Moslik turlari (match types)</b>\n\n"
+"Google'ga so'zni qanday \"tushunish\"ni aytish mumkin:\n"
+"• <b>Keng (broad)</b> — Google o'zi \"yaqin\" deb bilgan hamma "
+"so'rovga chiqaradi. Xavfli: byudjet keraksiz so'rovlarga oqishi "
+"mumkin.\n"
+"• <b>Ibora (phrase)</b> — so'rov ichida sizning iborangiz bo'lsa "
+"chiqadi. Oltin o'rtalik, boshlovchiga tavsiya.\n"
+"• <b>Aniq (exact)</b> — deyarli aynan shu so'rovga. Eng nazoratli, "
+"eng tor.\n\n"
+"<b>Minus-so'zlar — ko'rinmas qahramon</b>\n\n"
+"Byudjetni tejaydigan eng kuchli vosita: qaysi so'rovlarga "
+"<b>chiqmaslikni</b> aytish. Pullik kurs sotsangiz: \"bepul\", "
+"\"skachat\", \"torrent\" — minusga. Yangi mahsulot sotsangiz: "
+"\"b/u\", \"ishlatilgan\", \"remont\" — minusga. Har hafta \"qaysi "
+"so'rovlarga chiqdim\" hisobotini ochib, begona so'rovlarni minusga "
+"qo'shib borish — professional odat.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> kalit so'z tanlash — texnika emas, "
+"empatiya: mijoz muammosini u yozadigan so'zlar bilan yozing. "
+"Qolganini moslik turi va minus-so'zlar tartibga soladi."
+                ),
+            },
+            {
+                "id": "7.3",
+                "title": "Landing page: reklama olib kelgan mehmonni kutib olish",
+                "free": False,
+                "text": (
+"📖 <b>7.3-dars. Landing page: reklama olib kelgan mehmonni kutib "
+"olish</b>\n\n"
+"Reklama sozlash — ishning yarmi. Odam e'loningizni bosdi... endi "
+"qayerga tushadi? Ko'p byudjetlar aynan shu nuqtada nobud bo'ladi: "
+"reklama zo'r, lekin bosgan odam bosh sahifaga tushib, qidirganini "
+"topolmay chiqib ketadi. Har chiqib ketgan odam — to'langan, lekin "
+"foydasiz bosish.\n\n"
+"<b>Message match — va'da mosligi qonuni</b>\n\n"
+"Oltin qoida: <b>e'londagi va'da sahifada davom etsin</b>. E'lon "
+"\"Ingliz tili: 3 oyda gapirasiz — 40% chegirma\" desa, ochilgan "
+"sahifada birinchi ko'ringan narsa xuddi shu bo'lishi kerak — kurs "
+"nomi va o'sha chegirma. Odam ongida uzluksizlik hosil bo'ladi: "
+"\"to'g'ri joyga keldim\". E'lon boshqa, sahifa boshqa gapirsa — "
+"ishonch bir soniyada sinadi.\n\n"
+"<b>Yaxshi landing sahifaning skeleti</b>\n\n"
+"1. <b>Sarlavha</b> — asosiy va'da (e'lon bilan mos)\n"
+"2. <b>Foyda</b> — mijoz nimaga ega bo'ladi (xususiyat emas: "
+"\"8 GB xotira\" emas, \"1000 ta surat sig'adi\")\n"
+"3. <b>Ishonch</b> — izohlar, natijalar, raqamlar, kafolat\n"
+"4. <b>Bitta aniq CTA</b> — \"Ariza qoldirish\", \"Telegram'da "
+"yozish\". 4.2-darsdagi qoida shu yerda ham: bitta sahifa — bitta "
+"asosiy harakat. Beshta tugma — nol qaror.\n\n"
+"Va shakl (forma) qanchalik qisqa bo'lsa, shuncha ko'p ariza: ism + "
+"telefon yetarli. Har qo'shimcha maydon arizalarning bir qismini "
+"\"yeb qo'yadi\".\n\n"
+"<b>Sayt shartmi? Yo'q.</b>\n\n"
+"O'zbekiston voqeligida landing rolini ko'pincha boshqa narsalar "
+"o'ynaydi: to'g'ridan-to'g'ri Telegram bot (reklama → bot → suhbat "
+"→ savdo), Instagram profil (shuning uchun 3.1-darsdagi \"3 soniya "
+"imtihoni\" muhim edi) yoki bitta sahifali oddiy sayt. Qoida "
+"o'zgarmaydi: qayerga olib borsangiz ham, o'sha joy e'londagi "
+"va'dani davom ettirsin va bitta aniq keyingi qadam taklif "
+"qilsin.\n\n"
+"<b>Tezlik — ko'rinmas konversiya o'g'risi</b>\n\n"
+"Sahifa 3-4 soniyada ochilmasa, odamlarning katta qismi kutmaydi — "
+"siz esa bosish uchun to'lab bo'lgansiz. Og'ir rasmlar va keraksiz "
+"skriptlardan tozalang; telefonda tekshiring, chunki trafikning "
+"mutlaq ko'pchiligi telefondan keladi.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> reklama — eshik taqillatish, landing "
+"— eshikni ochib kutib olish. Mehmonni ostonada yo'qotmang.\n\n"
+"✍️ <b>Haftalik topshiriq:</b> o'z loyihangiz uchun (1) 10 ta kalit "
+"so'z yozing va ularni niyat bo'yicha uch guruhga ajrating "
+"(ma'lumot / taqqoslash / xarid), (2) kamida 5 ta minus-so'z "
+"toping, (3) mijoz reklamadan qayerga tushishini va u yerda qanday "
+"bitta CTA kutishini yozing. Botga yuboring!"
+                ),
+            },
+        ],
+        "test": [
+            {"q": "Google Search va Meta reklamasining tub farqi nimada?",
+             "opts": ["Google arzonroq",
+                      "Google'da odam o'zi qidiradi (tayyor niyat), Meta'da talab yaratiladi",
+                      "Meta faqat videolar uchun",
+                      "Farqi yo'q"],
+             "correct": 1},
+            {"q": "\"Matras narxi Toshkent yetkazib berish\" — bu qaysi niyat darajasi?",
+             "opts": ["Ma'lumot niyati", "Taqqoslash niyati", "Xarid niyati", "Niyatsiz so'rov"],
+             "correct": 2},
+            {"q": "Boshlovchiga qaysi moslik turi tavsiya etiladi?",
+             "opts": ["Keng (broad)", "Ibora (phrase)", "Faqat aniq (exact)", "Hammasi aralash"],
+             "correct": 1},
+            {"q": "Minus-so'zlar nima uchun kerak?",
+             "opts": ["Raqobatchini bloklash uchun",
+                      "Keraksiz so'rovlarga chiqmaslik va byudjetni tejash uchun",
+                      "E'lonni chiroyli qilish uchun",
+                      "Google talab qilgani uchun"],
+             "correct": 1},
+            {"q": "Message match nima?",
+             "opts": ["Ikki e'lonning bir xilligi",
+                      "E'londagi va'daning ochilgan sahifada davom etishi",
+                      "Xabarlarga tez javob berish",
+                      "Google va Meta'ni birga ishlatish"],
+             "correct": 1},
+            {"q": "Landing sahifada nechta asosiy CTA bo'lishi kerak?",
+             "opts": ["Qancha ko'p, shuncha yaxshi", "Bitta aniq harakat", "Kamida uchta", "CTA umuman kerak emas"],
+             "correct": 1},
+        ],
+    },
     8: {"title": "Analitika va metrikalar", "lessons": [], "test": []},
     9: {"title": "Funnel, email va influencer marketing", "lessons": [], "test": []},
     10: {"title": "Strategiya va yakuniy loyiha", "lessons": [], "test": []},
