@@ -597,7 +597,9 @@ async def stats(update, context):
     active7 = sum(1 for u in users.values() if u.get("last_seen", "") in days7)
     parts = sum(1 for u in users.values() if u.get("points", 0) > 0)
     top = ranking()[:1]
-    top_line = f"\n🥇 Yetakchi: {top[0][1]['name']} ({top[0][1]['points']} ochko)" if top else ""
+    import html as _html
+    top_line = (f"\n🥇 Yetakchi: {_html.escape(str(top[0][1]['name']))} "
+                f"({top[0][1]['points']} ochko)") if top else ""
     quizzes = load_json(QUIZ_FILE, {})
     q_made = len(quizzes)
     q_played = sum(len(z.get("attempts", [])) for z in quizzes.values())
@@ -624,22 +626,22 @@ async def stats(update, context):
     if totals:
         ranked = sorted(totals.items(), key=lambda x: -x[1])
         feat_pairs = [(EVENT_LABELS.get(n, n), c) for n, c in ranked[:8]]
-        feats = "\n".join(f"{i+1}. {lbl} — *{c}*" for i, (lbl, c) in enumerate(feat_pairs))
+        feats = "\n".join(f"{i+1}. {lbl} — <b>{c}</b>" for i, (lbl, c) in enumerate(feat_pairs))
     else:
-        feats = "_Hali ma'lumot yig'ilmagan (yangi versiya ishga tushgandan boshlab yig'iladi)_"
+        feats = "<i>Hali ma'lumot yig'ilmagan (yangi versiya ishga tushgandan boshlab yig'iladi)</i>"
 
     await update.message.reply_text(
-        f"📊 *Statistika*\n\n"
-        f"👥 Jami foydalanuvchi: *{len(users)}*\n"
-        f"🟢 Bugun faol: *{active}* · Haftada: *{active7}*\n"
-        f"🆕 Haftada yangi: *{week_new}*\n"
-        f"🤝 Jamoaga arizalar: *{len(apps)}*\n"
-        f"🏆 Konkurs ishtirokchilari: *{parts}*{top_line}\n"
-        f"🧩 Testlar: *{q_made}* yaratilgan · *{q_played}* o'ynalgan\n\n"
-        f"📈 *Yangi foydalanuvchilar (7 kun):*\n"
-        f"```\n{chart}\n```\n"
-        f"🔥 *Eng ko'p ishlatilgan bo'limlar (7 kun):*\n{feats}",
-        parse_mode="Markdown")
+        f"📊 <b>Statistika</b>\n\n"
+        f"👥 Jami foydalanuvchi: <b>{len(users)}</b>\n"
+        f"🟢 Bugun faol: <b>{active}</b> · Haftada: <b>{active7}</b>\n"
+        f"🆕 Haftada yangi: <b>{week_new}</b>\n"
+        f"🤝 Jamoaga arizalar: <b>{len(apps)}</b>\n"
+        f"🏆 Konkurs ishtirokchilari: <b>{parts}</b>{top_line}\n"
+        f"🧩 Testlar: <b>{q_made}</b> yaratilgan · <b>{q_played}</b> o'ynalgan\n\n"
+        f"📈 <b>Yangi foydalanuvchilar (7 kun):</b>\n"
+        f"<pre>{chart}</pre>\n"
+        f"🔥 <b>Eng ko'p ishlatilgan bo'limlar (7 kun):</b>\n{feats}",
+        parse_mode="HTML")
 
 
 # ---------------- Inline callbacklar ----------------
