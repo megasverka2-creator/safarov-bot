@@ -1258,7 +1258,191 @@ WEEKS = {
              "correct": 1},
         ],
     },
-    8: {"title": "Analitika va metrikalar", "lessons": [], "test": []},
+    8: {
+        "title": "Analitika va metrikalar",
+        "lessons": [
+            {
+                "id": "8.1",
+                "title": "Metrikalar: qaysi raqam maqtaydi, qaysi biri gapiradi",
+                "free": False,
+                "text": (
+"📖 <b>8.1-dars. Metrikalar: qaysi raqam maqtaydi, qaysi biri "
+"gapiradi</b>\n\n"
+"Marketing dunyosida raqamlar ikki xil bo'ladi. Birinchisi — "
+"<b>vanity metrics</b> (bezak raqamlar): ko'rkam ko'rinadi, ko'ngilni "
+"ko'taradi, lekin qaror chiqarishga yaramaydi. \"100 ming ko'rish!\" "
+"— zo'r, xo'sh, nechta savdo bo'ldi? Ikkinchisi — <b>ishchi "
+"raqamlar</b> (actionable): ular sizga aniq \"nima qilish "
+"kerak\"ligini aytadi. Professional marketolog birinchisini "
+"hisobotga, ikkinchisini qarorga ishlatadi.\n\n"
+"<b>Asosiy lug'at (bir marta aniq tushunib olamiz)</b>\n\n"
+"• <b>Impressions (ko'rsatishlar)</b> — kontent necha marta ekranda "
+"paydo bo'ldi (bir odam 3 marta ko'rsa = 3).\n"
+"• <b>Reach (qamrov)</b> — nechta <i>alohida odam</i> ko'rdi (o'sha "
+"odam = 1).\n"
+"• <b>ER (engagement rate)</b> — faollik: (layk + izoh + saqlash + "
+"ulashish) ÷ qamrov. Kontent auditoriyaga qanchalik \"tegayotgani\"ni "
+"ko'rsatadi.\n"
+"• <b>CTR</b> — bosish ulushi: bosishlar ÷ ko'rsatishlar. E'lon yoki "
+"havola qanchalik jalb qilayotganining o'lchovi.\n"
+"• <b>Konversiya</b> — harakatga o'tganlar ulushi: 100 kirdi, 5 tasi "
+"ariza qoldirdi = 5%.\n\n"
+"<b>Raqamlarni zanjir qilib o'qish</b>\n\n"
+"Alohida raqam kam narsa aytadi — kuch zanjirda: "
+"<i>ko'rsatish → bosish → so'rov → savdo</i>. Zanjirning qayeri "
+"ingichka bo'lsa, muammo o'sha yerda:\n"
+"Ko'rsatish ko'p, bosish kam (past CTR) → e'lon zaif, hook "
+"ishlamayapti.\n"
+"Bosish ko'p, so'rov kam → landing/profil kutib ololmayapti "
+"(7.3-dars esingizdami?).\n"
+"So'rov ko'p, savdo kam → narx, taklif yoki suhbatda muammo.\n"
+"Mana shu tashxis usuli \"reklama ishlamayapti\" degan mavhum "
+"nolani aniq vazifaga aylantiradi.\n\n"
+"<b>Hayotiy keys.</b> Onlayn kurs sotuvchisi \"reklamam ishlamayapti\" "
+"deb keldi. Raqamlarni zanjirга terdik: CTR yaxshi (e'lon zo'r), "
+"landing konversiyasi 1% (juda past). Sahifani ochsak — e'lon "
+"\"3 oyda natija\" deb va'da qilgan, sahifa esa umumiy gaplar bilan "
+"boshlanardi: message match buzilgan. Sarlavhani e'longa "
+"moslashtirish va formani qisqartirish — konversiya 1% dan 4% ga "
+"chiqdi. Reklama byudjeti o'zgarmadi, savdo 4 barobar oshdi. "
+"Raqamlar aniq ko'rsatdi: muammo reklamada emas edi.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> raqamlardan qo'rqmang — ular "
+"ayblovchi emas, maslahatchi. To'g'ri o'qilgan bitta metrika o'nta "
+"taxmindan qimmat."
+                ),
+            },
+            {
+                "id": "8.2",
+                "title": "UTM: har bir so'm qayerdan kelganini bilish",
+                "free": False,
+                "text": (
+"📖 <b>8.2-dars. UTM: har bir so'm qayerdan kelganini bilish</b>\n\n"
+"Klassik holat: reklama uch joyda ketyapti — Instagram, Telegram "
+"kanal, bloger. Savdo bor. Lekin <b>qaysi biridan?</b> Bilmasangiz, "
+"keyingi oy byudjetni taxmin bilan taqsimlaysiz — ehtimol, "
+"ishlamayotganiga quyib. Bu muammoning yechimi arzon va oddiy: "
+"UTM belgilari.\n\n"
+"<b>UTM nima?</b>\n\n"
+"Havola oxiriga qo'shiladigan \"pasport\": odam qayerdan kelganini "
+"aytib turadi. Oddiy havola:\n"
+"<code>mysite.uz/kurs</code>\n"
+"UTM bilan:\n"
+"<code>mysite.uz/kurs?utm_source=instagram&utm_medium=reels&"
+"utm_campaign=iyul_aksiya</code>\n\n"
+"Uch asosiy parametr:\n"
+"• <b>utm_source</b> — qayerdan (instagram, telegram, bloger_nomi)\n"
+"• <b>utm_medium</b> — qanday turdagi (reels, stories, post, "
+"reklama)\n"
+"• <b>utm_campaign</b> — qaysi aksiya (iyul_aksiya, yangi_kurs)\n\n"
+"Endi analitika tizimida har manbadan nechta odam kelgani va "
+"nechtasi ariza qoldirgani <b>alohida-alohida</b> ko'rinadi. "
+"Havolani qo'lda yozish shart emas — internetdagi bepul \"UTM "
+"builder\"lar 10 soniyada yasab beradi.\n\n"
+"<b>Sayt yo'q bo'lsa-chi? Promo-kod usuli</b>\n\n"
+"O'zbekistonda ko'p savdo Direct va Telegram suhbatida bo'ladi — u "
+"yerda UTM ko'rinmaydi. Yechim eskicha va ishonchli: <b>har kanalga "
+"o'z promo-kodi yoki so'zi</b>. Blogerga: \"AZIZA so'zini aytganlarga "
+"chegirma\". Telegram reklamasiga boshqa so'z. Endi mijozning "
+"birinchi xabari o'zi manbani aytib turadi. Yoki eng oddiy usul — "
+"so'rab qolish odati: \"Bizni qayerdan topdingiz?\" — va javobni "
+"jadvalga yozib borish. Ilmiy emas, lekin nolga qaraganda yuz "
+"barobar yaxshi.\n\n"
+"<b>Google Analytics haqida ikki og'iz</b>\n\n"
+"Saytingiz bo'lsa, Google Analytics (bepul) o'rnatilishi shart: u "
+"UTM'larni o'zi o'qiydi, qaysi manba qancha odam va qancha "
+"konversiya berganini jadval qilib beradi. Chuqur o'rganish alohida "
+"kurs mavzusi, lekin boshlanish uchun bitta hisobot yetadi: "
+"<i>Trafik manbalari → konversiyalar</i>. Haftada bir marta ochib "
+"qarash odati — byudjetingizning eng yaxshi qo'riqchisi.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> o'lchanmagan kanal — qorong'i xona: "
+"pul sarflayapsiz, natijani ko'rmayapsiz. UTM yoki promo-kod — "
+"chiroqni yoqish."
+                ),
+            },
+            {
+                "id": "8.3",
+                "title": "ROI, CAC, LTV: biznesning uch harfli haqiqatlari",
+                "free": False,
+                "text": (
+"📖 <b>8.3-dars. ROI, CAC, LTV: biznesning uch harfli "
+"haqiqatlari</b>\n\n"
+"Bu dars — kursning \"kalkulyator\" darsi. To'rtta formula bor, "
+"hammasi maktab arifmetikasi darajasida, lekin aynan shular "
+"marketingni \"his\"dan \"biznes\"ga aylantiradi.\n\n"
+"<b>1. CAC — mijoz olish narxi</b>\n"
+"<i>CAC = marketing sarfi ÷ kelgan yangi mijozlar soni</i>\n"
+"Oyiga 2 mln so'm sarflab 40 mijoz oldingizmi — bitta mijoz 50 000 "
+"so'mga tushdi.\n\n"
+"<b>2. LTV — mijozning umr bo'yi qiymati</b>\n"
+"<i>LTV = o'rtacha xarid foydasi × xaridlar soni</i>\n"
+"Mijoz o'rtacha 60 000 foyda qoldirib, yiliga 4 marta qaytsa: "
+"LTV = 240 000 so'm. Mana shu raqam ko'p narsani o'zgartiradi: "
+"birinchi savdoda 50 000 CAC \"qimmat\" tuyulgan edi — LTV yonida "
+"esa juda arzon. <b>Oltin nisbat: LTV kamida 3 × CAC.</b> Shu "
+"nisbat buzilmasa, biznes sog'lom.\n\n"
+"<b>3. ROAS — reklama qaytimi</b>\n"
+"<i>ROAS = reklamadan kelgan tushum ÷ reklama sarfi</i>\n"
+"1 mln sarflab 4 mln tushum = ROAS 4. Tez, kunlik nazorat uchun "
+"qulay o'lchov.\n\n"
+"<b>4. ROI — sof foyda qaytimi</b>\n"
+"<i>ROI = (foyda − sarf) ÷ sarf × 100%</i>\n"
+"ROAS'dan farqi: tushum emas, <b>foyda</b> hisoblanadi (tannarx, "
+"yetkazish — hammasi ayirilgan holda). ROAS 4 bo'lsa-yu, mahsulot "
+"marjasi past bo'lsa, ROI minus chiqishi mumkin — \"savdo ko'p, pul "
+"yo'q\" degan sirli holatning javobi ko'pincha shu yerda.\n\n"
+"<b>Hayotiy keys.</b> Ikki mahsulotli do'kon: A mahsulot reklamasi "
+"ROAS 5 beradi, B mahsulot — ROAS 3. Egasi byudjetni A'ga quyayotgan "
+"edi. ROI hisoblanganda rasm teskari chiqdi: A'ning marjasi 15% "
+"(ROI past), B'niki 55% (ROI baland). Byudjet B'ga ko'chirildi — "
+"oylik <b>foyda</b> sezilarli o'sdi, garchi \"tushum\" kamaygandek "
+"ko'rinsa ham. ROAS chiroyli gapirdi, ROI haqiqatni aytdi.\n\n"
+"<b>Oddiy hisobot odati</b>\n\n"
+"Oyiga bir marta, bitta jadval, beshta ustun: kanal · sarf · "
+"mijozlar · CAC · foyda. 15 daqiqalik ish. Uch oy yig'ilsa, "
+"byudjet qarorlarini siz emas — jadval qabul qila boshlaydi.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> marketing ijodkorlikdan boshlanadi, "
+"lekin arifmetikada g'alaba qozonadi.\n\n"
+"✍️ <b>Haftalik topshiriq:</b> hayoliy (yoki real) raqamlar bilan "
+"hisoblang: oylik reklama 1,5 mln so'm, kelgan mijozlar 30 ta, "
+"o'rtacha xarid foydasi 80 000 so'm, mijoz yiliga o'rtacha 3 marta "
+"qaytadi. CAC, LTV va LTV/CAC nisbatini toping — bu biznes "
+"sog'lommi? Javob va hisob-kitobingizni botga yuboring!"
+                ),
+            },
+        ],
+        "test": [
+            {"q": "Vanity metric (bezak raqam)ga misol qaysi?",
+             "opts": ["Bitta mijoz olish narxi (CAC)",
+                      "Umumiy ko'rishlar soni, savdoga bog'lanmagan holda",
+                      "Landing konversiyasi",
+                      "Reklama qaytimi (ROAS)"],
+             "correct": 1},
+            {"q": "Reach va Impressions farqi nimada?",
+             "opts": ["Farqi yo'q",
+                      "Reach — alohida odamlar, Impressions — jami ko'rsatishlar",
+                      "Reach faqat Instagram'da bo'ladi",
+                      "Impressions — faqat pullik reklamada"],
+             "correct": 1},
+            {"q": "CTR yaxshi, lekin so'rovlar kam — muammo qayerda bo'lishi ehtimol?",
+             "opts": ["E'londa", "Landing/qabul qiluvchi sahifada", "Auditoriyada", "Byudjetda"],
+             "correct": 1},
+            {"q": "utm_source parametri nimani bildiradi?",
+             "opts": ["Aksiya nomini", "Trafik qayerdan kelganini", "Reklama narxini", "Sayt tezligini"],
+             "correct": 1},
+            {"q": "CAC qanday hisoblanadi?",
+             "opts": ["Tushum ÷ sarf",
+                      "Marketing sarfi ÷ yangi mijozlar soni",
+                      "Foyda × mijozlar soni",
+                      "Sarf × 100%"],
+             "correct": 1},
+            {"q": "Sog'lom biznes uchun oltin nisbat qaysi?",
+             "opts": ["LTV kamida 3 barobar CAC'dan katta",
+                      "CAC kamida 3 barobar LTV'dan katta",
+                      "ROAS har doim 10 dan yuqori",
+                      "CAC = LTV bo'lishi kerak"],
+             "correct": 0},
+        ],
+    },
     9: {"title": "Funnel, email va influencer marketing", "lessons": [], "test": []},
     10: {"title": "Strategiya va yakuniy loyiha", "lessons": [], "test": []},
 }
