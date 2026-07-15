@@ -349,7 +349,200 @@ WEEKS = {
              "correct": 1},
         ],
     },
-    3: {"title": "SMM: Instagram va Telegram", "lessons": [], "test": []},
+    3: {
+        "title": "SMM: Instagram va Telegram",
+        "lessons": [
+            {
+                "id": "3.1",
+                "title": "Platformalar xaritasi: qaysi biznes qayerda yashaydi",
+                "free": False,
+                "text": (
+"📖 <b>3.1-dars. Platformalar xaritasi: qaysi biznes qayerda "
+"yashaydi</b>\n\n"
+"Yangi biznesning odatiy xatosi: \"hamma joyda bo'lishimiz kerak!\" "
+"— va to'rtta platformada to'rtta o'lik sahifa paydo bo'ladi. "
+"Professional yondashuv teskari: <b>mijozingiz qayerda bo'lsa, bor "
+"kuchni o'sha yerga qarating</b>. Bitta jonli sahifa to'rtta "
+"o'likdan yuz barobar kuchli.\n\n"
+"<b>O'zbekiston bozorida platformalar taqsimoti</b>\n\n"
+"📸 <b>Instagram</b> — vizual savdo maydoni. Kiyim, taom, go'zallik, "
+"dekor, sovg'alar — ko'z bilan tanlanadigan hamma narsa shu yerda. "
+"Auditoriya keng, ayollar ulushi yuqori. Kuchli tomoni: reels orqali "
+"bepul yangi auditoriyaga chiqish mumkin.\n\n"
+"✈️ <b>Telegram</b> — O'zbekistonning \"ikkinchi interneti\". Bu yerda "
+"odamlar yangilik o'qiydi, kanalga obuna bo'ladi, botdan buyurtma "
+"beradi. Kuchli tomoni: obunachi bilan to'g'ridan-to'g'ri, "
+"algoritmsiz aloqa — post yozsangiz, deyarli hamma ko'radi. Ta'lim, "
+"xizmatlar, ekspert brendlar uchun eng yaxshi uy.\n\n"
+"🎵 <b>TikTok</b> — yosh auditoriya va portlovchi organik o'sish. "
+"Bitta video million ko'rishga chiqishi mumkin — bepul. Lekin "
+"auditoriya \"sovuq\": ko'radi, kuladi, har doim ham sotib olmaydi. "
+"Brend tanilishi uchun zo'r, to'g'ridan-to'g'ri savdo uchun "
+"kuchsizroq.\n\n"
+"📘 <b>Facebook</b> — O'zbekistonda yoshi kattaroq auditoriya va... "
+"reklama kabineti. Ko'p biznes Facebook'da sahifa yuritmaydi, lekin "
+"Instagram reklamasi aynan Facebook (Meta) kabineti orqali "
+"sozlanadi — buni 6-haftada o'rganamiz.\n\n"
+"<b>To'g'ri formula: 1 + 1</b>\n\n"
+"Kichik biznes uchun oltin qoida: bitta <b>asosiy</b> platforma "
+"(kontentning bosh manzili) + bitta <b>yordamchi</b> (asosiyga "
+"trafik haydaydi yoki auditoriyani \"qulflaydi\"). Klassik juftlik: "
+"Instagram (ko'rsatish, jalb qilish) + Telegram (ushlab qolish, "
+"sotish). Reels yangi odamni topadi, Telegram uni doimiy mijozga "
+"aylantiradi.\n\n"
+"<b>Profil — 3 soniyalik imtihon</b>\n\n"
+"Yangi odam profilingizga kirib 3 soniyada uchta savolga javob "
+"topishi kerak: bu kim? menga nima beradi? keyin nima qilay? "
+"Shundan kelib chiqib: profil rasmi — aniq va sifatli (logotip yoki "
+"yuz), bio — kim ekaningiz + foydangiz + harakatga chaqiriq "
+"(\"👇 Katalog botda\"), highlight'lar — narxlar, izohlar, yetkazish. "
+"Bio'da \"eng yaxshi, sifatli, arzon\" degan quruq so'zlar o'rniga "
+"aniqlik: \"3 yildan beri 4000+ ona bizdan oladi\".\n\n"
+"💡 <b>Esda qoladigan fikr:</b> platforma tanlash — moda emas, "
+"strategiya. Mijozingiz qayerda vaqt o'tkazsa, sizning \"do'koningiz\" "
+"o'sha yerda bo'lsin."
+                ),
+            },
+            {
+                "id": "3.2",
+                "title": "Algoritm qanday o'ylaydi va unga qanday yoqish mumkin",
+                "free": False,
+                "text": (
+"📖 <b>3.2-dars. Algoritm qanday o'ylaydi va unga qanday yoqish "
+"mumkin</b>\n\n"
+"\"Postlarim hech kimga ko'rinmayapti, algoritm meni bosdi!\" — "
+"tanish gapmi? Yaxshi yangilik: algoritm hech kimni \"bosmaydi\". "
+"Uning bitta vazifasi bor: <b>odamni platformada uzoqroq ushlab "
+"turish</b>. Kontentingiz odamlarni ushlab tursa — algoritm uni "
+"o'zi tarqatadi, tekinga. Ushlamasa — hech qanday hiyla yordam "
+"bermaydi.\n\n"
+"<b>Algoritm nimalarni o'lchaydi (signallar)</b>\n\n"
+"1. <b>Ko'rish davomiyligi (watch time)</b> — reels'ni oxirigacha "
+"ko'rishdimi? Qayta ko'rishdimi? Eng kuchli signal. Shuning uchun "
+"birinchi 1-2 soniya hal qiluvchi: qiziqtirmasa, barmoq keyingisiga "
+"o'tadi.\n"
+"2. <b>Saqlash (save)</b> — \"keyin kerak bo'ladi\" degani. Foydali "
+"kontent belgisi: retseptlar, ro'yxatlar, maslahatlar ko'p "
+"saqlanadi.\n"
+"3. <b>Ulashish (share)</b> — \"buni do'stim ko'rsin\". Eng qimmat "
+"signal: bitta share o'nta laykdan kuchli, chunki sizga yangi "
+"auditoriya olib keladi.\n"
+"4. <b>Izohlar</b> — suhbat boshlandi degani. Savol bilan tugaydigan "
+"postlar izohni ko'paytiradi.\n"
+"Layk esa... eng arzon signal. \"Layk yig'ish\"ga emas, saqlash va "
+"ulashishga o'ynang.\n\n"
+"<b>Amaliy xulosa: kontentni signal ostiga qurish</b>\n\n"
+"Post tayyorlashdan oldin bitta savol bering: <i>\"Odam buni nega "
+"saqlaydi yoki kimga yuboradi?\"</i> Javob yo'q bo'lsa — post ham "
+"kuchsiz. Ishlaydigan formatlar: \"5 ta xato\" ro'yxatlari "
+"(saqlashadi), \"buni bilarmidingiz\" faktlari (ulashishadi), "
+"munozarali savollar (izoh yozishadi), hayotiy sahna ortlari "
+"(oxirigacha ko'rishadi).\n\n"
+"<b>Bitta muhim ogohlantirish</b>\n\n"
+"Algoritmni \"aldash\" yo'llari (layk chatlari, sotib olingan "
+"obunachi, giveaway'dan yig'ilgan olomon) qisqa muddatda son "
+"beradi, uzoq muddatda sahifani ko'madi: algoritm kontentingizni "
+"qiziqmagan odamlarga ko'rsatib ko'radi, ular o'tkazib yuboradi, "
+"tizim \"bu kontent yoqmayapti\" deb xulosa qiladi va tarqatishni "
+"to'xtatadi. 10 000 o'lik obunachidan 500 jonli obunachi qimmat.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> algoritm — dushman emas, u shunchaki "
+"auditoriyaning ko'zgusi. Odamlarga yoqsangiz, algoritmga ham "
+"yoqasiz."
+                ),
+            },
+            {
+                "id": "3.3",
+                "title": "Telegram marketingi: O'zbekistonning oltin kanali",
+                "free": False,
+                "text": (
+"📖 <b>3.3-dars. Telegram marketingi: O'zbekistonning oltin "
+"kanali</b>\n\n"
+"Dunyoning ko'p mamlakatlarida Telegram — oddiy messenjer. "
+"O'zbekistonda esa u to'laqonli media-makon: yangiliklar, do'konlar, "
+"ta'lim, ish e'lonlari — hammasi shu yerda. Shuning uchun bizda "
+"Telegram marketingi alohida dars: bu bilimsiz o'zbek bozorida SMM "
+"to'liq emas.\n\n"
+"<b>Uch qurol: kanal, guruh, bot</b>\n\n"
+"📣 <b>Kanal</b> — sizning minbaringiz: siz gapirasiz, obunachi "
+"o'qiydi. Kontent va ishonch qurish uchun. Instagram'dan farqi: "
+"algoritm yo'q, postingiz obunachining lentasiga <b>kafolatlangan</b> "
+"yetib boradi.\n"
+"👥 <b>Guruh</b> — davra suhbati: mijozlar bir-biri bilan "
+"gaplashadi. Jamoa va sodiqlik uchun kuchli, lekin moderatsiya "
+"talab qiladi.\n"
+"🤖 <b>Bot</b> — avtomatik xodim: buyurtma qabul qiladi, savolga "
+"javob beradi, konkurs o'tkazadi, hatto kurs sotadi (hozir siz "
+"aynan botda o'qiyapsiz 😉).\n\n"
+"Professional sxema uchalasini bog'laydi: kanal ishonch quradi → "
+"bot sotadi → guruh ushlab qoladi.\n\n"
+"<b>Kanalni nima o'stiradi</b>\n\n"
+"Telegram'da reels yo'q — \"tasodifiy\" topib olishmaydi. O'sish "
+"manbalari: boshqa platformalardan trafik (Instagram bio, reels'da "
+"\"davomi Telegramda\"), o'zaro reklama (auditoriyasi mos kanallar "
+"bilan almashinuv), reklama postlari (boshqa kanallarda pullik "
+"e'lon — obunachi narxini hisoblab olish: sarf ÷ kelganlar soni), "
+"va eng barqarori — <b>ulashiladigan kontent</b>: odam postingizni "
+"do'stiga yuborsa, u sizning bepul reklama agentingiz.\n\n"
+"<b>Ko'rsatkichlarni qanday o'qish kerak</b>\n\n"
+"Kanalda ikkita asosiy raqam bor: ERR (post ko'rishlari ÷ obunachilar) "
+"— 30% dan yuqori bo'lsa kanal \"tirik\"; va reaksiya-repostlar "
+"dinamikasi. Obunachi soni katta-yu, ko'rishlar past bo'lsa — kanal "
+"\"o'lik yuk\" yig'gan, bunday auditoriya reklama beruvchini ham, "
+"sizni ham aldaydi.\n\n"
+"<b>Hayotiy keys.</b> Bir ta'lim loyihasi Instagram'da 40 ming "
+"obunachiga ega edi, lekin har postda algoritm pastga urib, savdo "
+"tushib ketardi. Ular oddiy qadam qo'ydi: har reels oxirida \"to'liq "
+"darslik Telegram kanalda\" deb takrorladi va bio'ga havola qo'ydi. "
+"Olti oyda Telegram'da 8 ming obunachi yig'ildi — va qizig'i: savdoning "
+"70% i endi shu 8 mingdan keladi, 40 minglik Instagram'dan emas. "
+"Sabab: Telegram'da xabar kafolatlangan yetib boradi, Instagram'da "
+"esa algoritmdan omad tilab o'tirasiz.\n\n"
+"💡 <b>Esda qoladigan fikr:</b> Instagram — ov maydoni, Telegram — "
+"omborxona. Ovni maydonda qiling, boylikni omborda saqlang.\n\n"
+"✍️ <b>Haftalik topshiriq:</b> o'z loyihangiz uchun \"1+1\" formulani "
+"yozing (asosiy + yordamchi platforma va nima uchun), hamda 3 ta "
+"post g'oyasini yozing — har biri bitta algoritm signaliga "
+"mo'ljallangan bo'lsin (biri saqlash, biri ulashish, biri izoh "
+"uchun). Botga yuboring!"
+                ),
+            },
+        ],
+        "test": [
+            {"q": "Kichik biznes uchun platformalar bo'yicha to'g'ri strategiya qaysi?",
+             "opts": ["Barcha platformalarda birdek faol bo'lish",
+                      "Bitta asosiy + bitta yordamchi platformaga fokus",
+                      "Faqat TikTok — u eng tez o'sadi",
+                      "Platformaning ahamiyati yo'q"],
+             "correct": 1},
+            {"q": "Algoritmning asosiy maqsadi nima?",
+             "opts": ["Kichik sahifalarni bosish",
+                      "Reklama sotish",
+                      "Odamni platformada uzoqroq ushlab turish",
+                      "Eng chiroyli kontentni tanlash"],
+             "correct": 2},
+            {"q": "Qaysi signal algoritm uchun eng qimmatli hisoblanadi?",
+             "opts": ["Layk", "Ulashish (share)", "Profilga kirish", "Obuna bo'lish"],
+             "correct": 1},
+            {"q": "Telegram kanalning Instagram'dan asosiy farqi nimada?",
+             "opts": ["Telegram'da rasm joylash mumkin emas",
+                      "Post obunachiga algoritmsiz, kafolatlangan yetib boradi",
+                      "Telegram'da reklama qilish taqiqlangan",
+                      "Farqi yo'q"],
+             "correct": 1},
+            {"q": "Kanal \"tirikligi\"ni qaysi ko'rsatkich ko'rsatadi?",
+             "opts": ["Obunachilar soni",
+                      "Kanal yoshi",
+                      "Post ko'rishlarining obunachilarga nisbati (ERR)",
+                      "Postlar soni"],
+             "correct": 2},
+            {"q": "Sotib olingan obunachilar nega zararli?",
+             "opts": ["Ular pul so'raydi",
+                      "Algoritm kontentni qiziqmaganlarga ko'rsatib, tarqatishni to'xtatadi",
+                      "Telegram akkauntni bloklaydi",
+                      "Aslida zararli emas, foydali"],
+             "correct": 1},
+        ],
+    },
     4: {"title": "Kontent strategiyasi va copywriting", "lessons": [], "test": []},
     5: {"title": "Vizual kontent va kontent kalendari", "lessons": [], "test": []},
     6: {"title": "Meta Ads: pullik reklama", "lessons": [], "test": []},
