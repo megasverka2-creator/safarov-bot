@@ -93,9 +93,9 @@ MODEL_FAST = os.environ.get("AI_MODEL_FAST", "gpt-5.4-nano")
 MODEL_SMART = os.environ.get("AI_MODEL_SMART", "gpt-5.6-luna")
 MODEL = MODEL_FAST  # eski nom bilan moslik
 MIN_SCORE = 6                  # nomzodlik chegarasi (siz baribir qo'lda tanlaysiz)
-MAX_POSTS_PER_DAY = 8          # kunlik post-nomzodlar (5 rubrika uchun)
+MAX_POSTS_PER_DAY = 10         # kunlik post-nomzodlar (5 rubrika uchun)
 MAX_PER_RUBRIKA = 2            # bitta yo'nalish kunni bosib ketmasligi uchun
-MAX_API_CALLS_PER_DAY = 80     # 15 manba uchun; baribir kuniga ~$0.03 atrofida
+MAX_API_CALLS_PER_DAY = 120    # 15 manba uchun; baribir kuniga ~$0.03 atrofida
 SCORING_RESERVE = MAX_POSTS_PER_DAY  # post yozish uchun doim zaxira chaqiruv qoladi
 ARTICLE_CHAR_LIMIT = 8000
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) AppleWebKit/537.36"
@@ -118,6 +118,12 @@ SOURCES = [
     ("BBC World",     "https://feeds.bbci.co.uk/news/world/rss.xml",                   "dunyo"),
     ("Al Jazeera",    "https://www.aljazeera.com/xml/rss/all.xml",                     "dunyo"),
     ("NYT World",     "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",        "dunyo"),
+    # --- 🇺🇿 O'zbekiston yangiliklari ---
+    ("Gazeta.uz",     "https://www.gazeta.uz/uz/rss/",                                 "uzb"),
+    ("Spot.uz",       "https://www.spot.uz/rss/",                                      "uzb"),
+    # --- ⚽ Sport ---
+    ("BBC Futbol",    "https://feeds.bbci.co.uk/sport/football/rss.xml",               "sport"),
+    ("BBC Sport",     "https://feeds.bbci.co.uk/sport/rss.xml",                        "sport"),
     # --- 📚 Kitob va mutolaa ---
     ("Literary Hub",  "https://lithub.com/feed/",                                      "mutolaa"),
     ("Austin Kleon",  "https://austinkleon.com/feed/",                                 "mutolaa"),
@@ -125,10 +131,11 @@ SOURCES = [
 ]
 
 RUBRIKA_EMOJI = {"ai": "🗞", "rivojlanish": "🌱", "podcast": "🎧",
-                 "dunyo": "🌍", "mutolaa": "📚"}
+                 "dunyo": "🌍", "mutolaa": "📚", "uzb": "🇺🇿", "sport": "⚽"}
 RUBRIKA_NOMI = {"ai": "AI va marketing", "rivojlanish": "Shaxsiy rivojlanish",
                 "podcast": "Podcast va video", "dunyo": "Dunyo yangiliklari",
-                "mutolaa": "Kitob va mutolaa"}
+                "mutolaa": "Kitob va mutolaa",
+                "uzb": "O'zbekiston", "sport": "Sport"}
 
 log = logging.getLogger("agent")
 
@@ -193,7 +200,8 @@ def api_call_inc(conn):
 # ======================================================================
 SCORE_PROMPT = """Sen @safaroov_blog Telegram kanalining kuratorisan. Kanal yo'nalishlari: \
 (1) AI va marketing, (2) shaxsiy rivojlanish, (3) muhim jahon yangiliklari, \
-(4) kitob va mutolaa, (5) podcast. Auditoriya: O'zbekistondagi marketologlar, kichik \
+(4) kitob va mutolaa, (5) podcast, (6) O'zbekiston yangiliklari, (7) sport \
+(ayniqsa futbol va O'zbekistonga aloqador voqealar). Auditoriya: O'zbekistondagi marketologlar, kichik \
 biznes egalari, o'z ustida ishlaydigan yoshlar. Auditoriyaning asosiy qismi musulmonlar — \
 material hurmatli va ishonchli bo'lishi shart.
 
@@ -349,6 +357,59 @@ Shablon (kvadrat qavslarni o'z matning bilan almashtir):
 🔗 Manba: {url}
 
 #mutolaa · @safaroov_blog""",
+
+    "uzb": """Sen @safaroov_blog Telegram kanalining O'zbekiston yangiliklari \
+muharririsan. Kanal tili: o'zbek (lotin alifbosi). Ohang: xolis, aniq, xalqchil.
+
+Quyidagi maqola (o'zbek-kirill yoki rus tilida bo'lishi mumkin) asosida \
+O'zbekiston rubrikasi uchun POST yoz. Manba kirill alifbosida bo'lsa, lotinga \
+tabiiy o'gir.
+
+QO'SHIMCHA QAT'IY TALABLAR (mahalliy yangiliklar uchun):
+- FAQAT manbada tasdiqlangan faktlar; mish-mish va taxmin YO'Q.
+- Siyosiy mavzularda qat'iy betaraflik: shaxslar va idoralarga baho berma, \
+maqtama, ayblama — faqat nima bo'lganini ayt.
+- Fojia va jinoyat xabarlarida dahshatli tafsilotlar berilmasin, ehtirom saqlansin.
+- O'quvchiga amaliy foydasi bo'lsa (yangi qoida, imkoniyat, muddat) — shuni \
+alohida ochiq ayt.
+""" + _UMUMIY_QOIDALAR + """
+Shablon (kvadrat qavslarni o'z matning bilan almashtir):
+
+🇺🇿 [Aniq, xolis sarlavha]
+
+[2-4 gap: nima bo'ldi — faqat faktlar]
+
+📌 Bu nimani anglatadi: [1-2 gap — oddiy odamga qanday ta'sir qiladi yoki nima qilish kerak]
+
+🔗 Manba: {url}
+
+#uzbekiston · @safaroov_blog""",
+
+    "sport": """Sen @safaroov_blog Telegram kanalining sport muharririsan. \
+Kanal tili: o'zbek. Ohang: jonli, ishtiyoqli, lekin hurmatli — haqiqiy sport \
+sharhlovchisi kabi. Auditoriya futbolni ayniqsa sevadi va O'zbekiston terma \
+jamoasi hamda o'zbek sportchilariga aloqador voqealarni intiqlik bilan kutadi.
+
+Quyidagi inglizcha maqola asosida Sport rubrikasi uchun POST yoz.
+
+QO'SHIMCHA TALABLAR (sport uchun):
+- Hisob, natija va raqamlar aniq bo'lsin — sport o'quvchisi xatoni darrov sezadi.
+- Jamoa, klub va sportchi nomlari asl holicha (masalan: Real Madrid, Arsenal).
+- O'zbekistonga aloqasi bo'lsa (o'zbek futbolchisi, raqib jamoa, terma) — buni \
+albatta birinchi o'ringa chiqar.
+- Muxlislarni haqorat qiladigan yoki masxara ohangidagi ifodalar TAQIQ.
+""" + _UMUMIY_QOIDALAR + """
+Shablon (kvadrat qavslarni o'z matning bilan almashtir):
+
+⚽ [Jonli, aniq sarlavha]
+
+[2-3 gap: nima bo'ldi — natija, asosiy voqea, qahramon]
+
+🔥 Qiziq jihati: [1 gap — o'yinning eng esda qolarli lahzasi yoki konteksti]
+
+🔗 Manba: {url}
+
+#sport · @safaroov_blog""",
 }
 
 
@@ -497,6 +558,10 @@ CARD_PALETTES = {
                     ("#5d4037", "#8d6e63", "#fff8e1"), ("#263238", "#37474f", "#ffe082")],
     "podcast":     [("#0f2027", "#203a43", "#80deea"), ("#2c003e", "#512b58", "#ea80fc"),
                     ("#000046", "#1cb5e0", "#ffffff"), ("#232526", "#414345", "#84ffff")],
+    "uzb":         [("#0f3443", "#34e89e", "#e8f9f1"), ("#1a2980", "#26d0ce", "#aef3e7"),
+                    ("#134e5e", "#71b280", "#ffffff"), ("#232526", "#414345", "#69f0ae")],
+    "sport":       [("#0f2027", "#2c5364", "#69f0ae"), ("#1d976c", "#093028", "#ccff90"),
+                    ("#141e30", "#243b55", "#ffd54f"), ("#232526", "#414345", "#80d8ff")],
 }
 
 _FONT_PATHS = [
@@ -1350,7 +1415,7 @@ async def cmd_requeue(update, context):
 @admin_only
 async def cmd_sources(update, context):
     parts = []
-    for rub in ("ai", "rivojlanish", "podcast", "dunyo", "mutolaa"):
+    for rub in ("ai", "rivojlanish", "podcast", "dunyo", "mutolaa", "uzb", "sport"):
         names = ", ".join(n for n, _, r in SOURCES if r == rub)
         parts.append(f"{RUBRIKA_EMOJI[rub]} {RUBRIKA_NOMI[rub]}: {names}")
     await update.message.reply_text("📡 Manbalar:\n" + "\n".join(parts))
