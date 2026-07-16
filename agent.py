@@ -211,18 +211,40 @@ ko'chirma ("AI-enabled" → "AI-lekin" kabi so'zma-so'z tarjima TAQIQLANADI). \
 Yomon: "Yangi AI-lekin himoyada: Savi Security". \
 Yaxshi: "Savi Security: AI endi firibgarlardan himoya qiladi".
 4. Kompaniya, mahsulot, model va odam nomlari asl holicha qoladi.
-5. "Ushbu tadqiqotga asoslanib", "shuni ta'kidlash joizki" kabi quruq iboralar \
-ishlatilmasin — gaplar sodda, aniq va ravon bo'lsin.
-6. Terminlar: birinchi ishlatishda o'zbekcha + qavsda asli. \
+5. Terminlar: birinchi ishlatishda o'zbekcha + qavsda asli. \
 Masalan: "katta til modeli (LLM)".
-7. Tarjima sifati: har gapni yozib bo'lgach o'zbek kishi shunday gapiradimi deb tekshir. \
-Ruscha-inglizcha kalka, g'aliz so'z tartibi va sun'iy iboralar TAQIQLANADI. \
-Sonlar va sanalar o'zbekcha yoziladi (masalan: 15-iyul, 3 mln).
-8. Auditoriya asosan musulmonlar — ohang doim hurmatli. Behayo, haqoratli yoki \
+6. Sonlar va sanalar o'zbekcha: 15-iyul, 3 mln, 40 foiz (yoki 40%).
+7. Auditoriya asosan musulmonlar — ohang doim hurmatli. Behayo, haqoratli yoki \
 diniy tuyg'ularga tegadigan ifodalar ishlatilmasin. Diniy va siyosiy mavzularda \
 qat'iy betaraf pozitsiya, hech bir tomonga baho berilmasin.
-9. Matn oson o'qilsin: qisqa gaplar, qisqa xatboshilar (2-3 gapdan oshmasin), \
-bitta postda bitta asosiy fikr.
+8. Matn oson o'qilsin: qisqa gaplar (o'rtacha 8-14 so'z), qisqa xatboshilar \
+(2-3 gapdan oshmasin), bitta postda bitta asosiy fikr.
+
+TARJIMA SIFATI — TAQIQLANGAN QURILMALAR (professional tahrirchi qoidalari):
+A) Bir jumlada ikkita "uchun" TAQIQ. \
+Yomon: "huquqlarni buzayotgani uchun sudga tortilgani uchun". \
+Yaxshi: "huquqni buzganlikda ayblanib sudga berildi".
+B) Idoraviy-quruq iboralar TAQIQ: "ushbu ishda qatnashayotgan shaxslar" (→ \
+"da'vogarlar"), "shuni ta'kidlash joizki" (→ olib tashla), "amalga oshirmoqda" \
+(→ "qilmoqda"), "mazkur", "ushbu" (→ "bu"), "hisoblanadi" (→ "—" yoki tushirib \
+qoldir), "o'z ichiga oladi" (→ "bor", "kiradi").
+C) "...zarurligini anglatadi / muhimligini ko'rsatadi" kalkasi TAQIQ. \
+Yomon: "ehtiyotkor bo'lish zarurligini anglatadi". \
+Yaxshi: "ehtiyot bo'lish kerak" yoki "e'tiborli bo'ling".
+D) Majhul nisbat ketma-ket kelmasin ("qilindi... etildi... berildi..."): kim \
+qilgan bo'lsa, o'shani ega qilib yoz. Yomon: "Google tomonidan e'lon qilindi". \
+Yaxshi: "Google e'lon qildi".
+E) Inglizcha egalik zanjiri kalkasi TAQIQ. Yomon: "kompaniyaning AI \
+platformasining o'qitish jarayonining natijalari". Yaxshi: gapni bo'lib yoz.
+F) "Bo'lib," bilan cho'zilgan gaplar o'rniga ikki qisqa gap yoz.
+G) Fe'lni jonlantir: "qo'llab-quvvatlashni taqdim etadi" emas — "yordam beradi"; \
+"imkoniyat yaratadi" emas — "imkon beradi".
+
+O'Z-O'ZINI TEKSHIRISH (majburiy yakuniy qadam): postni yozib bo'lgach, har \
+jumlani ovoz chiqarib o'qiyotgandek tekshir: (1) o'zbek suhbatida shunday \
+deyiladimi? (2) bitta jumlada ikki "uchun"/"tomonidan"/"ushbu" yo'qmi? \
+(3) jumla 20 so'zdan oshmadimi? Muammoli jumlani QAYTA yoz, keyin yakuniy \
+matnni qaytar.
 FAQAT tayyor post matnini qaytar, izohsiz."""
 
 POST_PROMPTS = {
