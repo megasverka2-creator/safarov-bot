@@ -539,6 +539,115 @@ def preview_keyboard(post_id, variant):
         [InlineKeyboardButton("❌ Bekor qilish", callback_data=f"agno:{post_id}")],
     ])
 
+
+# ======================================================================
+# FOTO-KARTA — Pexels'dan mos surat topib, blog uslubida bezaydi
+# (PEXELS_API_KEY bo'lsa: 1-2-variantlar foto, 3-4 gradient; bo'lmasa hammasi gradient)
+# ======================================================================
+PEXELS_KEY = os.environ.get("PEXELS_API_KEY", "")
+_photo_cache = {}   # post_id -> suratlar URL ro'yxati (restartgacha)
+
+def ai_photo_query(text):
+    """Post mazmunidan 2-4 so'zlik inglizcha surat qidiruvini chiqaradi."""
+    resp = ai_client().chat.completions.create(
+        model=MODEL, max_tokens=20, temperature=0.4,
+        messages=[{"role": "user", "content":
+                   "Give 2-4 English keywords for a professional stock photo "
+                   "matching this post. Reply with keywords only:\n" + text[:500]}])
+    q = re.sub(r"[^\w\s]", "", resp.choices[0].message.content).strip()
+    return q[:60] or "modern business"
+
+async def pexels_photos(query, n=4):
+    async with httpx.AsyncClient(timeout=20) as cl:
+        r = await cl.get("https://api.pexels.com/v1/search",
+                         params={"query": query, "per_page": n,
+                                 "orientation": "landscape"},
+                         headers={"Authorization": PEXELS_KEY})
+        r.raise_for_status()
+        return [p["src"]["large2x"] for p in r.json().get("photos", [])]
+
+async def _fetch_bytes(url):
+    async with httpx.AsyncClient(timeout=25, follow_redirects=True) as cl:
+        r = await cl.get(url)
+        r.raise_for_status()
+        return r.content
+
+def make_photo_card(photo_bytes, post_text, rubrika):
+    """Pexels suratini blog uslubiga keltiradi: qoraytirish + sarlavha + brend."""
+    if Image is None:
+        return None
+    pal = CARD_PALETTES.get(rubrika, CARD_PALETTES["ai"])
+    accent = _hex_rgb(pal[0][2])
+
+    src = Image.open(BytesIO(photo_bytes)).convert("RGB")
+    # Cover-crop: 1280x720 ga to'ldirib kesish
+    k = max(CARD_W / src.width, CARD_H / src.height)
+    src = src.resize((int(src.width * k) + 1, int(src.height * k) + 1))
+    x = (src.width - CARD_W) // 2
+    y = (src.height - CARD_H) // 2
+    img = src.crop((x, y, x + CARD_W, y + CARD_H))
+
+    d = ImageDraw.Draw(img, "RGBA")
+    # Pastdan yuqoriga qorong'i gradient (matn o'qilishi uchun)
+    for i in range(CARD_H):
+        alpha = int(200 * max(0, (i - CARD_H * 0.35) / (CARD_H * 0.65)))
+        d.line([(0, i), (CARD_W, i)], fill=(10, 12, 16, alpha))
+    d.rectangle([0, 0, CARD_W, CARD_H], fill=(10, 12, 16, 55))  # yengil umumiy dim
+
+    # Rubrika yorlig'i
+    label = RUBRIKA_NOMI.get(rubrika, "YANGILIK").upper()
+    f_lbl = _card_font(28)
+    lw = d.textlength(label, font=f_lbl)
+    d.rounded_rectangle([70, 64, 70 + lw + 44, 118], radius=27,
+                        fill=(10, 12, 16, 150))
+    d.rounded_rectangle([70, 64, 70 + lw + 44, 118], radius=27,
+                        outline=accent, width=2)
+    d.text((92, 77), label, font=f_lbl, fill=accent)
+
+    # Sarlavha — pastki qismda
+    title = _card_title(post_text)
+    for fsize in (66, 56, 48, 42):
+        f_t = _card_font(fsize)
+        lines = _wrap(d, title, f_t, CARD_W - 190)
+        if len(lines) <= 3:
+            break
+    lh = int(fsize * 1.22)
+    y0 = CARD_H - 150 - lh * len(lines)
+    d.rectangle([70, y0 + 6, 82, y0 + lh * len(lines) - 6], fill=accent)
+    for i, ln in enumerate(lines):
+        d.text((108, y0 + i * lh), ln, font=f_t, fill=(255, 255, 255))
+
+    # Pastki panel
+    f_b = _card_font(34)
+    f_s = _card_font(24)
+    d.text((70, CARD_H - 96), "SAFAROV BLOG", font=f_b, fill=(255, 255, 255))
+    d.text((70, CARD_H - 52), "t.me/safaroov_blog", font=f_s, fill=accent)
+    sana = datetime.now(TZ).strftime("%d.%m.%Y")
+    sw = d.textlength(sana, font=f_s)
+    d.text((CARD_W - 70 - sw, CARD_H - 56), sana, font=f_s,
+           fill=(255, 255, 255, 220))
+
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+async def make_card_variant(post_id, text, rubrika, variant):
+    """Variant 0-1: Pexels foto-karta (kalit bo'lsa), 2-3: gradient karta."""
+    if PEXELS_KEY and variant < 2 and Image is not None:
+        try:
+            urls = _photo_cache.get(post_id)
+            if urls is None:
+                urls = await pexels_photos(ai_photo_query(text))
+                _photo_cache[post_id] = urls
+            if urls:
+                photo = await _fetch_bytes(urls[variant % len(urls)])
+                card = make_photo_card(photo, text, rubrika)
+                if card:
+                    return card
+        except Exception as e:
+            log.warning("Foto-karta xatosi (gradientga o'tildi): %s", e)
+    return make_card(text, rubrika, variant)
+
 def _post_rubrika(conn, post_id):
     row = conn.execute(
         "SELECT COALESCE(a.rubrika,'ai') FROM agent_posts p "
@@ -966,7 +1075,8 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --- ✅ Kanalga: avval rasm taklif qilinadi ---
     if action == "agpub":
         rubrika = _post_rubrika(conn, post_id)
-        img = make_card(text, rubrika, 0)
+        await query.answer("Rasm tayyorlanmoqda... 🎨")
+        img = await make_card_variant(post_id, text, rubrika, 0)
         if not img:  # Pillow yo'q — eski usul: to'g'ridan-to'g'ri matn
             try:
                 await _send_to_channel(context, text)
@@ -978,7 +1088,6 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.answer(f"Xato: {e}", show_alert=True)
             conn.close()
             return
-        await query.answer("Rasm tayyorlanmoqda... 🎨")
         try:
             await context.bot.send_photo(
                 chat_id=ADMIN_ID, photo=img,
@@ -993,14 +1102,14 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --- 🔄 Boshqa dizayn ---
     if action == "agrd":
         rubrika = _post_rubrika(conn, post_id)
-        img = make_card(text, rubrika, variant)
+        await query.answer("Tayyorlanmoqda... 🎨")
+        img = await make_card_variant(post_id, text, rubrika, variant)
         try:
             await query.edit_message_media(
                 InputMediaPhoto(img,
                                 caption=f"🎨 Dizayn {variant + 1}/{CARD_VARIANTS} — "
                                         f"postga mos keladimi?"),
                 reply_markup=preview_keyboard(post_id, variant))
-            await query.answer()
         except Exception as e:
             await query.answer(f"Xato: {e}", show_alert=True)
         conn.close()
@@ -1009,7 +1118,7 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --- 🖼 Rasm bilan chiqarish ---
     if action == "agok":
         rubrika = _post_rubrika(conn, post_id)
-        img = make_card(text, rubrika, variant)
+        img = await make_card_variant(post_id, text, rubrika, variant)
         try:
             await _send_to_channel(context, text, img)
             conn.execute("UPDATE agent_posts SET status='published' WHERE id=?", (post_id,))
