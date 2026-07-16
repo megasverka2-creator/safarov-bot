@@ -145,14 +145,14 @@ Savol: {question}"""
 
 def ai_check_task(week, answer):
     resp = ai_client().chat.completions.create(
-        model=MODEL, max_tokens=700, temperature=0.7,
+        model=MODEL, max_completion_tokens=700,
         messages=[{"role": "user", "content": TASK_PROMPT.format(
             week=week, context=_week_context(week), answer=answer[:4000])}])
     return resp.choices[0].message.content.strip()
 
 def ai_answer_question(uid, question):
     resp = ai_client().chat.completions.create(
-        model=MODEL, max_tokens=500, temperature=0.7,
+        model=MODEL, max_completion_tokens=500,
         messages=[{"role": "user", "content": QA_PROMPT.format(
             outline=_course_outline(), week=_current_week(uid),
             question=question[:1500])}])

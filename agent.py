@@ -420,7 +420,7 @@ def ai_score(conn, title, summary):
     resp = ai_client().chat.completions.create(
         model=MODEL,
         response_format={"type": "json_object"},
-        max_tokens=100,
+        max_completion_tokens=100,
         messages=[
             {"role": "system", "content": SCORE_PROMPT},
             {"role": "user", "content": f"Sarlavha: {title}\nAnnotatsiya: {summary[:1000]}"},
@@ -462,7 +462,7 @@ def ai_polish(conn, post_text):
     try:
         api_call_inc(conn)
         resp = ai_client().chat.completions.create(
-            model=MODEL_SMART, max_tokens=700, temperature=0.3,
+            model=MODEL_SMART, max_completion_tokens=700,
             messages=[{"role": "system", "content": EDIT_PROMPT},
                       {"role": "user", "content": post_text}])
         polished = resp.choices[0].message.content.strip()
@@ -481,7 +481,7 @@ def ai_write_post(conn, url, article_text, rubrika="ai"):
     prompt = POST_PROMPTS.get(rubrika, POST_PROMPTS["ai"])
     resp = ai_client().chat.completions.create(
         model=MODEL_SMART,
-        max_tokens=700,
+        max_completion_tokens=700,
         messages=[
             {"role": "system", "content": prompt.format(url=url)},
             {"role": "user", "content": article_text[:ARTICLE_CHAR_LIMIT]},
@@ -685,7 +685,7 @@ _photo_cache = {}   # post_id -> suratlar URL ro'yxati (restartgacha)
 def ai_photo_query(text):
     """Post mazmunidan 2-4 so'zlik inglizcha surat qidiruvini chiqaradi."""
     resp = ai_client().chat.completions.create(
-        model=MODEL, max_tokens=20, temperature=0.4,
+        model=MODEL, max_completion_tokens=20,
         messages=[{"role": "user", "content":
                    "Give 2-4 English keywords for a professional stock photo "
                    "matching this post. Reply with keywords only:\n" + text[:500]}])
@@ -872,7 +872,7 @@ def ai_voice_router(conn, question, digest):
     resp = ai_client().chat.completions.create(
         model=MODEL,
         response_format={"type": "json_object"},
-        max_tokens=700,
+        max_completion_tokens=700,
         messages=[
             {"role": "system", "content": ROUTER_PROMPT},
             {"role": "user",
