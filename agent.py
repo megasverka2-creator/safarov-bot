@@ -86,7 +86,12 @@ AISHA_API_KEY = os.environ.get("AISHA_API_KEY", "")
 AISHA_BASE = "https://back.aisha.group"
 
 TZ = ZoneInfo("Asia/Tashkent")
-MODEL = "gpt-4o-mini"
+# --- AI modellari (Railway Variables orqali kod o'zgartirmasdan almashtiriladi) ---
+# AI_MODEL_FAST  — arzon ishlar: saralash, surat so'rovi, ovoz routeri
+# AI_MODEL_SMART — sifat muhim ishlar: post yozish (tarjima!)
+MODEL_FAST = os.environ.get("AI_MODEL_FAST", "gpt-5.4-nano")
+MODEL_SMART = os.environ.get("AI_MODEL_SMART", "gpt-5.6-luna")
+MODEL = MODEL_FAST  # eski nom bilan moslik
 MIN_SCORE = 6                  # nomzodlik chegarasi (siz baribir qo'lda tanlaysiz)
 MAX_POSTS_PER_DAY = 8          # kunlik post-nomzodlar (5 rubrika uchun)
 MAX_PER_RUBRIKA = 2            # bitta yo'nalish kunni bosib ketmasligi uchun
@@ -372,7 +377,7 @@ def ai_write_post(conn, url, article_text, rubrika="ai"):
     api_call_inc(conn)
     prompt = POST_PROMPTS.get(rubrika, POST_PROMPTS["ai"])
     resp = ai_client().chat.completions.create(
-        model=MODEL,
+        model=MODEL_SMART,
         max_tokens=700,
         messages=[
             {"role": "system", "content": prompt.format(url=url)},
@@ -960,6 +965,7 @@ async def run_agent(context: ContextTypes.DEFAULT_TYPE):
         "WHERE status='scored' AND score>=? "
         "ORDER BY score DESC, seen_at DESC LIMIT 30",
         (MIN_SCORE,)).fetchall()
+    sent_count = 0
     candidates, taken = [], {}
     for row in rows:
         rub = row[5]
@@ -995,6 +1001,7 @@ async def run_agent(context: ContextTypes.DEFAULT_TYPE):
                      f"\n\n{post_text}",
                 reply_markup=draft_keyboard(post_id),
             )
+            sent_count += 1
         except Exception as e:
             log.exception("Agent xatosi: %s", e)
             try:
@@ -1003,6 +1010,7 @@ async def run_agent(context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 pass
     conn.close()
+    return sent_count
 
 
 async def evening_reminder(context: ContextTypes.DEFAULT_TYPE):
@@ -1251,8 +1259,24 @@ async def cmd_status(update, context):
 @admin_only
 async def cmd_run(update, context):
     await update.message.reply_text("🔍 Manbalarni tekshiryapman, biroz kuting...")
-    await run_agent(context)
-    await update.message.reply_text("Tekshiruv tugadi. /agent_status")
+    n = await run_agent(context)
+    conn = db()
+    calls = api_calls_today(conn)
+    drafts = conn.execute(
+        "SELECT COUNT(*) FROM agent_posts WHERE status='draft'").fetchone()[0]
+    conn.close()
+    if n:
+        await update.message.reply_text(
+            f"✅ {n} ta yangi post-nomzod yuborildi. Hammasi: /postlar")
+    elif calls >= MAX_API_CALLS_PER_DAY:
+        await update.message.reply_text(
+            f"⛔ Bugungi API limiti tugadi ({calls}/{MAX_API_CALLS_PER_DAY}) — "
+            f"yangi postlar ertaga. Kutayotganlar: {drafts} ta → /postlar")
+    else:
+        await update.message.reply_text(
+            f"📭 Yangi material topilmadi — manbalardagi maqolalar allaqachon "
+            f"ko'rib chiqilgan (odatda bir necha soatda yangilanadi).\n"
+            f"Kutayotgan postlar: {drafts} ta → /postlar")
 
 
 @admin_only

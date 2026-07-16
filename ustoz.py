@@ -33,7 +33,7 @@ log = logging.getLogger("ustoz")
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 USTOZ_FILE = os.path.join(DATA_DIR, "ustoz.json")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))
-MODEL = "gpt-4o-mini"
+MODEL = os.environ.get("AI_MODEL_SMART", "gpt-5.6-luna")  # Ustoz sifatli modelda ishlaydi
 DAILY_TASKS = 5      # kuniga nechta topshiriq tekshiriladi
 DAILY_QUESTIONS = 10  # kuniga nechta savolga javob
 
