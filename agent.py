@@ -795,6 +795,11 @@ def fetch_new_articles(conn):
 
 async def run_agent(context: ContextTypes.DEFAULT_TYPE):
     conn = db()
+    # 3 kundan eski ko'rilmagan postlar avtomatik o'tkaziladi (uyum yig'ilmasin)
+    conn.execute("UPDATE agent_posts SET status='skipped' "
+                 "WHERE status='draft' AND created_at < ?",
+                 ((datetime.now(TZ) - timedelta(days=3)).isoformat(),))
+    conn.commit()
     if meta_get(conn, "paused") == "1":
         conn.close()
         return
@@ -870,12 +875,43 @@ async def run_agent(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def evening_reminder(context: ContextTypes.DEFAULT_TYPE):
+    await _send_digest(context)
+
+
+async def _send_digest(context):
+    """Kutayotgan postlarni bitta ixcham ro'yxat qilib yuboradi."""
     conn = db()
-    n = conn.execute("SELECT COUNT(*) FROM agent_posts WHERE status='draft'").fetchone()[0]
+    rows = conn.execute(
+        "SELECT p.id, p.text, COALESCE(a.rubrika,'ai') FROM agent_posts p "
+        "LEFT JOIN agent_articles a ON a.url = p.article_url "
+        "WHERE p.status='draft' ORDER BY p.id DESC LIMIT 8").fetchall()
+    total = conn.execute(
+        "SELECT COUNT(*) FROM agent_posts WHERE status='draft'").fetchone()[0]
     conn.close()
-    if n:
+    if not rows:
         await context.bot.send_message(
-            ADMIN_ID, f"⏰ Eslatma: {n} ta post hali ko'rilmagan. /agent_status")
+            ADMIN_ID, "📭 Kutayotgan post yo'q — hammasi ko'rilgan! ✅")
+        return
+    lines, btns = [], []
+    for i, (pid, text, rub) in enumerate(rows, 1):
+        title = text.splitlines()[0].strip()[:55]
+        lines.append(f"{i}. {RUBRIKA_EMOJI.get(rub, '📰')} {title}")
+        btns.append(InlineKeyboardButton(str(i), callback_data=f"agopen:{pid}"))
+    kb = [btns[j:j + 4] for j in range(0, len(btns), 4)]
+    kb.append([InlineKeyboardButton("🧹 2 kundan eskilarini tozalash",
+                                    callback_data="agclean:0")])
+    await context.bot.send_message(
+        ADMIN_ID,
+        f"📥 Kutayotgan postlar: {total} ta (eng yangi {len(rows)} tasi)\n\n"
+        + "\n".join(lines)
+        + "\n\n👇 Raqamni bosing — post tugmalari bilan ochiladi.",
+        reply_markup=InlineKeyboardMarkup(kb))
+
+
+async def cmd_postlar(update, context):
+    if update.effective_user.id != ADMIN_ID:
+        return
+    await _send_digest(context)
 
 
 # ======================================================================
@@ -890,6 +926,32 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     action, post_id = parts[0], parts[1]
     variant = int(parts[2]) if len(parts) > 2 else 0
     conn = db()
+
+    # --- 🧹 Eski postlarni tozalash (2 kundan oshganlar) ---
+    if action == "agclean":
+        limit = (datetime.now(TZ) - timedelta(days=2)).isoformat()
+        cur = conn.execute(
+            "UPDATE agent_posts SET status='skipped' "
+            "WHERE status='draft' AND created_at < ?", (limit,))
+        conn.commit()
+        conn.close()
+        await query.answer(f"{cur.rowcount} ta eski post tozalandi 🧹")
+        await _send_digest(context)
+        return
+
+    # --- 📬 Ro'yxatdan postni ochish ---
+    if action == "agopen":
+        row = conn.execute(
+            "SELECT text,status FROM agent_posts WHERE id=?", (post_id,)).fetchone()
+        conn.close()
+        if not row or row[1] != "draft":
+            await query.answer("Bu post allaqachon ko'rilgan.", show_alert=True)
+            return
+        await query.answer()
+        await context.bot.send_message(
+            chat_id=ADMIN_ID, text=row[0], reply_markup=draft_keyboard(post_id))
+        return
+
     row = conn.execute("SELECT text,status FROM agent_posts WHERE id=?", (post_id,)).fetchone()
     if not row:
         await query.answer("Post topilmadi.")
@@ -1149,11 +1211,12 @@ def register(app: Application):
 
     app.add_handler(CommandHandler("agent_status", cmd_status))
     app.add_handler(CommandHandler("agent_run", cmd_run))
+    app.add_handler(CommandHandler("postlar", cmd_postlar))
     app.add_handler(CommandHandler("agent_pause", cmd_pause))
     app.add_handler(CommandHandler("agent_resume", cmd_resume))
     app.add_handler(CommandHandler("agent_requeue", cmd_requeue))
     app.add_handler(CommandHandler("agent_sources", cmd_sources))
-    app.add_handler(CallbackQueryHandler(on_button, pattern=r"^(agpub|agpubv|agskip|agok|agrd|agtxt|agno):\d+"))
+    app.add_handler(CallbackQueryHandler(on_button, pattern=r"^(agpub|agpubv|agskip|agok|agrd|agtxt|agno|agopen|agclean):\d+"))
     app.add_handler(MessageHandler(
         filters.VOICE & filters.User(user_id=ADMIN_ID), on_voice))
 
