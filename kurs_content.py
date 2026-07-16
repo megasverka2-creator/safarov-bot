@@ -15,7 +15,8 @@ COURSE_INTRO = (
     "Google Ads, analitika, funnel va yakuniy loyiha.\n\n"
     "✅ Darslar toza o'zbek tilida, O'zbekiston bozori misollari bilan\n"
     "🔓 Birinchi dars — <b>bepul</b>, sinab ko'ring\n"
-    "🏆 Kursni tugatganlarga shaxsiy sertifikat\n\n"
+    "🏆 Kursni tugatganlarga shaxsiy sertifikat\n"
+    "🤖 AI Ustoz: topshiriqlaringizni tekshiradi, savollarga javob beradi\n\n"
     "Narx: <b>{price} ⭐</b> (bir martalik, umrbod kirish)"
 )
 

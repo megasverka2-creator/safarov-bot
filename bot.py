@@ -33,6 +33,7 @@ from telegram.ext import (
 
 import agent  # AI Yangiliklar Agenti moduli
 import kurs   # Marketing kursi moduli (Stars to'lovi bilan)
+import ustoz  # AI Ustoz: topshiriq tekshirish va savol-javob
 
 try:
     from anthropic import AsyncAnthropic
@@ -1369,7 +1370,8 @@ def main():
     app.add_handler(CallbackQueryHandler(admin_decide, pattern="^(acc|rej):"))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
     agent.register(app)  # AI Yangiliklar Agenti (07:00 avtomatik, /agent_run)
-    kurs.register(app)   # Marketing kursi (/kurs, 100 Stars)
+    kurs.register(app)   # Marketing kursi (/kurs, 10 Stars)
+    ustoz.register(app)  # AI Ustoz (/topshiriq, /savol)
     print("Bot ishga tushdi...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
