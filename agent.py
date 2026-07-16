@@ -371,6 +371,48 @@ def ai_score(conn, title, summary):
         return 0
 
 
+EDIT_PROMPT = """Sen o'zbek tilining professional muharririsan. Quyida Telegram \
+post berilgan. Vazifang: MAZMUNIGA TEGMASDAN faqat TILINI tuzatish.
+
+Tuzatiladigan xatolar:
+1. Noto'g'ri so'z yasalishi: "Uganda ayolasi" → "ugandalik ayol"; davlat/millat \
+sifatlari "-lik" bilan yasaladi.
+2. Joy nomlarida ortiqcha apostrof: "Uganda'da" → "Ugandada", "Toshkent'ga" → \
+"Toshkentga".
+3. "Ushbu", "mazkur" → "bu"; "hisoblanadi" → tushirib qoldir yoki "—".
+4. Idoraviy fe'llar: "taqdim etmoqda" → "bermoqda/ochmoqda", "amalga \
+oshirmoqda" → "qilmoqda".
+5. Buzuq boshqaruv: "ayollarga imkoniyatlarni oshiradi" → "ayollarning \
+imkoniyatlarini kengaytiradi" yoki "ayollarga imkon yaratadi".
+6. Xato o'zlashmalar: "briquet" → "briket"; "charcoal" ma'nosida "kuydirilgan \
+yoqilg'i" → "pista ko'mir".
+7. Bir jumlada ikkita "uchun"/"tomonidan" — qayta tuz.
+8. G'aliz yoki 20 so'zdan uzun jumlalarni bo'lib, tabiiy so'zlashuv ohangiga \
+keltir.
+
+TEGMA: emoji, tuzilma (qatorlar tartibi), havolalar, hashtag, manba nomi, \
+raqamlar, atoqli otlar (kompaniya/odam/tashabbus nomlari asl holicha).
+FAQAT tuzatilgan matnni qaytar, izohsiz."""
+
+def ai_polish(conn, post_text):
+    """Ikkinchi o'tish: tayyor postni faqat til jihatidan tozalaydi."""
+    if api_calls_today(conn) >= MAX_API_CALLS_PER_DAY:
+        return post_text
+    try:
+        api_call_inc(conn)
+        resp = ai_client().chat.completions.create(
+            model=MODEL_SMART, max_tokens=700, temperature=0.3,
+            messages=[{"role": "system", "content": EDIT_PROMPT},
+                      {"role": "user", "content": post_text}])
+        polished = resp.choices[0].message.content.strip()
+        # Himoya: tahrirchi tuzilmani buzsa (juda qisqarib/uzayib ketsa) — aslini qoldir
+        if 0.6 < len(polished) / max(len(post_text), 1) < 1.4:
+            return polished
+    except Exception as e:
+        log.warning("Tahrirchi o'tish xatosi: %s", e)
+    return post_text
+
+
 def ai_write_post(conn, url, article_text, rubrika="ai"):
     if api_calls_today(conn) >= MAX_API_CALLS_PER_DAY:
         return None
@@ -384,7 +426,8 @@ def ai_write_post(conn, url, article_text, rubrika="ai"):
             {"role": "user", "content": article_text[:ARTICLE_CHAR_LIMIT]},
         ],
     )
-    return resp.choices[0].message.content.strip()
+    draft = resp.choices[0].message.content.strip()
+    return ai_polish(conn, draft)   # ikkinchi o'tish: til tahriri
 
 
 # ======================================================================
