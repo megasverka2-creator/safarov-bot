@@ -42,7 +42,7 @@ import os
 import re
 import sqlite3
 from io import BytesIO
-from datetime import datetime, time as dtime, date
+from datetime import datetime, time as dtime, date, timedelta
 from zoneinfo import ZoneInfo
 
 import feedparser
