@@ -78,6 +78,19 @@ from telegram.ext import (
 # ======================================================================
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "0") or "0")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "@safaroov_blog")
+# Yangiliklar kanali (dunyo/uzb/sport shu yerga chiqadi). Bo'sh bo'lsa hammasi asosiyga.
+CHANNEL2_ID = os.environ.get("CHANNEL2_ID", "")          # masalan: @zahiradagi_jurnalist
+NEWS_RUBRIKAS = {"dunyo", "uzb", "sport"}
+
+def _channel_for(rubrika):
+    return CHANNEL2_ID if (CHANNEL2_ID and rubrika in NEWS_RUBRIKAS) else CHANNEL_ID
+
+def _brand_for(rubrika):
+    """Karta pastidagi brend: rubrika qaysi kanalga chiqsa, o'sha nom."""
+    if CHANNEL2_ID and rubrika in NEWS_RUBRIKAS:
+        handle = CHANNEL2_ID.lstrip("@")
+        return ("ZAHIRADAGI JURNALIST", f"t.me/{handle}")
+    return ("SAFAROV BLOG", "t.me/safaroov_blog")
 # Baza botdagi boshqa fayllar (users.json) bilan bir joyda — Railway volume'da saqlanadi:
 DB_PATH = os.environ.get("DB_PATH",
                          os.path.join(os.environ.get("DATA_DIR", "."), "agent.db"))
@@ -529,7 +542,11 @@ def ai_write_post(conn, url, article_text, rubrika="ai"):
         ],
     )
     draft = resp.choices[0].message.content.strip()
-    return ai_polish(conn, draft)   # ikkinchi o'tish: til tahriri
+    draft = ai_polish(conn, draft)   # ikkinchi o'tish: til tahriri
+    # Yangiliklar rubrikalari imzosi — o'z kanaliga
+    if CHANNEL2_ID and rubrika in NEWS_RUBRIKAS:
+        draft = draft.replace("@safaroov_blog", CHANNEL2_ID)
+    return draft
 
 
 # ======================================================================
@@ -695,10 +712,10 @@ def make_card(post_text, rubrika, variant=0):
     # Pastki panel: brend + sana
     f_b = _card_font(36)
     f_s = _card_font(26)
-    d.text((70, CARD_H - 96), "SAFAROV BLOG", font=f_b, fill=(255, 255, 255))
+    bname, bhandle = _brand_for(rubrika)
+    d.text((70, CARD_H - 96), bname, font=f_b, fill=(255, 255, 255))
     sana = datetime.now(TZ).strftime("%d.%m.%Y")
-    handle = "t.me/safaroov_blog"
-    d.text((70, CARD_H - 50), handle, font=f_s, fill=accent)
+    d.text((70, CARD_H - 50), bhandle, font=f_s, fill=accent)
     sw = d.textlength(sana, font=f_s)
     d.text((CARD_W - 70 - sw, CARD_H - 56), sana, font=f_s, fill=(255, 255, 255, 210))
 
@@ -839,8 +856,9 @@ def make_photo_card(photo_bytes, post_text, rubrika, cover=None,
 
     # Brend (yuqori chapda, mayda) va sana (pastda, mayda)
     f_s = _card_font(24)
-    d.text((70, 64), "SAFAROV BLOG", font=f_s, fill=(255, 255, 255, 230))
-    d.text((70, 98), "t.me/safaroov_blog", font=_card_font(20), fill=accent)
+    bname, bhandle = _brand_for(rubrika)
+    d.text((70, 64), bname, font=f_s, fill=(255, 255, 255, 230))
+    d.text((70, 98), bhandle, font=_card_font(20), fill=accent)
     sana = datetime.now(TZ).strftime("%d.%m.%Y")
     sw = d.textlength(sana, font=f_s)
     d.text((W - 70 - sw, H - 54), sana, font=f_s,
@@ -936,17 +954,18 @@ def _post_rubrika(conn, post_id):
         "WHERE p.id=?", (post_id,)).fetchone()
     return row[0] if row else "ai"
 
-async def _send_to_channel(context, text, image_bytes=None):
-    """Kanalga chiqarish: rasm bo'lsa rasm+matn, bo'lmasa faqat matn."""
+async def _send_to_channel(context, text, image_bytes=None, rubrika=None):
+    """Kanalga chiqarish: rubrika qaysi kanalga tegishli bo'lsa, o'shanga."""
+    chan = _channel_for(rubrika)
     if image_bytes:
         if len(text) <= 1024:
-            await context.bot.send_photo(chat_id=CHANNEL_ID, photo=image_bytes,
+            await context.bot.send_photo(chat_id=chan, photo=image_bytes,
                                          caption=text)
         else:  # caption limiti — rasm alohida, matn alohida
-            await context.bot.send_photo(chat_id=CHANNEL_ID, photo=image_bytes)
-            await context.bot.send_message(chat_id=CHANNEL_ID, text=text)
+            await context.bot.send_photo(chat_id=chan, photo=image_bytes)
+            await context.bot.send_message(chat_id=chan, text=text)
     else:
-        await context.bot.send_message(chat_id=CHANNEL_ID, text=text)
+        await context.bot.send_message(chat_id=chan, text=text)
 
 
 # ======================================================================
@@ -1067,7 +1086,7 @@ async def publish_article(context, conn, url, ovozli):
             if audio:
                 audio_title = post_text.splitlines()[0].strip()[:60] or "Safarov blog"
                 await context.bot.send_audio(
-                    chat_id=CHANNEL_ID, audio=audio, filename="post.wav",
+                    chat_id=_channel_for(rubrika), audio=audio, filename="post.wav",
                     title=audio_title, performer="Safarov blog")
                 audio_note = " + 🎙 OVOZ"
         except Exception as e:
@@ -1363,7 +1382,7 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         img = await make_card_variant(post_id, text, rubrika, 0)
         if not img:  # Pillow yo'q — eski usul: to'g'ridan-to'g'ri matn
             try:
-                await _send_to_channel(context, text)
+                await _send_to_channel(context, text, rubrika=rubrika)
                 conn.execute("UPDATE agent_posts SET status='published' WHERE id=?", (post_id,))
                 conn.commit()
                 await query.answer("Kanalga jo'natildi! ✅")
@@ -1404,7 +1423,7 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         rubrika = _post_rubrika(conn, post_id)
         img = await make_card_variant(post_id, text, rubrika, variant)
         try:
-            await _send_to_channel(context, text, img)
+            await _send_to_channel(context, text, img, rubrika)
             conn.execute("UPDATE agent_posts SET status='published' WHERE id=?", (post_id,))
             conn.commit()
             await query.answer("Rasm bilan kanalga chiqdi! ✅")
@@ -1416,8 +1435,9 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # --- 📝 Rasmsiz chiqarish ---
     if action == "agtxt":
+        rubrika = _post_rubrika(conn, post_id)
         try:
-            await _send_to_channel(context, text)
+            await _send_to_channel(context, text, rubrika=rubrika)
             conn.execute("UPDATE agent_posts SET status='published' WHERE id=?", (post_id,))
             conn.commit()
             await query.answer("Kanalga jo'natildi! ✅")
@@ -1441,8 +1461,9 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # --- 🎙 Ovozli: matn + audio (eski oqim, rasm bosqichisiz) ---
     if action == "agpubv":
+        rubrika = _post_rubrika(conn, post_id)
         try:
-            await _send_to_channel(context, text)
+            await _send_to_channel(context, text, rubrika=rubrika)
             conn.execute("UPDATE agent_posts SET status='published' WHERE id=?", (post_id,))
             conn.commit()
         except Exception as e:
