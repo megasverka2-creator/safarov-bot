@@ -743,7 +743,39 @@ async def _fetch_bytes(url):
         r.raise_for_status()
         return r.content
 
-def make_photo_card(photo_bytes, post_text, rubrika):
+_cover_cache = {}   # post_id -> (title, badge)
+
+def ai_cover_title(post_id, post_text, rubrika):
+    """Muqova uchun qisqa urg'uli sarlavha: ("MITTI RAZVEDKA", "DRONI")."""
+    if post_id in _cover_cache:
+        return _cover_cache[post_id]
+    title, badge = None, None
+    try:
+        resp = ai_client().chat.completions.create(
+            model=MODEL_FAST, max_completion_tokens=60,
+            messages=[{"role": "user", "content":
+                "Quyidagi o'zbekcha post uchun Instagram muqova sarlavhasini tuz. "
+                "FAQAT JSON qaytar: {\"title\": \"1-3 so'zli urg'uli sarlavha\", "
+                "\"badge\": \"1-2 so'zli kategoriya\"}. "
+                "Misollar: {\"title\": \"MITTI RAZVEDKA\", \"badge\": \"DRONI\"} yoki "
+                "{\"title\": \"TILANCHI\", \"badge\": \"ROBOTLAR\"}. "
+                "So'zlar postdagi eng qiziq faktdan olinsin, katta harflarda.\n\n"
+                + post_text[:600]}])
+        data = json.loads(re.sub(r"```json|```", "", resp.choices[0].message.content).strip())
+        title = str(data.get("title", "")).upper().strip()[:28]
+        badge = str(data.get("badge", "")).upper().strip()[:18]
+    except Exception as e:
+        log.warning("Muqova sarlavha xatosi: %s", e)
+    if not title:
+        words = _card_title(post_text).upper().split()
+        title, badge = " ".join(words[:3])[:28], RUBRIKA_NOMI.get(rubrika, "").upper()[:18]
+    if not badge:
+        badge = RUBRIKA_NOMI.get(rubrika, "YANGILIK").upper()[:18]
+    _cover_cache[post_id] = (title, badge)
+    return title, badge
+
+
+def make_photo_card(photo_bytes, post_text, rubrika, cover=None):
     """Pexels suratini blog uslubiga keltiradi: qoraytirish + sarlavha + brend."""
     if Image is None:
         return None
@@ -765,38 +797,45 @@ def make_photo_card(photo_bytes, post_text, rubrika):
         d.line([(0, i), (CARD_W, i)], fill=(10, 12, 16, alpha))
     d.rectangle([0, 0, CARD_W, CARD_H], fill=(10, 12, 16, 55))  # yengil umumiy dim
 
-    # Rubrika yorlig'i
-    label = RUBRIKA_NOMI.get(rubrika, "YANGILIK").upper()
-    f_lbl = _card_font(28)
-    lw = d.textlength(label, font=f_lbl)
-    d.rounded_rectangle([70, 64, 70 + lw + 44, 118], radius=27,
-                        fill=(10, 12, 16, 150))
-    d.rounded_rectangle([70, 64, 70 + lw + 44, 118], radius=27,
-                        outline=accent, width=2)
-    d.text((92, 77), label, font=f_lbl, fill=accent)
+    # === MUQOVA USLUBI (techno.kun.uz kabi): markazda katta sarlavha + yorliq ===
+    title, badge = cover if cover else (
+        _card_title(post_text).upper()[:28],
+        RUBRIKA_NOMI.get(rubrika, "YANGILIK").upper())
 
-    # Sarlavha — pastki qismda
-    title = _card_title(post_text)
-    for fsize in (66, 56, 48, 42):
+    # Katta markaziy sarlavha (1-2 qator)
+    for fsize in (100, 86, 72, 60):
         f_t = _card_font(fsize)
-        lines = _wrap(d, title, f_t, CARD_W - 190)
-        if len(lines) <= 3:
+        lines = _wrap(d, title, f_t, CARD_W - 160)
+        if len(lines) <= 2:
             break
-    lh = int(fsize * 1.22)
-    y0 = CARD_H - 150 - lh * len(lines)
-    d.rectangle([70, y0 + 6, 82, y0 + lh * len(lines) - 6], fill=accent)
+    lh = int(fsize * 1.12)
+    badge_h = 66
+    total_h = lh * len(lines) + 22 + badge_h
+    y0 = CARD_H - 120 - total_h
     for i, ln in enumerate(lines):
-        d.text((108, y0 + i * lh), ln, font=f_t, fill=(255, 255, 255))
+        w = d.textlength(ln, font=f_t)
+        x = (CARD_W - w) / 2
+        # yengil soya — o'qilishi uchun
+        d.text((x + 3, y0 + i * lh + 3), ln, font=f_t, fill=(0, 0, 0, 170))
+        d.text((x, y0 + i * lh), ln, font=f_t, fill=(255, 255, 255))
 
-    # Pastki panel
-    f_b = _card_font(34)
+    # Kategoriya-yorliq (oq pilyulya, qora matn)
+    f_bdg = _card_font(30)
+    bw = d.textlength(badge, font=f_bdg)
+    bx = (CARD_W - bw - 56) / 2
+    by = y0 + lh * len(lines) + 22
+    d.rounded_rectangle([bx, by, bx + bw + 56, by + badge_h], radius=badge_h // 2,
+                        fill=(245, 245, 245, 235))
+    d.text((bx + 28, by + 16), badge, font=f_bdg, fill=(20, 22, 26))
+
+    # Brend (yuqori chapda, mayda) va sana (pastda, mayda)
     f_s = _card_font(24)
-    d.text((70, CARD_H - 96), "SAFAROV BLOG", font=f_b, fill=(255, 255, 255))
-    d.text((70, CARD_H - 52), "t.me/safaroov_blog", font=f_s, fill=accent)
+    d.text((70, 64), "SAFAROV BLOG", font=f_s, fill=(255, 255, 255, 230))
+    d.text((70, 98), "t.me/safaroov_blog", font=_card_font(20), fill=accent)
     sana = datetime.now(TZ).strftime("%d.%m.%Y")
     sw = d.textlength(sana, font=f_s)
-    d.text((CARD_W - 70 - sw, CARD_H - 56), sana, font=f_s,
-           fill=(255, 255, 255, 220))
+    d.text((CARD_W - 70 - sw, CARD_H - 54), sana, font=f_s,
+           fill=(255, 255, 255, 180))
 
     buf = BytesIO()
     img.save(buf, format="PNG")
@@ -812,7 +851,8 @@ async def make_card_variant(post_id, text, rubrika, variant):
                 _photo_cache[post_id] = urls
             if urls:
                 photo = await _fetch_bytes(urls[variant % len(urls)])
-                card = make_photo_card(photo, text, rubrika)
+                card = make_photo_card(photo, text, rubrika,
+                                       cover=ai_cover_title(post_id, text, rubrika))
                 if card:
                     return card
         except Exception as e:
