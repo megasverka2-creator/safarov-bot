@@ -884,7 +884,7 @@ _genimg_cache = {}          # post_id -> tayyor karta baytlari
 _genimg_count = {"date": "", "n": 0}
 
 def _img_quota_ok():
-    today = time.strftime("%Y-%m-%d")
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
     if _genimg_count["date"] != today:
         _genimg_count.update({"date": today, "n": 0})
     if _genimg_count["n"] >= IMG_PER_DAY:
