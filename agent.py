@@ -93,9 +93,9 @@ MODEL_FAST = os.environ.get("AI_MODEL_FAST", "gpt-5.4-nano")
 MODEL_SMART = os.environ.get("AI_MODEL_SMART", "gpt-5.6-luna")
 MODEL = MODEL_FAST  # eski nom bilan moslik
 MIN_SCORE = 6                  # nomzodlik chegarasi (siz baribir qo'lda tanlaysiz)
-MAX_POSTS_PER_DAY = 10         # kunlik post-nomzodlar (5 rubrika uchun)
+MAX_POSTS_PER_DAY = 12         # kunlik post-nomzodlar (5 rubrika uchun)
 MAX_PER_RUBRIKA = 2            # bitta yo'nalish kunni bosib ketmasligi uchun
-MAX_API_CALLS_PER_DAY = 120    # 15 manba uchun; baribir kuniga ~$0.03 atrofida
+MAX_API_CALLS_PER_DAY = 150    # 15 manba uchun; baribir kuniga ~$0.03 atrofida
 SCORING_RESERVE = MAX_POSTS_PER_DAY  # post yozish uchun doim zaxira chaqiruv qoladi
 ARTICLE_CHAR_LIMIT = 8000
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) AppleWebKit/537.36"
@@ -124,6 +124,10 @@ SOURCES = [
     # --- ⚽ Sport ---
     ("BBC Futbol",    "https://feeds.bbci.co.uk/sport/football/rss.xml",               "sport"),
     ("BBC Sport",     "https://feeds.bbci.co.uk/sport/rss.xml",                        "sport"),
+    # --- 📱 Texno: gadjetlar va harbiy texnologiyalar ---
+    ("Engadget",      "https://www.engadget.com/rss.xml",                              "texno"),
+    ("GSMArena",      "https://www.gsmarena.com/rss-news-reviews.php3",                "texno"),
+    ("Defense News",  "https://www.defensenews.com/arc/outboundfeeds/rss/",            "texno"),
     # --- 📚 Kitob va mutolaa ---
     ("Literary Hub",  "https://lithub.com/feed/",                                      "mutolaa"),
     ("Austin Kleon",  "https://austinkleon.com/feed/",                                 "mutolaa"),
@@ -131,11 +135,11 @@ SOURCES = [
 ]
 
 RUBRIKA_EMOJI = {"ai": "🗞", "rivojlanish": "🌱", "podcast": "🎧",
-                 "dunyo": "🌍", "mutolaa": "📚", "uzb": "🇺🇿", "sport": "⚽"}
+                 "dunyo": "🌍", "mutolaa": "📚", "uzb": "🇺🇿", "sport": "⚽", "texno": "📱"}
 RUBRIKA_NOMI = {"ai": "AI va marketing", "rivojlanish": "Shaxsiy rivojlanish",
                 "podcast": "Podcast va video", "dunyo": "Dunyo yangiliklari",
                 "mutolaa": "Kitob va mutolaa",
-                "uzb": "O'zbekiston", "sport": "Sport"}
+                "uzb": "O'zbekiston", "sport": "Sport", "texno": "Texno olami"}
 
 log = logging.getLogger("agent")
 
@@ -201,7 +205,8 @@ def api_call_inc(conn):
 SCORE_PROMPT = """Sen @safaroov_blog Telegram kanalining kuratorisan. Kanal yo'nalishlari: \
 (1) AI va marketing, (2) shaxsiy rivojlanish, (3) muhim jahon yangiliklari, \
 (4) kitob va mutolaa, (5) podcast, (6) O'zbekiston yangiliklari, (7) sport \
-(ayniqsa futbol va O'zbekistonga aloqador voqealar). Auditoriya: O'zbekistondagi marketologlar, kichik \
+(ayniqsa futbol va O'zbekistonga aloqador voqealar), (8) texno olami — \
+gadjetlar, yangi qurilmalar, harbiy texnologiyalar. Auditoriya: O'zbekistondagi marketologlar, kichik \
 biznes egalari, o'z ustida ishlaydigan yoshlar. Auditoriyaning asosiy qismi musulmonlar — \
 material hurmatli va ishonchli bo'lishi shart.
 
@@ -410,6 +415,35 @@ Shablon (kvadrat qavslarni o'z matning bilan almashtir):
 🔗 Manba: {url}
 
 #sport · @safaroov_blog""",
+
+    "texno": """Sen @safaroov_blog Telegram kanalining Texno olami rubrikasi \
+muharririsan. Kanal tili: o'zbek. Ohang: qiziquvchan, aniq, texnologiyani \
+sevadigan sharhlovchi kabi — lekin quruq spets-varaq emas, jonli hikoya.
+
+Quyidagi inglizcha maqola asosida Texno rubrikasi uchun POST yoz. Mavzular: \
+gadjetlar (telefon, noutbuk, soat), yangi qurilmalar, ilmiy-texnik yutuqlar, \
+harbiy texnologiyalar.
+
+QO'SHIMCHA TALABLAR (texno uchun):
+- Texnik ko'rsatkichlar (narx, quvvat, o'lcham, sana) manbadagidek ANIQ bo'lsin.
+- Qurilma va brend nomlari asl holicha: iPhone, Samsung Galaxy, F-35.
+- O'quvchiga "bu menga nima" burchagini ber: qachon chiqadi, taxminan qancha \
+turadi, nimasi bilan ajralib turadi.
+- HARBIY mavzularda: faqat texnologiya faktlari, xolis ohang. Urushni yoki \
+qurolni ulug'lash, biror tomonni qo'llash TAQIQ. Qurbonlar tafsiloti \
+berilmasin. Texnika — mavzu, urush — emas.
+""" + _UMUMIY_QOIDALAR + """
+Shablon (kvadrat qavslarni o'z matning bilan almashtir):
+
+📱 [Qiziqarli, aniq sarlavha]
+
+[2-3 gap: nima taqdim etildi/kashf qilindi — asosiy faktlar va raqamlar]
+
+⚙️ Ajralib turadigan jihati: [1-2 gap — eng muhim xususiyat yoki nima uchun bu muhim]
+
+🔗 Manba: {url}
+
+#texno · @safaroov_blog""",
 }
 
 
@@ -562,6 +596,8 @@ CARD_PALETTES = {
                     ("#134e5e", "#71b280", "#ffffff"), ("#232526", "#414345", "#69f0ae")],
     "sport":       [("#0f2027", "#2c5364", "#69f0ae"), ("#1d976c", "#093028", "#ccff90"),
                     ("#141e30", "#243b55", "#ffd54f"), ("#232526", "#414345", "#80d8ff")],
+    "texno":       [("#000428", "#004e92", "#40c4ff"), ("#0f0c29", "#302b63", "#18ffff"),
+                    ("#141e30", "#243b55", "#82b1ff"), ("#232526", "#414345", "#80deea")],
 }
 
 _FONT_PATHS = [
@@ -1415,7 +1451,7 @@ async def cmd_requeue(update, context):
 @admin_only
 async def cmd_sources(update, context):
     parts = []
-    for rub in ("ai", "rivojlanish", "podcast", "dunyo", "mutolaa", "uzb", "sport"):
+    for rub in ("ai", "rivojlanish", "podcast", "dunyo", "mutolaa", "uzb", "sport", "texno"):
         names = ", ".join(n for n, _, r in SOURCES if r == rub)
         parts.append(f"{RUBRIKA_EMOJI[rub]} {RUBRIKA_NOMI[rub]}: {names}")
     await update.message.reply_text("📡 Manbalar:\n" + "\n".join(parts))
