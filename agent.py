@@ -257,6 +257,11 @@ platformasining o'qitish jarayonining natijalari". Yaxshi: gapni bo'lib yoz.
 F) "Bo'lib," bilan cho'zilgan gaplar o'rniga ikki qisqa gap yoz.
 G) Fe'lni jonlantir: "qo'llab-quvvatlashni taqdim etadi" emas — "yordam beradi"; \
 "imkoniyat yaratadi" emas — "imkon beradi".
+H) SARLAVHA to'liq tugallangan bo'lsin: "-gani", "-ekani", "-ligi" bilan \
+TUGAMASIN. Yomon: "qizil tus dasturiy muammo ekani". \
+Yaxshi: "qizil tus — dasturiy muammo" yoki "qizil tus dasturiy muammo ekan".
+I) Manbada YO'Q maslahat va xulosa QO'SHMA ("...ga murojaat qiling", "...ni \
+kuting" kabi tavsiyalar faqat manbada aniq aytilgan bo'lsagina yoziladi).
 
 O'Z-O'ZINI TEKSHIRISH (majburiy yakuniy qadam): postni yozib bo'lgach, har \
 jumlani ovoz chiqarib o'qiyotgandek tekshir: (1) o'zbek suhbatida shunday \
@@ -484,6 +489,8 @@ yoqilg'i" → "pista ko'mir".
 7. Bir jumlada ikkita "uchun"/"tomonidan" — qayta tuz.
 8. G'aliz yoki 20 so'zdan uzun jumlalarni bo'lib, tabiiy so'zlashuv ohangiga \
 keltir.
+9. Sarlavha "-gani/-ekani/-ligi" bilan tugagan bo'lsa, tugallangan shaklga \
+keltir: "muammo ekani" → "muammo ekan" yoki "— muammo".
 
 TEGMA: emoji, tuzilma (qatorlar tartibi), havolalar, hashtag, manba nomi, \
 raqamlar, atoqli otlar (kompaniya/odam/tashabbus nomlari asl holicha).
