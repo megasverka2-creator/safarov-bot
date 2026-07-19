@@ -1563,9 +1563,32 @@ def register(app: Application):
         log.error("JobQueue yo'q! requirements.txt da "
                   "python-telegram-bot[job-queue] bo'lishi kerak.")
     else:
-        app.job_queue.run_daily(run_agent, time=dtime(7, 0, tzinfo=TZ), name="agent_morning")
-        app.job_queue.run_daily(evening_reminder, time=dtime(20, 0, tzinfo=TZ), name="agent_evening")
+        # Ish vaqtlari Railway Variables'dan boshqariladi:
+        #   AGENT_TIMES    = "07:00" yoki "07:00,13:00,19:00" (Toshkent vaqti)
+        #   REMINDER_TIME  = "20:00" — kechki eslatma (bo'sh qoldirilsa 20:00)
+        times_raw = os.environ.get("AGENT_TIMES", "07:00")
+        agent_times = []
+        for t in times_raw.split(","):
+            t = t.strip()
+            try:
+                h, m = map(int, t.split(":"))
+                agent_times.append((h, m))
+            except Exception:
+                log.warning("AGENT_TIMES noto'g'ri qiymat o'tkazildi: %r", t)
+        if not agent_times:
+            agent_times = [(7, 0)]
+        for i, (h, m) in enumerate(agent_times):
+            app.job_queue.run_daily(run_agent, time=dtime(h, m, tzinfo=TZ),
+                                    name=f"agent_run_{i}")
+        try:
+            rh, rm = map(int, os.environ.get("REMINDER_TIME", "20:00").split(":"))
+        except Exception:
+            rh, rm = 20, 0
+        app.job_queue.run_daily(evening_reminder, time=dtime(rh, rm, tzinfo=TZ),
+                                name="agent_evening")
         app.job_queue.run_once(_setup_commands, when=3, name="setup_commands")
+        log.info("Agent jadvali: %s (Toshkent), eslatma: %02d:%02d",
+                 ", ".join(f"{h:02d}:{m:02d}" for h, m in agent_times), rh, rm)
 
     log.info("AI agent ulandi: 07:00 avtomatik, /agent_run — qo'lda. Aisha TTS: %s",
              "yoqilgan 🎙" if AISHA_API_KEY else "o'chiq (AISHA_API_KEY berilmagan)")
