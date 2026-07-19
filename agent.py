@@ -775,27 +775,29 @@ def ai_cover_title(post_id, post_text, rubrika):
     return title, badge
 
 
-def make_photo_card(photo_bytes, post_text, rubrika, cover=None):
-    """Pexels suratini blog uslubiga keltiradi: qoraytirish + sarlavha + brend."""
+def make_photo_card(photo_bytes, post_text, rubrika, cover=None,
+                    size=None):
+    """Suratni blog uslubiga keltiradi: qoraytirish + muqova sarlavha + brend."""
     if Image is None:
         return None
+    W, H = size or (CARD_W, CARD_H)
     pal = CARD_PALETTES.get(rubrika, CARD_PALETTES["ai"])
     accent = _hex_rgb(pal[0][2])
 
     src = Image.open(BytesIO(photo_bytes)).convert("RGB")
-    # Cover-crop: 1280x720 ga to'ldirib kesish
-    k = max(CARD_W / src.width, CARD_H / src.height)
+    # Cover-crop: kadr o'lchamiga to'ldirib kesish
+    k = max(W / src.width, H / src.height)
     src = src.resize((int(src.width * k) + 1, int(src.height * k) + 1))
-    x = (src.width - CARD_W) // 2
-    y = (src.height - CARD_H) // 2
-    img = src.crop((x, y, x + CARD_W, y + CARD_H))
+    x = (src.width - W) // 2
+    y = (src.height - H) // 2
+    img = src.crop((x, y, x + W, y + H))
 
     d = ImageDraw.Draw(img, "RGBA")
     # Pastdan yuqoriga qorong'i gradient (matn o'qilishi uchun)
-    for i in range(CARD_H):
-        alpha = int(200 * max(0, (i - CARD_H * 0.35) / (CARD_H * 0.65)))
-        d.line([(0, i), (CARD_W, i)], fill=(10, 12, 16, alpha))
-    d.rectangle([0, 0, CARD_W, CARD_H], fill=(10, 12, 16, 55))  # yengil umumiy dim
+    for i in range(H):
+        alpha = int(200 * max(0, (i - H * 0.35) / (H * 0.65)))
+        d.line([(0, i), (W, i)], fill=(10, 12, 16, alpha))
+    d.rectangle([0, 0, W, H], fill=(10, 12, 16, 55))  # yengil umumiy dim
 
     # === MUQOVA USLUBI (techno.kun.uz kabi): markazda katta sarlavha + yorliq ===
     title, badge = cover if cover else (
@@ -805,16 +807,16 @@ def make_photo_card(photo_bytes, post_text, rubrika, cover=None):
     # Katta markaziy sarlavha (1-2 qator)
     for fsize in (100, 86, 72, 60):
         f_t = _card_font(fsize)
-        lines = _wrap(d, title, f_t, CARD_W - 160)
+        lines = _wrap(d, title, f_t, W - 160)
         if len(lines) <= 2:
             break
     lh = int(fsize * 1.12)
     badge_h = 66
     total_h = lh * len(lines) + 22 + badge_h
-    y0 = CARD_H - 120 - total_h
+    y0 = H - 120 - total_h
     for i, ln in enumerate(lines):
         w = d.textlength(ln, font=f_t)
-        x = (CARD_W - w) / 2
+        x = (W - w) / 2
         # yengil soya — o'qilishi uchun
         d.text((x + 3, y0 + i * lh + 3), ln, font=f_t, fill=(0, 0, 0, 170))
         d.text((x, y0 + i * lh), ln, font=f_t, fill=(255, 255, 255))
@@ -822,7 +824,7 @@ def make_photo_card(photo_bytes, post_text, rubrika, cover=None):
     # Kategoriya-yorliq (oq pilyulya, qora matn)
     f_bdg = _card_font(30)
     bw = d.textlength(badge, font=f_bdg)
-    bx = (CARD_W - bw - 56) / 2
+    bx = (W - bw - 56) / 2
     by = y0 + lh * len(lines) + 22
     d.rounded_rectangle([bx, by, bx + bw + 56, by + badge_h], radius=badge_h // 2,
                         fill=(245, 245, 245, 235))
@@ -834,7 +836,7 @@ def make_photo_card(photo_bytes, post_text, rubrika, cover=None):
     d.text((70, 98), "t.me/safaroov_blog", font=_card_font(20), fill=accent)
     sana = datetime.now(TZ).strftime("%d.%m.%Y")
     sw = d.textlength(sana, font=f_s)
-    d.text((CARD_W - 70 - sw, CARD_H - 54), sana, font=f_s,
+    d.text((W - 70 - sw, H - 54), sana, font=f_s,
            fill=(255, 255, 255, 180))
 
     buf = BytesIO()
@@ -842,8 +844,13 @@ def make_photo_card(photo_bytes, post_text, rubrika, cover=None):
     return buf.getvalue()
 
 async def make_card_variant(post_id, text, rubrika, variant):
-    """Variant 0-1: Pexels foto-karta (kalit bo'lsa), 2-3: gradient karta."""
-    if PEXELS_KEY and variant < 2 and Image is not None:
+    """Variant 0: GPT Image (4:5, AI chizadi) · 1-2: Pexels foto · 3: gradient."""
+    if variant == 0 and Image is not None:
+        card = await make_genai_card(post_id, text, rubrika)
+        if card:
+            return card
+        variant = 1   # AI ishlamasa — foto variantiga tushamiz
+    if PEXELS_KEY and variant < 3 and Image is not None:
         try:
             urls = _photo_cache.get(post_id)
             if urls is None:
@@ -858,6 +865,62 @@ async def make_card_variant(post_id, text, rubrika, variant):
         except Exception as e:
             log.warning("Foto-karta xatosi (gradientga o'tildi): %s", e)
     return make_card(text, rubrika, variant)
+
+
+# ======================================================================
+# GPT IMAGE — postga mos rasmni AI o'zi chizadi (4:5, muqova uslubida)
+# ======================================================================
+IMG_MODEL = os.environ.get("AI_MODEL_IMAGE", "gpt-image-2")
+IMG_QUALITY = os.environ.get("AI_IMAGE_QUALITY", "medium")   # low/medium/high
+IMG_PER_DAY = int(os.environ.get("AI_IMAGE_PER_DAY", "20"))  # xarajat himoyasi
+_genimg_cache = {}          # post_id -> tayyor karta baytlari
+_genimg_count = {"date": "", "n": 0}
+
+def _img_quota_ok():
+    today = time.strftime("%Y-%m-%d")
+    if _genimg_count["date"] != today:
+        _genimg_count.update({"date": today, "n": 0})
+    if _genimg_count["n"] >= IMG_PER_DAY:
+        return False
+    _genimg_count["n"] += 1
+    return True
+
+def ai_image_prompt(post_text, rubrika):
+    """Post mazmunidan rasm modeli uchun inglizcha tasvir-prompt tuzadi."""
+    resp = ai_client().chat.completions.create(
+        model=MODEL_FAST, max_completion_tokens=120,
+        messages=[{"role": "user", "content":
+            "Write a vivid English image-generation prompt (max 60 words) for an "
+            "editorial cover illustration matching this news post. Style: cinematic, "
+            "dramatic lighting, photorealistic, vertical composition, subject in "
+            "upper two-thirds (bottom will hold a title). STRICT: no text, no "
+            "words, no letters, no logos, no real people's faces. "
+            "Reply with the prompt only:\n" + post_text[:500]}])
+    return resp.choices[0].message.content.strip()[:900]
+
+async def make_genai_card(post_id, text, rubrika):
+    """GPT Image bilan 4:5 muqova-karta. Keshlanadi — qayta pul ketmaydi."""
+    if post_id in _genimg_cache:
+        return _genimg_cache[post_id]
+    if not _img_quota_ok():
+        log.info("Rasm generatsiya kunlik limiti tugadi (%s)", IMG_PER_DAY)
+        return None
+    try:
+        import base64
+        prompt = ai_image_prompt(text, rubrika)
+        resp = ai_client().images.generate(
+            model=IMG_MODEL, prompt=prompt,
+            size="1024x1536", quality=IMG_QUALITY, n=1)
+        raw = base64.b64decode(resp.data[0].b64_json)
+        card = make_photo_card(raw, text, rubrika,
+                               cover=ai_cover_title(post_id, text, rubrika),
+                               size=(1080, 1350))   # 4:5
+        if card:
+            _genimg_cache[post_id] = card
+        return card
+    except Exception as e:
+        log.warning("GPT Image xatosi (fotoga o'tildi): %s", e)
+        return None
 
 def _post_rubrika(conn, post_id):
     row = conn.execute(
