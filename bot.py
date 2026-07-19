@@ -1340,8 +1340,12 @@ async def post_init(app):
     try:
         jq = app.job_queue
         if jq is not None:
-            jq.run_once(k2_auto_draw, when=k2_deadline_dt(), name="k2_draw")
-            print(f"[K2] Avtomatik g'olib taymeri o'rnatildi: {K2_DEADLINE_LOCAL} (Toshkent)")
+            if k2_deadline_dt() > datetime.now(TASHKENT_TZ):
+                jq.run_once(k2_auto_draw, when=k2_deadline_dt(), name="k2_draw")
+                print(f"[K2] Avtomatik g'olib taymeri o'rnatildi: {K2_DEADLINE_LOCAL} (Toshkent)")
+            else:
+                print(f"[K2] Muddat o'tgan ({K2_DEADLINE_LOCAL}) — taymer o'rnatilmadi. "
+                      f"Yangi konkurs uchun K2_DEADLINE ni yangilang.")
         else:
             print("[K2] OGOHLANTIRISH: job_queue yo'q — requirements.txt da [job-queue] kerak.")
     except Exception as e:
