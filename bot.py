@@ -35,6 +35,7 @@ import agent  # AI Yangiliklar Agenti moduli
 import kurs   # Marketing kursi moduli (Stars to'lovi bilan)
 import ustoz  # AI Ustoz: topshiriq tekshirish va savol-javob
 import farosat  # Farosatdan kanali uchun kontent-agent
+import sutuur   # Sutuur adabiy kanali uchun kontent-agent
 
 try:
     from anthropic import AsyncAnthropic
@@ -1378,6 +1379,7 @@ def main():
     kurs.register(app)   # Marketing kursi (/kurs, 10 Stars)
     ustoz.register(app)  # AI Ustoz (/topshiriq, /savol)
     farosat.register(app)  # Farosat-agent (/farosat)
+    sutuur.register(app)   # Sutuur-agent (/sutuur)
     print("Bot ishga tushdi...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
