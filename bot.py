@@ -36,6 +36,7 @@ import kurs   # Marketing kursi moduli (Stars to'lovi bilan)
 import ustoz  # AI Ustoz: topshiriq tekshirish va savol-javob
 import farosat  # Farosatdan kanali uchun kontent-agent
 import sutuur   # Sutuur adabiy kanali uchun kontent-agent
+import admin    # Yagona boshqaruv paneli (/panel)
 
 try:
     from anthropic import AsyncAnthropic
@@ -1380,6 +1381,7 @@ def main():
     ustoz.register(app)  # AI Ustoz (/topshiriq, /savol)
     farosat.register(app)  # Farosat-agent (/farosat)
     sutuur.register(app)   # Sutuur-agent (/sutuur)
+    admin.register(app)    # Boshqaruv paneli (/panel)
     print("Bot ishga tushdi...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
