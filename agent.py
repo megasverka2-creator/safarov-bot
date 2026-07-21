@@ -78,18 +78,34 @@ from telegram.ext import (
 # ======================================================================
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "0") or "0")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "@safaroov_blog")
-# Yangiliklar kanali (dunyo/uzb/sport shu yerga chiqadi). Bo'sh bo'lsa hammasi asosiyga.
-CHANNEL2_ID = os.environ.get("CHANNEL2_ID", "")          # masalan: @zahiradagi_jurnalist
-NEWS_RUBRIKAS = {"dunyo", "uzb", "sport"}
+# ======================================================================
+# KO'P KANALLI MARSHRUTLASH — istalgan rubrika istalgan kanalga
+# Railway Variables:
+#   CHANNEL_MAP = "dunyo=@zahiradagi_jurnalist, uzb=@zahiradagi_jurnalist, sport=@zahiradagi_jurnalist, mutolaa=@mutolaachidan"
+#   (yozilmagan rubrikalar asosiy CHANNEL_ID ga chiqadi)
+#   CHANNEL2_ID = eski usul ham ishlaydi: dunyo/uzb/sport uchun qisqa yo'l
+# ======================================================================
+CHANNEL2_ID = os.environ.get("CHANNEL2_ID", "")
+RUBRIKA_CHANNELS = {}
+for _pair in os.environ.get("CHANNEL_MAP", "").split(","):
+    if "=" in _pair:
+        _r, _c = _pair.split("=", 1)
+        _r, _c = _r.strip(), _c.strip()
+        if _r and _c:
+            RUBRIKA_CHANNELS[_r] = _c
+if CHANNEL2_ID:
+    for _r in ("dunyo", "uzb", "sport"):
+        RUBRIKA_CHANNELS.setdefault(_r, CHANNEL2_ID)
 
 def _channel_for(rubrika):
-    return CHANNEL2_ID if (CHANNEL2_ID and rubrika in NEWS_RUBRIKAS) else CHANNEL_ID
+    return RUBRIKA_CHANNELS.get(rubrika, CHANNEL_ID)
 
 def _brand_for(rubrika):
     """Karta pastidagi brend: rubrika qaysi kanalga chiqsa, o'sha nom."""
-    if CHANNEL2_ID and rubrika in NEWS_RUBRIKAS:
-        handle = CHANNEL2_ID.lstrip("@")
-        return ("ZAHIRADAGI JURNALIST", f"t.me/{handle}")
+    chan = RUBRIKA_CHANNELS.get(rubrika)
+    if chan:
+        h = chan.lstrip("@")
+        return (h.replace("_", " ").upper(), f"t.me/{h}")
     return ("SAFAROV BLOG", "t.me/safaroov_blog")
 # Baza botdagi boshqa fayllar (users.json) bilan bir joyda — Railway volume'da saqlanadi:
 DB_PATH = os.environ.get("DB_PATH",
@@ -141,6 +157,10 @@ SOURCES = [
     ("Engadget",      "https://www.engadget.com/rss.xml",                              "texno"),
     ("GSMArena",      "https://www.gsmarena.com/rss-news-reviews.php3",                "texno"),
     ("Defense News",  "https://www.defensenews.com/arc/outboundfeeds/rss/",            "texno"),
+    # --- 🕌 Islom olami yangiliklari ---
+    ("Arab News",     "https://www.arabnews.com/rss.xml",                              "islom"),
+    ("Anadolu",       "https://www.aa.com.tr/en/rss/default?cat=live",                 "islom"),
+    ("Middle East Eye","https://www.middleeasteye.net/rss",                            "islom"),
     # --- 📚 Kitob va mutolaa ---
     ("Literary Hub",  "https://lithub.com/feed/",                                      "mutolaa"),
     ("Austin Kleon",  "https://austinkleon.com/feed/",                                 "mutolaa"),
@@ -148,11 +168,12 @@ SOURCES = [
 ]
 
 RUBRIKA_EMOJI = {"ai": "🗞", "rivojlanish": "🌱", "podcast": "🎧",
-                 "dunyo": "🌍", "mutolaa": "📚", "uzb": "🇺🇿", "sport": "⚽", "texno": "📱"}
+                 "dunyo": "🌍", "mutolaa": "📚", "uzb": "🇺🇿", "sport": "⚽", "texno": "📱", "islom": "🕌"}
 RUBRIKA_NOMI = {"ai": "AI va marketing", "rivojlanish": "Shaxsiy rivojlanish",
                 "podcast": "Podcast va video", "dunyo": "Dunyo yangiliklari",
                 "mutolaa": "Kitob va mutolaa",
-                "uzb": "O'zbekiston", "sport": "Sport", "texno": "Texno olami"}
+                "uzb": "O'zbekiston", "sport": "Sport", "texno": "Texno olami",
+                "islom": "Islom olami"}
 
 log = logging.getLogger("agent")
 
@@ -219,7 +240,10 @@ SCORE_PROMPT = """Sen @safaroov_blog Telegram kanalining kuratorisan. Kanal yo'n
 (1) AI va marketing, (2) shaxsiy rivojlanish, (3) muhim jahon yangiliklari, \
 (4) kitob va mutolaa, (5) podcast, (6) O'zbekiston yangiliklari, (7) sport \
 (ayniqsa futbol va O'zbekistonga aloqador voqealar), (8) texno olami — \
-gadjetlar, yangi qurilmalar, harbiy texnologiyalar. Auditoriya: O'zbekistondagi marketologlar, kichik \
+gadjetlar, yangi qurilmalar, harbiy texnologiyalar, (9) Islom olami \
+yangiliklari — musulmon mamlakatlar va jamoalardagi muhim voqealar (Haj, \
+xalqaro sammitlar, iqtisodiy-madaniy hodisalar). Islom olami uchun past baho: \
+mazhabiy bahs-munozaralar, ichki nizolarni qo'zg'aydigan materiallar. Auditoriya: O'zbekistondagi marketologlar, kichik \
 biznes egalari, o'z ustida ishlaydigan yoshlar. Auditoriyaning asosiy qismi musulmonlar — \
 material hurmatli va ishonchli bo'lishi shart.
 
@@ -462,6 +486,40 @@ Shablon (kvadrat qavslarni o'z matning bilan almashtir):
 🔗 Manba: {url}
 
 #texno · @safaroov_blog""",
+
+    "islom": """Sen @safaroov_blog loyihasining Islom olami yangiliklari \
+muharririsan. Kanal tili: o'zbek. Ohang: hurmatli, vazmin, xolis — jiddiy \
+axborot agentligi kabi. Auditoriya — musulmonlar; ular ishonchli, tasdiqlangan \
+xabar kutadi.
+
+Quyidagi inglizcha maqola asosida Islom olami rubrikasi uchun POST yoz. \
+Mavzular: musulmon mamlakatlar va jamoalardagi muhim voqealar — Haj va Umra \
+mavsumi, xalqaro sammitlar, iqtisodiy-madaniy hodisalar, ilm-fan va ta'lim, \
+musulmon jamoalari hayoti.
+
+ENG QAT'IY TALABLAR (bu rubrika uchun alohida mas'uliyat):
+- Bu YANGILIK, diniy ta'limot EMAS: hech qanday diniy hukm, fatvo, ibodat \
+ko'rsatmasi, oyat-hadis talqini YOZMA — faqat voqea faktlari.
+- Mazhab, oqim va davlatlararo bahslarda MUTLAQO betaraf tur: hech bir \
+tomonni qo'llama, ayblama, baholama. Ichki nizolarni qo'zg'aydigan ohang TAQIQ.
+- Muqaddas tushunchalar haqida faqat hurmatli shakllarda yoz.
+- Diniy sanalar (Ramazon, hayit boshlanishi kabi) faqat manbada rasmiy e'lon \
+sifatida kelgan bo'lsa yoziladi, taxmin qilinmaydi.
+- Fojia xabarlarida dahshatli tafsilotlar berilmasin, qurbonlar ehtirom bilan \
+tilga olinsin.
+- Manba nomini ko'rsat ("Anadolu xabariga ko'ra...").
+""" + _UMUMIY_QOIDALAR + """
+Shablon (kvadrat qavslarni o'z matning bilan almashtir):
+
+🕌 [Hurmatli, xolis sarlavha]
+
+[2-4 gap: nima bo'ldi — faqat tasdiqlangan faktlar, manba nomi bilan]
+
+📌 Nega muhim: [1-2 gap — bu voqea musulmon olami yoki yurtimiz uchun qanday ahamiyatga ega]
+
+🔗 Manba: {url}
+
+#islomolami · @safaroov_blog""",
 }
 
 
@@ -543,9 +601,10 @@ def ai_write_post(conn, url, article_text, rubrika="ai"):
     )
     draft = resp.choices[0].message.content.strip()
     draft = ai_polish(conn, draft)   # ikkinchi o'tish: til tahriri
-    # Yangiliklar rubrikalari imzosi — o'z kanaliga
-    if CHANNEL2_ID and rubrika in NEWS_RUBRIKAS:
-        draft = draft.replace("@safaroov_blog", CHANNEL2_ID)
+    # Rubrika boshqa kanalga chiqsa — imzo ham o'sha kanalniki
+    chan = RUBRIKA_CHANNELS.get(rubrika)
+    if chan:
+        draft = draft.replace("@safaroov_blog", chan)
     return draft
 
 
@@ -622,6 +681,8 @@ CARD_PALETTES = {
                     ("#141e30", "#243b55", "#ffd54f"), ("#232526", "#414345", "#80d8ff")],
     "texno":       [("#000428", "#004e92", "#40c4ff"), ("#0f0c29", "#302b63", "#18ffff"),
                     ("#141e30", "#243b55", "#82b1ff"), ("#232526", "#414345", "#80deea")],
+    "islom":       [("#0b3d2e", "#14594a", "#d4af37"), ("#08281f", "#1d6b52", "#f0e6c8"),
+                    ("#132f26", "#2a5a48", "#c9a86a"), ("#232526", "#414345", "#a5d6a7")],
 }
 
 _FONT_PATHS = [
@@ -1582,7 +1643,7 @@ async def cmd_requeue(update, context):
 @admin_only
 async def cmd_sources(update, context):
     parts = []
-    for rub in ("ai", "rivojlanish", "podcast", "dunyo", "mutolaa", "uzb", "sport", "texno"):
+    for rub in ("ai", "rivojlanish", "podcast", "dunyo", "mutolaa", "uzb", "sport", "texno", "islom"):
         names = ", ".join(n for n, _, r in SOURCES if r == rub)
         parts.append(f"{RUBRIKA_EMOJI[rub]} {RUBRIKA_NOMI[rub]}: {names}")
     await update.message.reply_text("📡 Manbalar:\n" + "\n".join(parts))
