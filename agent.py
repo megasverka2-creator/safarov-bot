@@ -1660,19 +1660,25 @@ PUBLIC_COMMANDS = [
     BotCommand("shaxs",   "🧠 Shaxsiyat testi"),
     BotCommand("kanallar","📣 Kanallarimiz"),
 ]
-ADMIN_COMMANDS = PUBLIC_COMMANDS + [
-    BotCommand("agent_status",  "📊 Agent holati"),
+ADMIN_COMMANDS = [
+    BotCommand("panel",         "🏛 BOSHQARUV PANELI — hammasi shu yerda"),
+    BotCommand("postlar",       "📥 Kutayotgan postlar ro'yxati"),
     BotCommand("agent_run",     "🔍 Agentni hozir ishga tushirish"),
+    BotCommand("farosat",       "🧠 Farosatdan: 5 ta kuzatuv"),
+    BotCommand("sutuur",        "📖 Sutuur: satr / adabiyot"),
+    BotCommand("stats",         "📈 Bot statistikasi"),
+    BotCommand("kurs_stats",    "🎓 Kurs sotuvlari"),
+    BotCommand("tekshir",       "🔎 Bloklaganlarni aniqlash"),
+    BotCommand("xabar",         "📢 Hammaga xabar yuborish"),
+    BotCommand("agent_status",  "📊 Agent holati"),
     BotCommand("agent_sources", "📡 Agent manbalari"),
     BotCommand("agent_requeue", "♻️ Maqolalarni navbatga qaytarish"),
     BotCommand("agent_pause",   "⏸ Agentni to'xtatish"),
     BotCommand("agent_resume",  "▶️ Agentni davom ettirish"),
-    BotCommand("stats",  "📈 Bot statistikasi"),
-    BotCommand("xabar",  "📢 Hammaga xabar yuborish"),
     BotCommand("elon2",  "📚 Konkurs e'lonini joylash"),
     BotCommand("golib2", "🎉 Konkurs g'olibini tanlash"),
     BotCommand("reset2", "🧹 Konkursni tozalash"),
-]
+] + PUBLIC_COMMANDS
 
 
 async def _setup_commands(context: ContextTypes.DEFAULT_TYPE):
