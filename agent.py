@@ -1030,6 +1030,86 @@ async def _send_to_channel(context, text, image_bytes=None, rubrika=None):
 
 
 # ======================================================================
+# RICH MESSAGE (Bot API 10.1 — "maqola" formati)
+# ======================================================================
+# PTB hali sendRichMessage'ni o'ramaydi, shuning uchun to'g'ridan-to'g'ri
+# httpx bilan chaqiramiz. Muhim: parse_mode BERILMAYDI (rich bilan ishlamaydi).
+#   POST .../sendRichMessage
+#   {"chat_id": ..., "rich_message": {"markdown": "..."}}
+
+def post_to_rich_markdown(text):
+    """Oddiy post matnini (1-qator = sarlavha, qolgani = tan) rich markdown'ga o'giradi.
+    Sarlavha '# ' bo'ladi, qolgan matn paragraflar, oxirgi @kanal qatori footer bo'lib qoladi."""
+    lines = text.strip().split("\n")
+    if not lines:
+        return text.strip()
+    title = lines[0].strip()
+    body = "\n".join(lines[1:]).strip()
+    # sarlavhada allaqachon # bo'lsa qayta qo'shmaymiz
+    if not title.startswith("#"):
+        title = "# " + title
+    return f"{title}\n\n{body}".strip() if body else title
+
+
+async def send_rich_markdown(context, chat_id, markdown_text):
+    """Bot API 10.1 sendRichMessage — markdown ko'rinishida "maqola" xabari.
+    (ok: bool, data: dict) qaytaradi. Xato bo'lsa data['description']da sabab bor."""
+    url = f"https://api.telegram.org/bot{context.bot.token}/sendRichMessage"
+    payload = {"chat_id": chat_id,
+               "rich_message": {"markdown": markdown_text}}
+    async with httpx.AsyncClient(timeout=30) as cli:
+        r = await cli.post(url, json=payload)
+    try:
+        data = r.json()
+    except Exception:
+        return False, {"description": f"HTTP {r.status_code}: {r.text[:200]}"}
+    return bool(data.get("ok")), data
+
+
+# --- SINOV MATNI: barcha asosiy formatlarni tekshiradi ---
+RICH_TEST_MD = """# Bu — maqola sarlavhasi
+
+Bu oddiy paragraf. Rich format matnda **qalin**, _kursiv_ va boshqa \
+uslublarni tabiiy ko'rsatadi. Agent yozgan yangilik aynan shunday, \
+tinch va o'qishli chiqadi.
+
+Ikkinchi paragraf. Maqola formati uzun matnni ham chiroyli joylaydi — \
+sarlavha tepada ajralib turadi, matn esa ostida.
+
+> Bu — iqtibos bloki. Sutuur kanalidagi adib so'zlari yoki mashhur \
+iqtiboslar aynan shunday ajralib ko'rinadi.
+
+Asosiy fikrlar:
+- Birinchi muhim nuqta
+- Ikkinchi muhim nuqta
+- Uchinchi muhim nuqta
+
+@safaroov_blog"""
+
+
+@admin_only
+async def cmd_rich_test(update, context):
+    """/rich_test — rich (maqola) formatini ADMINGA yuborib sinaydi.
+    Kanalga tegmaydi; faqat ko'rinishni tekshirish uchun."""
+    await update.message.reply_text("🧪 Rich xabar yuborilmoqda...")
+    try:
+        ok, data = await send_rich_markdown(context, ADMIN_ID, RICH_TEST_MD)
+    except Exception as e:
+        await update.message.reply_text(f"❌ So'rov xatosi: {e}")
+        return
+    if ok:
+        await update.message.reply_text(
+            "✅ Rich xabar chiqdi — yuqoridagi ko'rinishni tekshiring.\n"
+            "Sarlavha, paragraf, iqtibos, ro'yxat to'g'ri ko'rinsa — "
+            "asosiy oqimga ulaymiz.")
+    else:
+        desc = data.get("description", "noma'lum")
+        await update.message.reply_text(
+            f"❌ Rich xabar chiqmadi.\nSabab: {desc}\n\n"
+            f"To'liq javob (debug):\n{str(data)[:500]}")
+
+
+# ======================================================================
 # OVOZLI YORDAMCHI (Aisha STT + AI javob + Aisha TTS)
 # ======================================================================
 async def stt_transcribe(audio_bytes, filename="voice.ogg"):
@@ -1671,6 +1751,7 @@ ADMIN_COMMANDS = [
     BotCommand("tekshir",       "🔎 Bloklaganlarni aniqlash"),
     BotCommand("xabar",         "📢 Hammaga xabar yuborish"),
     BotCommand("agent_status",  "📊 Agent holati"),
+    BotCommand("rich_test",     "🧪 Rich (maqola) format sinovi"),
     BotCommand("agent_sources", "📡 Agent manbalari"),
     BotCommand("agent_requeue", "♻️ Maqolalarni navbatga qaytarish"),
     BotCommand("agent_pause",   "⏸ Agentni to'xtatish"),
@@ -1713,6 +1794,7 @@ def register(app: Application):
     app.add_handler(CommandHandler("agent_resume", cmd_resume))
     app.add_handler(CommandHandler("agent_requeue", cmd_requeue))
     app.add_handler(CommandHandler("agent_sources", cmd_sources))
+    app.add_handler(CommandHandler("rich_test", cmd_rich_test))
     app.add_handler(CallbackQueryHandler(on_button, pattern=r"^(agpub|agpubv|agskip|agok|agrd|agtxt|agno|agopen|agclean):\d+"))
     app.add_handler(MessageHandler(
         filters.VOICE & filters.User(user_id=ADMIN_ID), on_voice))
