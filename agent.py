@@ -1022,38 +1022,52 @@ def _post_rubrika(conn, post_id):
         "WHERE p.id=?", (post_id,)).fetchone()
     return row[0] if row else "ai"
 
-async def _send_to_channel(context, text, image_bytes=None, rubrika=None):
-    """Kanalga chiqarish: rubrika qaysi kanalga tegishli bo'lsa, o'shanga.
-    Avval RICH (maqola) formatida urinadi; xato bo'lsa — eski usulga tushadi,
-    ya'ni post baribir chiqadi, kanal bo'sh qolmaydi."""
+async def rich_photo_url(post_id, text, variant=0):
+    """Rich maqola ICHIGA qo'yish uchun ochiq havolali foto (Pexels).
+    Rasm bloki faqat http(s) havola bilan ishlaydi, shuning uchun xom foto."""
+    if not PEXELS_KEY:
+        return None
+    try:
+        urls = _photo_cache.get(post_id)
+        if urls is None:
+            urls = await pexels_photos(ai_photo_query(text))
+            _photo_cache[post_id] = urls
+        if urls:
+            return urls[variant % len(urls)]
+    except Exception as e:
+        log.warning("Rich foto havolasi olinmadi: %s", e)
+    return None
+
+
+async def _send_to_channel(context, text, image_bytes=None, rubrika=None,
+                           image_url=None):
+    """Kanalga chiqarish. RICH yoqilgan bo'lsa — maqola ko'rinishida:
+    sarlavha → rasm → matn → manba. Xato bo'lsa eski usulga tushadi."""
     chan = _channel_for(rubrika)
 
-    # --- 1) RICH (maqola) formati — asosiy yo'l ---
+    # --- 1) RICH (maqola) formati ---
     if RICH_POSTS:
-        photo_sent = False
         try:
-            if image_bytes:
+            md = post_to_rich_markdown(text, image_url=image_url)
+            if not image_url and image_bytes:
+                # havola yo'q — muqova alohida rasm bo'lib tepada chiqadi
                 await context.bot.send_photo(chat_id=chan, photo=image_bytes)
-                photo_sent = True
-            ok, data = await send_rich_markdown(
-                context, chan, post_to_rich_markdown(text))
+                image_bytes = None       # zaxirada takrorlanmasin
+            ok, data = await send_rich_markdown(context, chan, md)
             if ok:
                 return
-            log.warning("Rich xabar chiqmadi (%s) — eski usulga o'tildi.",
+            log.warning("Rich chiqmadi (%s) — eski usulga o'tildi.",
                         data.get("description"))
         except Exception as e:
-            log.warning("Rich xabar xatosi (%s) — eski usulga o'tildi.", e)
-        if photo_sent:   # rasm chiqib bo'ldi — faqat matnni qo'shamiz
-            await context.bot.send_message(chat_id=chan, text=text)
-            return
+            log.warning("Rich xatosi (%s) — eski usulga o'tildi.", e)
 
     # --- 2) ESKI USUL (zaxira, yoki RICH_POSTS=0 bo'lsa) ---
-    if image_bytes:
+    photo = image_bytes or image_url
+    if photo:
         if len(text) <= 1024:
-            await context.bot.send_photo(chat_id=chan, photo=image_bytes,
-                                         caption=text)
+            await context.bot.send_photo(chat_id=chan, photo=photo, caption=text)
         else:  # caption limiti — rasm alohida, matn alohida
-            await context.bot.send_photo(chat_id=chan, photo=image_bytes)
+            await context.bot.send_photo(chat_id=chan, photo=photo)
             await context.bot.send_message(chat_id=chan, text=text)
     else:
         await context.bot.send_message(chat_id=chan, text=text)
@@ -1556,6 +1570,21 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if action == "agpub":
         rubrika = _post_rubrika(conn, post_id)
         await query.answer("Rasm tayyorlanmoqda... 🎨")
+        # RICH rejim: maqola ichiga ochiq havolali foto ketadi —
+        # shuning uchun ko'rsatiladigan rasm ham aynan o'sha bo'ladi.
+        if RICH_POSTS:
+            url = await rich_photo_url(post_id, text, 0)
+            if url:
+                try:
+                    await context.bot.send_photo(
+                        chat_id=ADMIN_ID, photo=url,
+                        caption=f"🖼 Rasm 1/{CARD_VARIANTS} — maqola ichiga shu ketadi",
+                        reply_markup=preview_keyboard(post_id, 0))
+                    await query.edit_message_text(f"🎨 RASM TANLANMOQDA (pastda)\n\n{text}")
+                except Exception as e:
+                    await query.answer(f"Rasm xatosi: {e}", show_alert=True)
+                conn.close()
+                return
         img = await make_card_variant(post_id, text, rubrika, 0)
         if not img:  # Pillow yo'q — eski usul: to'g'ridan-to'g'ri matn
             try:
@@ -1583,6 +1612,19 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if action == "agrd":
         rubrika = _post_rubrika(conn, post_id)
         await query.answer("Tayyorlanmoqda... 🎨")
+        if RICH_POSTS:
+            url = await rich_photo_url(post_id, text, variant)
+            if url:
+                try:
+                    await query.edit_message_media(
+                        InputMediaPhoto(url,
+                                        caption=f"🖼 Rasm {variant + 1}/{CARD_VARIANTS} — "
+                                                f"maqola ichiga shu ketadi"),
+                        reply_markup=preview_keyboard(post_id, variant))
+                except Exception as e:
+                    await query.answer(f"Xato: {e}", show_alert=True)
+                conn.close()
+                return
         img = await make_card_variant(post_id, text, rubrika, variant)
         try:
             await query.edit_message_media(
@@ -1598,9 +1640,13 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --- 🖼 Rasm bilan chiqarish ---
     if action == "agok":
         rubrika = _post_rubrika(conn, post_id)
-        img = await make_card_variant(post_id, text, rubrika, variant)
         try:
-            await _send_to_channel(context, text, img, rubrika)
+            if RICH_POSTS:
+                url = await rich_photo_url(post_id, text, variant)
+                await _send_to_channel(context, text, None, rubrika, image_url=url)
+            else:
+                img = await make_card_variant(post_id, text, rubrika, variant)
+                await _send_to_channel(context, text, img, rubrika)
             conn.execute("UPDATE agent_posts SET status='published' WHERE id=?", (post_id,))
             conn.commit()
             await query.answer("Rasm bilan kanalga chiqdi! ✅")
