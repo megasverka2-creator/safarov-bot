@@ -1874,18 +1874,16 @@ async def _rich_media_try(context, chat_id, markdown_text, image_bytes, media_ob
 
 # Xatodan aniqlandi: InputRichMessageMedia da "id" maydoni majburiy.
 # Endi media obyekti va markdown murojaati birga sinaladi (matritsa).
-_RICH_MEDIA_SHAPES = [
-    # Aniqlandi: "id" majburiy, "media" esa OBYEKT bo'lishi kerak.
-    ("s1 media=InputMedia",
-     {"id": "muqova", "media": {"type": "photo", "media": "attach://muqova"}}),
-    ("s2 media.photo",
-     {"id": "muqova", "media": {"type": "photo", "photo": "attach://muqova"}}),
-    ("s3 media obyekt, type tashqarida",
-     {"id": "muqova", "type": "photo", "media": {"media": "attach://muqova"}}),
-]
-_RICH_MEDIA_REFS = [
-    ("r1 attach", "attach://muqova"),
-    ("r2 id",     "muqova"),
+# Aniqlandi: {"id": ..., "media": {"type":"photo","media":"attach://muqova"}}
+# shakli TO'G'RI o'qiladi. Qolgani — markdown ichida unga murojaat shakli.
+# Har element: (nom, id qiymati, markdown havolasi)
+_RICH_MEDIA_CASES = [
+    ("c1 id=attach",      "attach://muqova",              "attach://muqova"),
+    ("c2 id=soxta url",   "https://safarov.uz/muqova.png","https://safarov.uz/muqova.png"),
+    ("c3 tg://media",     "muqova",                       "tg://media?id=muqova"),
+    ("c4 media://",       "muqova",                       "media://muqova"),
+    ("c5 tg-id://",       "muqova",                       "tg-id://muqova"),
+    ("c6 id=#muqova",     "muqova",                       "#muqova"),
 ]
 
 
@@ -1915,21 +1913,22 @@ async def cmd_rich_media(update, context):
         return
 
     hisobot = []
-    for m_nom, shape in _RICH_MEDIA_SHAPES:
-        for r_nom, ref in _RICH_MEDIA_REFS:
-            md = post_to_rich_markdown(text, image_url=ref)
-            try:
-                res = await _rich_media_try(context, ADMIN_ID, md, img, shape)
-            except Exception as e:
-                hisobot.append(f"{m_nom} + {r_nom} — so'rov xatosi: {e}")
-                continue
-            if res.get("ok"):
-                await update.message.reply_text(
-                    f"✅ ISHLADI: {m_nom} + {r_nom}\n\n"
-                    "☝️ Brendli muqova maqola ichida chiqdi. "
-                    "Shu variantni kanal oqimiga ulaymiz.")
-                return
-            hisobot.append(f"{m_nom} + {r_nom} — {res.get('description', '?')}")
+    for nom, id_qiymat, ref in _RICH_MEDIA_CASES:
+        shape = {"id": id_qiymat,
+                 "media": {"type": "photo", "media": "attach://muqova"}}
+        md = post_to_rich_markdown(text, image_url=ref)
+        try:
+            res = await _rich_media_try(context, ADMIN_ID, md, img, shape)
+        except Exception as e:
+            hisobot.append(f"{nom} — so'rov xatosi: {e}")
+            continue
+        if res.get("ok"):
+            await update.message.reply_text(
+                f"✅ ISHLADI: {nom}\n(id={id_qiymat} · havola={ref})\n\n"
+                "☝️ Brendli muqova maqola ichida chiqdi. "
+                "Shu variantni kanal oqimiga ulaymiz.")
+            return
+        hisobot.append(f"{nom} — {res.get('description', '?')}")
 
     matn = "Hech biri ishlamadi:\n\n" + "\n".join(hisobot)
     await update.message.reply_text(matn[:3900] +
