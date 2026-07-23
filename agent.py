@@ -1875,10 +1875,13 @@ async def _rich_media_try(context, chat_id, markdown_text, image_bytes, media_ob
 # Xatodan aniqlandi: InputRichMessageMedia da "id" maydoni majburiy.
 # Endi media obyekti va markdown murojaati birga sinaladi (matritsa).
 _RICH_MEDIA_SHAPES = [
-    ("m1 id+media",       {"id": "muqova", "media": "attach://muqova"}),
-    ("m2 id+type+media",  {"id": "muqova", "type": "photo",
-                           "media": "attach://muqova"}),
-    ("m3 id+photo",       {"id": "muqova", "photo": "attach://muqova"}),
+    # Aniqlandi: "id" majburiy, "media" esa OBYEKT bo'lishi kerak.
+    ("s1 media=InputMedia",
+     {"id": "muqova", "media": {"type": "photo", "media": "attach://muqova"}}),
+    ("s2 media.photo",
+     {"id": "muqova", "media": {"type": "photo", "photo": "attach://muqova"}}),
+    ("s3 media obyekt, type tashqarida",
+     {"id": "muqova", "type": "photo", "media": {"media": "attach://muqova"}}),
 ]
 _RICH_MEDIA_REFS = [
     ("r1 attach", "attach://muqova"),
