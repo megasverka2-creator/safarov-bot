@@ -258,6 +258,16 @@ biznes egalari, o'z ustida ishlaydigan yoshlar. Auditoriyaning asosiy qismi musu
 material hurmatli va ishonchli bo'lishi shart.
 
 Quyidagi material sarlavhasi va annotatsiyasiga qarab baho ber.
+
+RUBRIKA MOSLIGI (birinchi tekshiriladi): material qaysi rubrikaga tegishli \
+ekani "Rubrika:" qatorida beriladi. Agar material o'sha rubrika mavzusiga \
+BEVOSITA tegishli bo'lmasa — baho 3 dan oshmasin, mazmuni qanchalik yaxshi \
+bo'lmasin. Xususan "islom" rubrikasi FAQAT islom olami va musulmon \
+mamlakatlariga bevosita aloqador xabarlar uchun. Umumiy jahon iqtisodi, birja \
+narxlari, boshqa mintaqalar siyosati, umumiy ob-havo yoki sport xabarlari bu \
+rubrikaga TUSHMAYDI — ular manba agentligi musulmon davlatiniki bo'lsa ham \
+past baho oladi. Masalan "jahon bozorida bug'doy narxi oshdi" — bu "islom" \
+rubrikasi EMAS.
 Yuqori baho: amaliy foyda, yangi vosita/model, real keys, kuchli hayotiy saboq, \
 ilmiy asosli maslahat, dunyodagi chinakam muhim voqea (siyosat, iqtisod — keng ommaga \
 ta'sir qiladigan), mutolaa madaniyati va kitoblar haqida qiziqarli material. \
@@ -308,7 +318,22 @@ H) SARLAVHA to'liq tugallangan bo'lsin: "-gani", "-ekani", "-ligi" bilan \
 TUGAMASIN. Yomon: "qizil tus dasturiy muammo ekani". \
 Yaxshi: "qizil tus — dasturiy muammo" yoki "qizil tus dasturiy muammo ekan".
 I) Manbada YO'Q maslahat va xulosa QO'SHMA ("...ga murojaat qiling", "...ni \
-kuting" kabi tavsiyalar faqat manbada aniq aytilgan bo'lsagina yoziladi).
+kuting" kabi tavsiyalar faqat manbada aniq aytilgan bo'lsagina yoziladi). \
+Manbada yo'q tafsilotni ham qo'shma. \
+Yomon (manbada "oziq-ovqat inflyatsiyasi kutilmalari" deyilgan): \
+"importga bog'liq mamlakatlarda oziq-ovqat inflyatsiyasi xavfi". \
+Yaxshi: "oziq-ovqat narxlariga ta'sir qilishi mumkin".
+J) O'ZBEK O'QUVCHISIGA NOTANISH O'LCHOV BIRLIGI qavsda tushuntirilsin \
+(bushel, funt, gallon, akr, dyuym, barrel va h.k.) — aks holda raqam ma'nosiz. \
+Yomon: "7,085 dollar/bushelga yetdi". \
+Yaxshi: "bir bushel (taxminan 27 kg) uchun 7,085 dollarga chiqdi". \
+Slash ("/") belgisi o'rniga so'z bilan yoz.
+K) TABIAT VA IQTISOD ATAMALARINI so'zma-so'z ko'chirma. \
+Yomon: "issiq to'lqinlar" (heat waves), "qurg'oqchilik tashvishlari". \
+Yaxshi: "jazirama issiq", "qurg'oqchilikdan xavotir".
+L) "...bo'yicha" ulagichi idoraviy — imkon boricha tushirib qoldir. \
+Yomon: "don eksporti bo'yicha xavotirlar kuchaydi". \
+Yaxshi: "don eksportidan xavotir kuchaydi".
 
 O'Z-O'ZINI TEKSHIRISH (majburiy yakuniy qadam): postni yozib bo'lgach, har \
 jumlani ovoz chiqarib o'qiyotgandek tekshir: (1) o'zbek suhbatida shunday \
@@ -533,17 +558,19 @@ Shablon (kvadrat qavslarni o'z matning bilan almashtir):
 }
 
 
-def ai_score(conn, title, summary):
+def ai_score(conn, title, summary, rubrika=None):
     if api_calls_today(conn) >= MAX_API_CALLS_PER_DAY:
         return None
     api_call_inc(conn)
+    sov = f"Rubrika: {rubrika or 'nomaʼlum'}\nSarlavha: {title}\n" \
+          f"Annotatsiya: {summary[:1000]}"
     resp = ai_client().chat.completions.create(
         model=MODEL,
         response_format={"type": "json_object"},
         max_completion_tokens=100,
         messages=[
             {"role": "system", "content": SCORE_PROMPT},
-            {"role": "user", "content": f"Sarlavha: {title}\nAnnotatsiya: {summary[:1000]}"},
+            {"role": "user", "content": sov},
         ],
     )
     try:
@@ -1484,13 +1511,14 @@ async def run_agent(context: ContextTypes.DEFAULT_TYPE):
 
     # --- Bosqich A: saralash ('new' navbatidan; post yozish uchun zaxira qoladi) ---
     queue = conn.execute(
-        "SELECT url, title, COALESCE(summary,'') FROM agent_articles "
+        "SELECT url, title, COALESCE(summary,''), COALESCE(rubrika,'ai') "
+        "FROM agent_articles "
         "WHERE status='new' ORDER BY seen_at DESC LIMIT 30").fetchall()
-    for url, title, summary in queue:
+    for url, title, summary, rubrika in queue:
         if api_calls_today(conn) >= MAX_API_CALLS_PER_DAY - SCORING_RESERVE:
             log.info("Saralash to'xtadi — zaxira limitiga yetildi, qolgani ertaga.")
             break
-        score = ai_score(conn, title, summary)
+        score = ai_score(conn, title, summary, rubrika)
         if score is None:
             break
         conn.execute("UPDATE agent_articles SET score=?, status='scored' WHERE url=?",
