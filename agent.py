@@ -78,6 +78,10 @@ from telegram.ext import (
 # ======================================================================
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "0") or "0")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "@safaroov_blog")
+# RICH (maqola) formati: 1 = yoqilgan (default), 0 = eski usul.
+# Xato bo'lsa kod o'zi eski usulga tushadi — post baribir chiqadi.
+RICH_POSTS = os.environ.get("RICH_POSTS", "1").strip().lower() \
+    not in ("0", "false", "off", "no", "")
 # ======================================================================
 # KO'P KANALLI MARSHRUTLASH — istalgan rubrika istalgan kanalga
 # Railway Variables:
@@ -1016,8 +1020,31 @@ def _post_rubrika(conn, post_id):
     return row[0] if row else "ai"
 
 async def _send_to_channel(context, text, image_bytes=None, rubrika=None):
-    """Kanalga chiqarish: rubrika qaysi kanalga tegishli bo'lsa, o'shanga."""
+    """Kanalga chiqarish: rubrika qaysi kanalga tegishli bo'lsa, o'shanga.
+    Avval RICH (maqola) formatida urinadi; xato bo'lsa — eski usulga tushadi,
+    ya'ni post baribir chiqadi, kanal bo'sh qolmaydi."""
     chan = _channel_for(rubrika)
+
+    # --- 1) RICH (maqola) formati — asosiy yo'l ---
+    if RICH_POSTS:
+        photo_sent = False
+        try:
+            if image_bytes:
+                await context.bot.send_photo(chat_id=chan, photo=image_bytes)
+                photo_sent = True
+            ok, data = await send_rich_markdown(
+                context, chan, post_to_rich_markdown(text))
+            if ok:
+                return
+            log.warning("Rich xabar chiqmadi (%s) — eski usulga o'tildi.",
+                        data.get("description"))
+        except Exception as e:
+            log.warning("Rich xabar xatosi (%s) — eski usulga o'tildi.", e)
+        if photo_sent:   # rasm chiqib bo'ldi — faqat matnni qo'shamiz
+            await context.bot.send_message(chat_id=chan, text=text)
+            return
+
+    # --- 2) ESKI USUL (zaxira, yoki RICH_POSTS=0 bo'lsa) ---
     if image_bytes:
         if len(text) <= 1024:
             await context.bot.send_photo(chat_id=chan, photo=image_bytes,
@@ -1721,6 +1748,38 @@ async def cmd_rich_test(update, context):
 
 
 @admin_only
+async def cmd_rich_oxirgi(update, context):
+    """/rich_oxirgi — bazadagi eng oxirgi postni RICH formatda ADMINGA ko'rsatadi.
+    Kanalga CHIQMAYDI — haqiqiy post qanday ko'rinishini xavfsiz tekshirish uchun."""
+    conn = db()
+    row = conn.execute(
+        "SELECT id, text FROM agent_posts ORDER BY id DESC LIMIT 1").fetchone()
+    conn.close()
+    if not row:
+        await update.message.reply_text(
+            "Bazada post yo'q. Avval /agent_run bosing.")
+        return
+    post_id, text = row
+    await update.message.reply_text(
+        f"🧪 #{post_id} post rich (maqola) formatda ko'rsatilmoqda...")
+    try:
+        ok, data = await send_rich_markdown(
+            context, ADMIN_ID, post_to_rich_markdown(text))
+    except Exception as e:
+        await update.message.reply_text(f"❌ So'rov xatosi: {e}")
+        return
+    if ok:
+        await update.message.reply_text(
+            "☝️ Kanalga aynan shunday chiqadi.\n"
+            "Sarlavha, havola, hashtag va emoji joyida bo'lsa — tayyor.\n"
+            "Biror joyi buzilsa — menga ayting, shablonni to'g'rilaymiz.")
+    else:
+        await update.message.reply_text(
+            f"❌ Chiqmadi.\nSabab: {data.get('description', 'nomaʼlum')}\n\n"
+            f"Debug:\n{str(data)[:400]}")
+
+
+@admin_only
 async def cmd_sources(update, context):
     parts = []
     for rub in ("ai", "rivojlanish", "podcast", "dunyo", "mutolaa", "uzb", "sport", "texno", "islom"):
@@ -1752,6 +1811,7 @@ ADMIN_COMMANDS = [
     BotCommand("xabar",         "📢 Hammaga xabar yuborish"),
     BotCommand("agent_status",  "📊 Agent holati"),
     BotCommand("rich_test",     "🧪 Rich (maqola) format sinovi"),
+    BotCommand("rich_oxirgi",   "🧪 Oxirgi postni rich formatda ko'rish"),
     BotCommand("agent_sources", "📡 Agent manbalari"),
     BotCommand("agent_requeue", "♻️ Maqolalarni navbatga qaytarish"),
     BotCommand("agent_pause",   "⏸ Agentni to'xtatish"),
@@ -1795,6 +1855,7 @@ def register(app: Application):
     app.add_handler(CommandHandler("agent_requeue", cmd_requeue))
     app.add_handler(CommandHandler("agent_sources", cmd_sources))
     app.add_handler(CommandHandler("rich_test", cmd_rich_test))
+    app.add_handler(CommandHandler("rich_oxirgi", cmd_rich_oxirgi))
     app.add_handler(CallbackQueryHandler(on_button, pattern=r"^(agpub|agpubv|agskip|agok|agrd|agtxt|agno|agopen|agclean):\d+"))
     app.add_handler(MessageHandler(
         filters.VOICE & filters.User(user_id=ADMIN_ID), on_voice))
