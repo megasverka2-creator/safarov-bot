@@ -82,6 +82,9 @@ CHANNEL_ID = os.environ.get("CHANNEL_ID", "@safaroov_blog")
 # Xato bo'lsa kod o'zi eski usulga tushadi — post baribir chiqadi.
 RICH_POSTS = os.environ.get("RICH_POSTS", "1").strip().lower() \
     not in ("0", "false", "off", "no", "")
+# Rasm ombori: rasm shu yerga yuklanadi va undan havola olinadi.
+# Bo'sh qoldirilsa — adminning shaxsiy chatiga tushadi.
+RICH_IMAGE_STORE = os.environ.get("RICH_IMAGE_STORE", "").strip()
 # ======================================================================
 # KO'P KANALLI MARSHRUTLASH — istalgan rubrika istalgan kanalga
 # Railway Variables:
@@ -1064,18 +1067,46 @@ async def _send_to_channel(context, text, image_bytes=None, rubrika=None):
 #   POST .../sendRichMessage
 #   {"chat_id": ..., "rich_message": {"markdown": "..."}}
 
-def post_to_rich_markdown(text):
-    """Oddiy post matnini (1-qator = sarlavha, qolgani = tan) rich markdown'ga o'giradi.
-    Sarlavha '# ' bo'ladi, qolgan matn paragraflar, oxirgi @kanal qatori footer bo'lib qoladi."""
+def _rich_escape(body):
+    """Rich Markdown'da qator boshidagi '#' sarlavha belgisi hisoblanadi.
+    Hashtag ('#ai', '#uzbekiston') yo'qolmasligi uchun uni himoyalaymiz."""
+    out = []
+    for line in body.split("\n"):
+        s = line.lstrip()
+        # "# Sarlavha" (bo'shliq bilan) — haqiqiy sarlavha, tegmaymiz.
+        # "#ai" (bo'shliqsiz) — hashtag, himoyalanadi.
+        if s.startswith("#") and not re.match(r"#{1,6}\s", s):
+            line = line.replace("#", "\\#", 1)
+        out.append(line)
+    return "\n".join(out)
+
+
+def post_to_rich_markdown(text, image_url=None):
+    """Oddiy post matnini (1-qator = sarlavha) rich markdown'ga o'giradi.
+    image_url berilsa — rasm sarlavha ostiga, maqola ICHIGA joylanadi."""
     lines = text.strip().split("\n")
     if not lines:
         return text.strip()
     title = lines[0].strip()
-    body = "\n".join(lines[1:]).strip()
-    # sarlavhada allaqachon # bo'lsa qayta qo'shmaymiz
+    body = _rich_escape("\n".join(lines[1:]).strip())
     if not title.startswith("#"):
         title = "# " + title
-    return f"{title}\n\n{body}".strip() if body else title
+    parts = [title]
+    if image_url:
+        parts.append(f"![]({image_url})")   # rasm bloki — alohida qator
+    if body:
+        parts.append(body)
+    return "\n\n".join(parts)
+
+
+async def tg_image_url(context, image_bytes):
+    """Rasm baytlarini Telegramga yuklab, unga HTTPS havola qaytaradi.
+    Rich rasm bloki faqat http(s) havola bilan ishlaydi, bayt bilan emas."""
+    store = RICH_IMAGE_STORE or ADMIN_ID
+    msg = await context.bot.send_photo(chat_id=store, photo=image_bytes,
+                                       disable_notification=True)
+    f = await context.bot.get_file(msg.photo[-1].file_id)
+    return f.file_path        # PTB to'liq HTTPS havola qaytaradi
 
 
 async def send_rich_markdown(context, chat_id, markdown_text):
@@ -1780,6 +1811,49 @@ async def cmd_rich_oxirgi(update, context):
 
 
 @admin_only
+async def cmd_rich_rasm(update, context):
+    """/rich_rasm — oxirgi postni RASM MAQOLA ICHIDA holatda ADMINGA ko'rsatadi.
+    Kanalga CHIQMAYDI. Rasm avval Telegramga yuklanadi, undan havola olinadi."""
+    conn = db()
+    row = conn.execute(
+        "SELECT id, text FROM agent_posts ORDER BY id DESC LIMIT 1").fetchone()
+    if not row:
+        conn.close()
+        await update.message.reply_text("Bazada post yo'q. Avval /agent_run bosing.")
+        return
+    post_id, text = row
+    rubrika = _post_rubrika(conn, post_id)
+    conn.close()
+
+    await update.message.reply_text(
+        f"🧪 #{post_id} — muqova tayyorlanmoqda, keyin maqola ichiga qo'yiladi...")
+    try:
+        img = await make_card_variant(post_id, text, rubrika, 0)
+        if not img:
+            await update.message.reply_text("❌ Muqova chiqmadi (Pillow yoki limit).")
+            return
+        url = await tg_image_url(context, img)
+    except Exception as e:
+        await update.message.reply_text(f"❌ Rasm havolasini olishda xato: {e}")
+        return
+    try:
+        ok, data = await send_rich_markdown(
+            context, ADMIN_ID, post_to_rich_markdown(text, image_url=url))
+    except Exception as e:
+        await update.message.reply_text(f"❌ So'rov xatosi: {e}")
+        return
+    if ok:
+        await update.message.reply_text(
+            "☝️ Rasm maqola ichida chiqdimi? Sarlavha tepada, rasm ostida, "
+            "matn eng pastda bo'lsa — aynan siz istagan ko'rinish.\n"
+            "Hashtag ham joyida ekanini tekshiring.")
+    else:
+        await update.message.reply_text(
+            f"❌ Chiqmadi.\nSabab: {data.get('description', 'nomaʼlum')}\n\n"
+            f"Debug:\n{str(data)[:400]}")
+
+
+@admin_only
 async def cmd_sources(update, context):
     parts = []
     for rub in ("ai", "rivojlanish", "podcast", "dunyo", "mutolaa", "uzb", "sport", "texno", "islom"):
@@ -1812,6 +1886,7 @@ ADMIN_COMMANDS = [
     BotCommand("agent_status",  "📊 Agent holati"),
     BotCommand("rich_test",     "🧪 Rich (maqola) format sinovi"),
     BotCommand("rich_oxirgi",   "🧪 Oxirgi postni rich formatda ko'rish"),
+    BotCommand("rich_rasm",     "🧪 Rasm maqola ichida sinovi"),
     BotCommand("agent_sources", "📡 Agent manbalari"),
     BotCommand("agent_requeue", "♻️ Maqolalarni navbatga qaytarish"),
     BotCommand("agent_pause",   "⏸ Agentni to'xtatish"),
@@ -1856,6 +1931,7 @@ def register(app: Application):
     app.add_handler(CommandHandler("agent_sources", cmd_sources))
     app.add_handler(CommandHandler("rich_test", cmd_rich_test))
     app.add_handler(CommandHandler("rich_oxirgi", cmd_rich_oxirgi))
+    app.add_handler(CommandHandler("rich_rasm", cmd_rich_rasm))
     app.add_handler(CallbackQueryHandler(on_button, pattern=r"^(agpub|agpubv|agskip|agok|agrd|agtxt|agno|agopen|agclean):\d+"))
     app.add_handler(MessageHandler(
         filters.VOICE & filters.User(user_id=ADMIN_ID), on_voice))
