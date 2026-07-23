@@ -1857,6 +1857,77 @@ async def cmd_rich_rasm(update, context):
             f"Debug:\n{str(data)[:400]}")
 
 
+async def _rich_media_try(context, chat_id, markdown_text, image_bytes, media_obj):
+    """sendRichMessage'ni multipart bilan chaqiradi (rasm bayt sifatida ketadi).
+    Qaytaradi: (ok, javob) — xato matni tashxis uchun kerak."""
+    url = f"https://api.telegram.org/bot{context.bot.token}/sendRichMessage"
+    body = {"markdown": markdown_text, "media": [media_obj]}
+    data = {"chat_id": str(chat_id), "rich_message": json.dumps(body)}
+    files = {"muqova": ("muqova.png", image_bytes, "image/png")}
+    async with httpx.AsyncClient(timeout=60) as cli:
+        r = await cli.post(url, data=data, files=files)
+    try:
+        return r.json()
+    except Exception:
+        return {"ok": False, "description": f"HTTP {r.status_code}: {r.text[:150]}"}
+
+
+# Sinaladigan variantlar: qaysi biri to'g'riligini Telegram xatosi ko'rsatadi
+_RICH_MEDIA_SHAPES = [
+    ("A: type+media",      {"type": "photo", "media": "attach://muqova"}),
+    ("B: name+media",      {"name": "muqova", "media": "attach://muqova"}),
+    ("C: type+name+media", {"type": "photo", "name": "muqova",
+                            "media": "attach://muqova"}),
+]
+
+
+@admin_only
+async def cmd_rich_media(update, context):
+    """/rich_media — brendli muqovani maqola ICHIGA havolasiz joylashni sinaydi.
+    Bir necha yozilish variantini ketma-ket urinib, natijasini aytadi."""
+    conn = db()
+    row = conn.execute(
+        "SELECT id, text FROM agent_posts ORDER BY id DESC LIMIT 1").fetchone()
+    if not row:
+        conn.close()
+        await update.message.reply_text("Bazada post yo'q. Avval /agent_run bosing.")
+        return
+    post_id, text = row
+    rubrika = _post_rubrika(conn, post_id)
+    conn.close()
+
+    await update.message.reply_text(f"🧪 #{post_id} — muqova tayyorlanmoqda...")
+    try:
+        img = await make_card_variant(post_id, text, rubrika, 0)
+        if not img:
+            await update.message.reply_text("❌ Muqova chiqmadi (Pillow yoki kunlik limit).")
+            return
+    except Exception as e:
+        await update.message.reply_text(f"❌ Muqova xatosi: {e}")
+        return
+
+    md = post_to_rich_markdown(text, image_url="attach://muqova")
+    hisobot = []
+    for nom, shape in _RICH_MEDIA_SHAPES:
+        try:
+            res = await _rich_media_try(context, ADMIN_ID, md, img, shape)
+        except Exception as e:
+            hisobot.append(f"{nom} — so'rov xatosi: {e}")
+            continue
+        if res.get("ok"):
+            hisobot.append(f"{nom} — ✅ ISHLADI")
+            await update.message.reply_text(
+                "\n".join(hisobot) +
+                "\n\n☝️ Yuqorida brendli muqova maqola ichida chiqdi. "
+                "Shu variantni kanal oqimiga ulaymiz.")
+            return
+        hisobot.append(f"{nom} — ❌ {res.get('description', '?')}")
+
+    await update.message.reply_text(
+        "Hech biri ishlamadi:\n\n" + "\n".join(hisobot) +
+        "\n\nBu xatolar menga yo'lni ko'rsatadi — shuni menga tashlang.")
+
+
 @admin_only
 async def cmd_sources(update, context):
     parts = []
@@ -1891,6 +1962,7 @@ ADMIN_COMMANDS = [
     BotCommand("rich_test",     "🧪 Rich (maqola) format sinovi"),
     BotCommand("rich_oxirgi",   "🧪 Oxirgi postni rich formatda ko'rish"),
     BotCommand("rich_rasm",     "🧪 Rasm maqola ichida sinovi"),
+    BotCommand("rich_media",    "🧪 Muqova maqola ichida (havolasiz)"),
     BotCommand("agent_sources", "📡 Agent manbalari"),
     BotCommand("agent_requeue", "♻️ Maqolalarni navbatga qaytarish"),
     BotCommand("agent_pause",   "⏸ Agentni to'xtatish"),
@@ -1936,6 +2008,7 @@ def register(app: Application):
     app.add_handler(CommandHandler("rich_test", cmd_rich_test))
     app.add_handler(CommandHandler("rich_oxirgi", cmd_rich_oxirgi))
     app.add_handler(CommandHandler("rich_rasm", cmd_rich_rasm))
+    app.add_handler(CommandHandler("rich_media", cmd_rich_media))
     app.add_handler(CallbackQueryHandler(on_button, pattern=r"^(agpub|agpubv|agskip|agok|agrd|agtxt|agno|agopen|agclean):\d+"))
     app.add_handler(MessageHandler(
         filters.VOICE & filters.User(user_id=ADMIN_ID), on_voice))
