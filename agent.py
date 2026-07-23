@@ -1087,28 +1087,6 @@ Asosiy fikrlar:
 @safaroov_blog"""
 
 
-@admin_only
-async def cmd_rich_test(update, context):
-    """/rich_test — rich (maqola) formatini ADMINGA yuborib sinaydi.
-    Kanalga tegmaydi; faqat ko'rinishni tekshirish uchun."""
-    await update.message.reply_text("🧪 Rich xabar yuborilmoqda...")
-    try:
-        ok, data = await send_rich_markdown(context, ADMIN_ID, RICH_TEST_MD)
-    except Exception as e:
-        await update.message.reply_text(f"❌ So'rov xatosi: {e}")
-        return
-    if ok:
-        await update.message.reply_text(
-            "✅ Rich xabar chiqdi — yuqoridagi ko'rinishni tekshiring.\n"
-            "Sarlavha, paragraf, iqtibos, ro'yxat to'g'ri ko'rinsa — "
-            "asosiy oqimga ulaymiz.")
-    else:
-        desc = data.get("description", "noma'lum")
-        await update.message.reply_text(
-            f"❌ Rich xabar chiqmadi.\nSabab: {desc}\n\n"
-            f"To'liq javob (debug):\n{str(data)[:500]}")
-
-
 # ======================================================================
 # OVOZLI YORDAMCHI (Aisha STT + AI javob + Aisha TTS)
 # ======================================================================
@@ -1718,6 +1696,28 @@ async def cmd_requeue(update, context):
     conn.close()
     await update.message.reply_text(
         f"♻️ {n} ta maqola navbatga qaytarildi. Endi /agent_run bosing.")
+
+
+@admin_only
+async def cmd_rich_test(update, context):
+    """/rich_test — rich (maqola) formatini ADMINGA yuborib sinaydi.
+    Kanalga tegmaydi; faqat ko'rinishni tekshirish uchun."""
+    await update.message.reply_text("🧪 Rich xabar yuborilmoqda...")
+    try:
+        ok, data = await send_rich_markdown(context, ADMIN_ID, RICH_TEST_MD)
+    except Exception as e:
+        await update.message.reply_text(f"❌ So'rov xatosi: {e}")
+        return
+    if ok:
+        await update.message.reply_text(
+            "✅ Rich xabar chiqdi — yuqoridagi ko'rinishni tekshiring.\n"
+            "Sarlavha, paragraf, iqtibos, ro'yxat to'g'ri ko'rinsa — "
+            "asosiy oqimga ulaymiz.")
+    else:
+        desc = data.get("description", "noma'lum")
+        await update.message.reply_text(
+            f"❌ Rich xabar chiqmadi.\nSabab: {desc}\n\n"
+            f"To'liq javob (debug):\n{str(data)[:500]}")
 
 
 @admin_only
