@@ -1081,14 +1081,19 @@ async def _send_to_channel(context, text, image_bytes=None, rubrika=None,
 #   POST .../sendRichMessage
 #   {"chat_id": ..., "rich_message": {"markdown": "..."}}
 
+_EMOJI_BOSH = re.compile(
+    r"^[\U0001F000-\U0001FAFF\u2190-\u21FF\u2300-\u27BF\u2B00-\u2BFF\uFE0F\u200D]+\s*")
+_MANBA_RE = re.compile(r"^\s*\S{0,3}\s*Manba\s*:\s*(https?://\S+)", re.I)
+_TAG_RE = re.compile(r"#[\w\u0400-\u04FF]+")
+_KANAL_RE = re.compile(r"@\w+")
+
+
 def _rich_escape(body):
-    """Rich Markdown'da qator boshidagi '#' sarlavha belgisi hisoblanadi.
-    Hashtag ('#ai', '#uzbekiston') yo'qolmasligi uchun uni himoyalaymiz."""
+    """Qator boshidagi '#' — Rich Markdown'da sarlavha belgisi.
+    Hashtag yo'qolmasligi uchun himoyalanadi."""
     out = []
     for line in body.split("\n"):
         s = line.lstrip()
-        # "# Sarlavha" (bo'shliq bilan) — haqiqiy sarlavha, tegmaymiz.
-        # "#ai" (bo'shliqsiz) — hashtag, himoyalanadi.
         if s.startswith("#") and not re.match(r"#{1,6}\s", s):
             line = line.replace("#", "\\#", 1)
         out.append(line)
@@ -1096,21 +1101,44 @@ def _rich_escape(body):
 
 
 def post_to_rich_markdown(text, image_url=None):
-    """Oddiy post matnini (1-qator = sarlavha) rich markdown'ga o'giradi.
-    image_url berilsa — rasm sarlavha ostiga, maqola ICHIGA joylanadi."""
-    lines = text.strip().split("\n")
+    """Postni maqola ko'rinishiga keltiradi:
+        sarlavha → rasm → hashtag → matn → [Manba](havola) · @kanal
+    Emoji belgilar (💡 ✨ 📌 🔗) matndan olib tashlanadi."""
+    lines = [l.rstrip() for l in text.strip().split("\n")]
     if not lines:
-        return text.strip()
+        return ""
     title = lines[0].strip()
-    body = _rich_escape("\n".join(lines[1:]).strip())
     if not title.startswith("#"):
         title = "# " + title
-    parts = [title]
+
+    manba_url, teglar, kanal, gavda = None, [], None, []
+    for line in lines[1:]:
+        m = _MANBA_RE.match(line)
+        if m:                                   # "🔗 Manba: https://..."
+            manba_url = m.group(1).rstrip(".,;")
+            continue
+        if _TAG_RE.search(line) and _KANAL_RE.search(line) and len(line) < 100:
+            teglar = _TAG_RE.findall(line)      # "#mutolaa · @safaroov_blog"
+            kanal = _KANAL_RE.search(line).group(0)
+            continue
+        gavda.append(_EMOJI_BOSH.sub("", line))
+
+    qismlar = [title]
     if image_url:
-        parts.append(f"![]({image_url})")   # rasm bloki — alohida qator
-    if body:
-        parts.append(body)
-    return "\n\n".join(parts)
+        qismlar.append(f"![]({image_url})")
+    if teglar:                                  # hashtag matn boshida
+        qismlar.append(" ".join("\\" + t for t in teglar))
+    matn = _rich_escape("\n".join(gavda).strip())
+    if matn:
+        qismlar.append(matn)
+    oxiri = []
+    if manba_url:
+        oxiri.append(f"[Manba]({manba_url})")
+    if kanal:
+        oxiri.append(kanal)
+    if oxiri:
+        qismlar.append(" · ".join(oxiri))
+    return "\n\n".join(qismlar)
 
 
 async def tg_image_url(context, image_bytes):
