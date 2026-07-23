@@ -1812,30 +1812,32 @@ async def cmd_rich_oxirgi(update, context):
 
 @admin_only
 async def cmd_rich_rasm(update, context):
-    """/rich_rasm — oxirgi postni RASM MAQOLA ICHIDA holatda ADMINGA ko'rsatadi.
-    Kanalga CHIQMAYDI. Rasm avval Telegramga yuklanadi, undan havola olinadi."""
+    """/rich_rasm — rasm maqola ICHIDA chiqishini sinaydi (ADMINGA, kanalga emas).
+    Ochiq HTTPS havola (Pexels) ishlatiladi — Telegram o'z fayl havolasini
+    qabul qilmagani aniqlandi (RICH_MESSAGE_PHOTO_NO_MEDIA_FOUND)."""
     conn = db()
     row = conn.execute(
         "SELECT id, text FROM agent_posts ORDER BY id DESC LIMIT 1").fetchone()
+    conn.close()
     if not row:
-        conn.close()
         await update.message.reply_text("Bazada post yo'q. Avval /agent_run bosing.")
         return
     post_id, text = row
-    rubrika = _post_rubrika(conn, post_id)
-    conn.close()
 
-    await update.message.reply_text(
-        f"🧪 #{post_id} — muqova tayyorlanmoqda, keyin maqola ichiga qo'yiladi...")
-    try:
-        img = await make_card_variant(post_id, text, rubrika, 0)
-        if not img:
-            await update.message.reply_text("❌ Muqova chiqmadi (Pillow yoki limit).")
-            return
-        url = await tg_image_url(context, img)
-    except Exception as e:
-        await update.message.reply_text(f"❌ Rasm havolasini olishda xato: {e}")
+    if not PEXELS_KEY:
+        await update.message.reply_text("PEXELS_API_KEY yo'q — sinov o'tkazib bo'lmaydi.")
         return
+    await update.message.reply_text(f"🧪 #{post_id} — ochiq havolali rasm izlanmoqda...")
+    try:
+        urls = await pexels_photos(ai_photo_query(text))
+        if not urls:
+            await update.message.reply_text("❌ Pexels rasm topmadi.")
+            return
+        url = urls[0]
+    except Exception as e:
+        await update.message.reply_text(f"❌ Pexels xatosi: {e}")
+        return
+
     try:
         ok, data = await send_rich_markdown(
             context, ADMIN_ID, post_to_rich_markdown(text, image_url=url))
@@ -1844,9 +1846,11 @@ async def cmd_rich_rasm(update, context):
         return
     if ok:
         await update.message.reply_text(
-            "☝️ Rasm maqola ichida chiqdimi? Sarlavha tepada, rasm ostida, "
-            "matn eng pastda bo'lsa — aynan siz istagan ko'rinish.\n"
-            "Hashtag ham joyida ekanini tekshiring.")
+            "✅ Rasm maqola ichida chiqdi.\n\n"
+            "Demak mexanizm ishlaydi, faqat rasm ochiq havolada turishi shart.\n"
+            "Bu — Pexels fotosi (muqova yozuvisiz). Muqovali variantni ham "
+            "ichkariga qo'yish uchun rasmni ochiq joyda saqlash kerak — "
+            "buni keyingi qadamda hal qilamiz.")
     else:
         await update.message.reply_text(
             f"❌ Chiqmadi.\nSabab: {data.get('description', 'nomaʼlum')}\n\n"
