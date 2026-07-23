@@ -36,6 +36,7 @@ Nima qiladi:
   * Buyruqlar: /agent_status /agent_run /agent_pause /agent_resume /agent_sources
 """
 
+import html
 import json
 import logging
 import os
@@ -139,6 +140,8 @@ USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) AppleWebKit/537.36"
 # Rubrikalar: ai · rivojlanish · podcast · dunyo (jahon yangiliklari) · mutolaa (kitob)
 SOURCES = [
     # --- 🗞 AI va marketing ---
+    ("OpenAI",        "https://openai.com/news/rss.xml",                               "ai"),
+    ("Anthropic",     "scrape:anthropic",                                              "ai"),
     ("Google AI",     "https://blog.google/technology/ai/rss/",                        "ai"),
     ("TechCrunch AI", "https://techcrunch.com/category/artificial-intelligence/feed/", "ai"),
     ("HubSpot",       "https://blog.hubspot.com/marketing/rss.xml",                    "ai"),
@@ -1394,16 +1397,60 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ======================================================================
 # AGENT — ASOSIY OQIM
 # ======================================================================
+_ANTH_LINK_RE = re.compile(
+    r'<a[^>]+href="(/news/[^"#?]{3,})"[^>]*>(.*?)</a>', re.I | re.S)
+_TEG_RE = re.compile(r"<[^>]+>")
+_SANA_RE = re.compile(
+    r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},\s*\d{4}\b")
+_KATEG_RE = re.compile(
+    r"\b(Announcements?|Product|Policy|Research|Economic Research|Societal Impacts)\b")
+
+
+def scrape_anthropic(limit=10):
+    """Anthropic RSS chiqarmaydi — news sahifasidan maqolalarni o'qiymiz.
+    RSS yozuviga o'xshash lug'atlar ro'yxatini qaytaradi."""
+    natija, korilgan = [], set()
+    try:
+        r = httpx.get("https://www.anthropic.com/news", timeout=30,
+                      follow_redirects=True, headers={"User-Agent": USER_AGENT})
+        r.raise_for_status()
+        for yol, ichi in _ANTH_LINK_RE.findall(r.text):
+            if yol in korilgan:
+                continue
+            korilgan.add(yol)
+            matn = html.unescape(_TEG_RE.sub(" ", ichi))
+            matn = _SANA_RE.sub(" ", matn)          # "Jul 9, 2026" olib tashlanadi
+            matn = _KATEG_RE.sub(" ", matn)         # rubrika yorlig'i olib tashlanadi
+            matn = re.sub(r"\s+", " ", matn).strip()
+            slug = yol.rsplit("/", 1)[-1].replace("-", " ").capitalize()
+            sarlavha = matn[:180] if len(matn) >= 15 else slug
+            natija.append({"link": "https://www.anthropic.com" + yol,
+                           "title": sarlavha, "summary": ""})
+            if len(natija) >= limit:
+                break
+    except Exception as e:
+        log.warning("Anthropic sahifasi o'qilmadi: %s", e)
+    return natija
+
+
+SCRAPERS = {"anthropic": scrape_anthropic}
+
+
 def fetch_new_articles(conn):
-    """RSS manbalardan bazada yo'q maqolalarni 'new' holatida saqlaydi."""
+    """RSS manbalardan bazada yo'q maqolalarni 'new' holatida saqlaydi.
+    'scrape:NOM' ko'rinishidagi manba RSS emas — SCRAPERS dagi funksiya o'qiydi."""
     added = 0
     for source_name, feed_url, rubrika in SOURCES:
-        try:
-            feed = feedparser.parse(feed_url, agent=USER_AGENT)
-        except Exception as e:
-            log.warning("RSS xato (%s): %s", source_name, e)
-            continue
-        for entry in feed.entries[:10]:
+        if feed_url.startswith("scrape:"):
+            entries = SCRAPERS.get(feed_url[7:], lambda: [])()
+        else:
+            try:
+                feed = feedparser.parse(feed_url, agent=USER_AGENT)
+            except Exception as e:
+                log.warning("RSS xato (%s): %s", source_name, e)
+                continue
+            entries = feed.entries
+        for entry in entries[:10]:
             url = entry.get("link", "")
             if not url:
                 continue
