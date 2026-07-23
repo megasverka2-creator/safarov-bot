@@ -1872,12 +1872,17 @@ async def _rich_media_try(context, chat_id, markdown_text, image_bytes, media_ob
         return {"ok": False, "description": f"HTTP {r.status_code}: {r.text[:150]}"}
 
 
-# Sinaladigan variantlar: qaysi biri to'g'riligini Telegram xatosi ko'rsatadi
+# Xatodan aniqlandi: InputRichMessageMedia da "id" maydoni majburiy.
+# Endi media obyekti va markdown murojaati birga sinaladi (matritsa).
 _RICH_MEDIA_SHAPES = [
-    ("A: type+media",      {"type": "photo", "media": "attach://muqova"}),
-    ("B: name+media",      {"name": "muqova", "media": "attach://muqova"}),
-    ("C: type+name+media", {"type": "photo", "name": "muqova",
-                            "media": "attach://muqova"}),
+    ("m1 id+media",       {"id": "muqova", "media": "attach://muqova"}),
+    ("m2 id+type+media",  {"id": "muqova", "type": "photo",
+                           "media": "attach://muqova"}),
+    ("m3 id+photo",       {"id": "muqova", "photo": "attach://muqova"}),
+]
+_RICH_MEDIA_REFS = [
+    ("r1 attach", "attach://muqova"),
+    ("r2 id",     "muqova"),
 ]
 
 
@@ -1906,26 +1911,26 @@ async def cmd_rich_media(update, context):
         await update.message.reply_text(f"❌ Muqova xatosi: {e}")
         return
 
-    md = post_to_rich_markdown(text, image_url="attach://muqova")
     hisobot = []
-    for nom, shape in _RICH_MEDIA_SHAPES:
-        try:
-            res = await _rich_media_try(context, ADMIN_ID, md, img, shape)
-        except Exception as e:
-            hisobot.append(f"{nom} — so'rov xatosi: {e}")
-            continue
-        if res.get("ok"):
-            hisobot.append(f"{nom} — ✅ ISHLADI")
-            await update.message.reply_text(
-                "\n".join(hisobot) +
-                "\n\n☝️ Yuqorida brendli muqova maqola ichida chiqdi. "
-                "Shu variantni kanal oqimiga ulaymiz.")
-            return
-        hisobot.append(f"{nom} — ❌ {res.get('description', '?')}")
+    for m_nom, shape in _RICH_MEDIA_SHAPES:
+        for r_nom, ref in _RICH_MEDIA_REFS:
+            md = post_to_rich_markdown(text, image_url=ref)
+            try:
+                res = await _rich_media_try(context, ADMIN_ID, md, img, shape)
+            except Exception as e:
+                hisobot.append(f"{m_nom} + {r_nom} — so'rov xatosi: {e}")
+                continue
+            if res.get("ok"):
+                await update.message.reply_text(
+                    f"✅ ISHLADI: {m_nom} + {r_nom}\n\n"
+                    "☝️ Brendli muqova maqola ichida chiqdi. "
+                    "Shu variantni kanal oqimiga ulaymiz.")
+                return
+            hisobot.append(f"{m_nom} + {r_nom} — {res.get('description', '?')}")
 
-    await update.message.reply_text(
-        "Hech biri ishlamadi:\n\n" + "\n".join(hisobot) +
-        "\n\nBu xatolar menga yo'lni ko'rsatadi — shuni menga tashlang.")
+    matn = "Hech biri ishlamadi:\n\n" + "\n".join(hisobot)
+    await update.message.reply_text(matn[:3900] +
+                                    "\n\nShu xatolarni menga tashlang.")
 
 
 @admin_only
