@@ -285,16 +285,19 @@ _UMUMIY_QOIDALAR = """Qat'iy qoidalar:
 ko'chirma ("AI-enabled" → "AI-lekin" kabi so'zma-so'z tarjima TAQIQLANADI). \
 Yomon: "Yangi AI-lekin himoyada: Savi Security". \
 Yaxshi: "Savi Security: AI endi firibgarlardan himoya qiladi".
-4. Kompaniya, mahsulot, model nomlari asl holicha qoladi (Google, Chelsea, \
-Gemini). LEKIN sharq (arab, fors, turk) ismlari o'zbek an'anaviy shaklida \
-yoziladi, inglizcha transliteratsiya EMAS. \
-Yomon: "Abbas Araghchi", "Mohammed". Yaxshi: "Abbos Araqchi", "Muhammad". \
-G'arb ismlari asl holicha: "Donald Trump", "Xabi Alonso".
+4. Kompaniya, mahsulot, model va ODAM nomlari MANBADAGIDEK qoladi \
+(Google, Chelsea, Gemini, Mark Dowd, Abbas Araghchi). Ismni o'zbekchalashtirishga \
+URINMA — noto'g'ri o'zgartirilgan ism jiddiy xato hisoblanadi. \
+Yomon: "Mark Dowd" → "Mark Daud". \
+Faqat azaldan o'zbekcha shakli bor joy nomlari o'zbekcha yoziladi \
+(Misr, Makka, Madina, Istanbul).
 4a. VALYUTA belgisi emas, so'z bilan yoziladi. \
 Yomon: "£117 mln", "$20". Yaxshi: "117 mln funt sterling", "20 dollar".
 4b. RUSCHA-INGLIZCHA KO'CHIRMA IBORALAR TAQIQ. \
-Yomon: "bayonot yangradi" (прозвучало). Yaxshi: "bayonot e'lon qilindi". \
-Yomon: "e'tibor qaratildi" o'rniga har joyda. Yaxshi: tabiiy fe'l tanla.
+Yomon: "bayonot yangradi" (прозвучало). Yaxshi: "bayonot e'lon qilindi".
+4c. TEXNIKA ATAMALARI o'zbek texno matnlaridagidek yoziladi. \
+Yomon: "mA·soat" (ruscha мА·ч), "talqini" (versiya ma'nosida). \
+Yaxshi: "mAh", "versiyasi". Vt, GB, MP, Hz — shu holicha qoladi.
 5. Terminlar: birinchi ishlatishda o'zbekcha + qavsda asli. \
 Masalan: "katta til modeli (LLM)".
 6. Sonlar va sanalar o'zbekcha: 15-iyul, 3 mln, 40 foiz (yoki 40%).
@@ -363,9 +366,14 @@ S4) YUMSHATIB YUBORMA: manbadagi so'zning kuchi saqlansin. \
 "bostirib kirish / reyd" → "kirish" emas; "ogohlantirdi" → "bildirdi" emas; \
 "qat'iy qoraladi" → "e'tiroz bildirdi" emas.
 S5) "Nega muhim / Bu bizga nima beradi" — O'QUVCHI UCHUN KONTEKST, manba \
-jumlasining takrori EMAS. Bu yerda savolga javob ber: bu xabar O'zbekistondagi \
-o'quvchiga nima uchun ahamiyatli? Agar aytadigan yangi gap bo'lmasa, bu qatorni \
-umuman yozma.
+jumlasining takrori EMAS. Bu yerda YANGI ma'lumot bo'lishi shart: oqibat, \
+miqyos, O'zbekistonga aloqasi yoki keyingi kutilayotgan qadam. \
+TEKSHIR: bu qatordagi gap sarlavha yoki yuqoridagi paragrafda allaqachon \
+aytilganmi? Aytilgan bo'lsa — qatorni butunlay O'CHIR, takrorlama. \
+Yomon (sarlavha "Belarusda ishlash taklif qilindi"): "Bu nimani anglatadi: \
+o'zbekistonliklar Belarusda ish topish imkoniga ega". \
+Yaxshi: "Bu nimani anglatadi: taklif rasmiy shartnoma asosida, ya'ni mehnat \
+huquqlari himoyalangan bo'ladi" (agar manbada shunday deyilgan bo'lsa).
 S6) Post o'qilgach o'quvchi quyidagilarga javob topa olsin: NIMA bo'ldi? KIM \
 qildi? QAChON? NATIJA yoki TALAB nima? Bittasi yo'q bo'lsa — post qayta yoziladi.
 
@@ -655,12 +663,18 @@ B. TIL TAHRIRI:
 8. Mavhum ot aniq harakat o'rnida turmasin ("voqea", "holat", "vaziyat").
 9. Ruscha-inglizcha ko'chirmalar: "yangradi" (прозвучало) → "e'lon qilindi"; \
 "issiq to'lqinlar" → "jazirama issiq".
-10. Sharq ismlari o'zbekcha an'anaviy shaklda: "Araghchi" → "Araqchi", \
-"Muhammad" inglizcha "Mohammed" emas. G'arb ismlari asl holicha qoladi.
+10. ISMLAR MANBADAGIDEK qolsin — o'zbekchalashtirma. \
+Yomon: "Mark Dowd" → "Mark Daud". Ism buzilishi jiddiy xato.
 11. Valyuta so'z bilan: "£117 mln" → "117 mln funt sterling"; "$20" → \
 "20 dollar"; "€5 mln" → "5 mln yevro".
 12. O'zbek o'quvchisiga notanish o'lchov birligi qavsda tushuntirilsin \
 (bushel, funt, gallon, akr, barrel).
+13. Texnika atamalari: "mA·soat" → "mAh"; "talqini" (versiya ma'nosida) → \
+"versiyasi". Vt, GB, MP, Hz — shu holicha.
+14. KOMPANIYA VA TASHKILOT NOMI tushib qolmasin: manbada aniq kompaniya \
+aytilgan bo'lsa, postda ham aytilsin. \
+Yomon: "AI cheklovlari" (kim cheklagani noma'lum). \
+Yaxshi: "OpenAI va Anthropic cheklovlari".
 
 TEGMA: emoji, qatorlar tartibi, havolalar, hashtag, manba nomi, kompaniya va \
 mahsulot nomlari (Google, Chelsea, Gemini — asl holicha).
@@ -700,6 +714,22 @@ TEGMA: emoji, tuzilma (qatorlar tartibi), havolalar, hashtag, manba nomi, \
 raqamlar, atoqli otlar (kompaniya/odam/tashabbus nomlari asl holicha).
 FAQAT tuzatilgan matnni qaytar, izohsiz."""
 
+_MANBA_QATOR_RE = re.compile(r"^.*Manba\s*:\s*https?://\S+.*$", re.M)
+_IMZO_QATOR_RE = re.compile(r"^.*#[\w\u0400-\u04FF]+.*@\w+.*$", re.M)
+
+
+def _qatorlarni_tikla(asl, yangi):
+    """Tahrirchi manba yoki hashtag/kanal imzosini o'chirib yuborsa — qaytaradi.
+    Promptga ishonmaymiz: bu qatorlar postning majburiy qismi."""
+    for regex in (_MANBA_QATOR_RE, _IMZO_QATOR_RE):
+        m = regex.search(asl)
+        if m and not regex.search(yangi):
+            yangi = yangi.rstrip() + "\n\n" + m.group(0).strip()
+            log.warning("Tahrirchi qatorni o'chirgan, tiklandi: %s",
+                        m.group(0).strip()[:60])
+    return yangi
+
+
 def ai_polish(conn, post_text, article_text=None):
     """Ikkinchi o'tish — tahrirchi.
     Manba matni berilsa, tahrirchi postni MANBA BILAN SOLISHTIRIB tekshiradi:
@@ -721,6 +751,7 @@ def ai_polish(conn, post_text, article_text=None):
             messages=[{"role": "system", "content": sys_prompt},
                       {"role": "user", "content": user}])
         polished = resp.choices[0].message.content.strip()
+        polished = _qatorlarni_tikla(post_text, polished)
         # Himoya: tahrirchi tuzilmani buzsa (juda qisqarib/uzayib ketsa) — aslini qoldir
         if 0.6 < len(polished) / max(len(post_text), 1) < 1.4:
             return polished
