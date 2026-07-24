@@ -67,6 +67,7 @@ from telegram import (
 )
 from telegram.ext import (
     Application,
+    ApplicationHandlerStop,
     CommandHandler,
     CallbackQueryHandler,
     MessageHandler,
@@ -146,7 +147,12 @@ SOURCES = [
     ("Anthropic",     "scrape:anthropic",                                              "ai"),
     ("Google AI",     "https://blog.google/technology/ai/rss/",                        "ai"),
     ("TechCrunch AI", "https://techcrunch.com/category/artificial-intelligence/feed/", "ai"),
-    ("HubSpot",       "https://blog.hubspot.com/marketing/rss.xml",                    "ai"),
+    # --- 📈 SMM va marketing (@marketing_bysafarov) ---
+    ("HubSpot",       "https://blog.hubspot.com/marketing/rss.xml",                    "smm"),
+    ("Social Media Today", "https://www.socialmediatoday.com/feeds/news/",             "smm"),
+    ("Buffer",        "https://buffer.com/resources/rss/",                             "smm"),
+    ("Sprout Social", "https://sproutsocial.com/insights/feed/",                       "smm"),
+    ("TechCrunch Social", "https://techcrunch.com/category/social/feed/",              "smm"),
     # --- 🌱 Shaxsiy rivojlanish ---
     ("Farnam Street", "https://fs.blog/feed/",                                         "rivojlanish"),
     ("Mark Manson",   "https://markmanson.net/feed",                                   "rivojlanish"),
@@ -180,12 +186,13 @@ SOURCES = [
 ]
 
 RUBRIKA_EMOJI = {"ai": "🗞", "rivojlanish": "🌱", "podcast": "🎧",
-                 "dunyo": "🌍", "mutolaa": "📚", "uzb": "🇺🇿", "sport": "⚽", "texno": "📱", "islom": "🕌"}
+                 "dunyo": "🌍", "mutolaa": "📚", "uzb": "🇺🇿", "sport": "⚽", "texno": "📱", "islom": "🕌", "smm": "📈"}
 RUBRIKA_NOMI = {"ai": "AI va marketing", "rivojlanish": "Shaxsiy rivojlanish",
                 "podcast": "Podcast va video", "dunyo": "Dunyo yangiliklari",
                 "mutolaa": "Kitob va mutolaa",
                 "uzb": "O'zbekiston", "sport": "Sport", "texno": "Texno olami",
-                "islom": "Islom olami"}
+                "islom": "Islom olami",
+                "smm": "SMM va marketing"}
 
 log = logging.getLogger("agent")
 
@@ -607,6 +614,33 @@ Shablon (kvadrat qavslarni o'z matning bilan almashtir):
 🔗 Manba: {url}
 
 #islomolami · @safaroov_blog""",
+
+    "smm": """Sen @marketing_bysafarov kanali muharririsan. Auditoriya — SMM va \
+marketing MUTAXASSISLARI (havaskorlar emas).
+
+Shu kanalning uslubi:
+- Sarlavhada EMOJI YO'Q. Sarlavha — qisqa, tasdiqlovchi gap (40-60 belgi): \
+nima bo'lganini aytadi. Yomon: "SMM haqida qiziq yangilik". \
+Yaxshi: "LinkedIn post vaqti: 4,8 mln post tahlili".
+- Asosni tushuntirma: SMM nima, algoritm qanday ishlaydi — auditoriya biladi. \
+Darrov mohiyatga o't.
+- RAQAM VA SANA majburiy: platforma nomi, tadqiqot hajmi, o'zgarish sanasi.
+- "Nega muhim" o'rniga "Nima qilish kerak" — mutaxassisga AMAL kerak, kontekst \
+emas. Bu qatorda aniq qadam bo'lsin: nimani o'zgartirsin, nimani sinab ko'rsin.
+- Imkon bo'lsa O'zbekiston bozoriga bog'la (vaqt mintaqasi, mahalliy \
+platformalar), lekin manbada yo'q narsani TO'QIMA.
+""" + _UMUMIY_QOIDALAR + """
+Shablon (kvadrat qavslarni o'z matning bilan almashtir):
+
+[Sarlavha — emojisiz, qisqa, tasdiqlovchi gap]
+
+[2-4 gap: nima aniqlandi yoki o'zgardi — raqam va manba nomi bilan]
+
+Nima qilish kerak: [1-2 gap — aniq amaliy qadam]
+
+🔗 Manba: {url}
+
+#marketing · @marketing_bysafarov""",
 }
 
 
@@ -872,12 +906,41 @@ async def tts_generate(text):
 
 
 def draft_keyboard(post_id):
-    """Post-nomzod tugmalari. Aisha kaliti bo'lsa 🎙 ham chiqadi."""
-    row = [InlineKeyboardButton("✅ Kanalga", callback_data=f"agpub:{post_id}")]
+    """Post-nomzod tugmalari. Aisha kaliti bo'lsa 🎙 ham chiqadi.
+    ✍️ Fikr — admin o'z qarashini qo'shadi (eng kuchli ta'sir ko'rsatkichi)."""
+    row = [InlineKeyboardButton("✅ Kanalga", callback_data=f"agpub:{post_id}"),
+           InlineKeyboardButton("✍️ Fikr", callback_data=f"agfikr:{post_id}")]
     if AISHA_API_KEY:
         row.append(InlineKeyboardButton("🎙 Ovozli", callback_data=f"agpubv:{post_id}"))
     row.append(InlineKeyboardButton("❌", callback_data=f"agskip:{post_id}"))
     return InlineKeyboardMarkup([row])
+
+
+# Admin fikr yozishini kutish holati: {admin_id: post_id}
+_fikr_kutilmoqda = {}
+
+
+def matnga_fikr_qosh(matn, fikr):
+    """Admin fikrini postga qo'shadi — manba qatoridan OLDIN, alohida xatboshi.
+    Oxiriga savol qo'yiladi (savol bo'lmasa), chunki savol qatnashuvni oshiradi."""
+    fikr = fikr.strip()
+    if not fikr:
+        return matn
+    if not fikr.endswith("?"):
+        fikr += "\n\nSiz nima deb o'ylaysiz?"
+    qatorlar = matn.rstrip().split("\n")
+    # manba yoki imzo qatorini topamiz — fikr o'shalardan oldin turadi
+    joy = len(qatorlar)
+    for i, q in enumerate(qatorlar):
+        if _MANBA_QATOR_RE.match(q) or _IMZO_QATOR_RE.match(q):
+            joy = i
+            break
+    bosh = "\n".join(qatorlar[:joy]).rstrip()
+    qoldiq = "\n".join(qatorlar[joy:]).strip()
+    natija = f"{bosh}\n\n{fikr}"
+    if qoldiq:
+        natija += f"\n\n{qoldiq}"
+    return natija
 
 
 # ======================================================================
@@ -2014,12 +2077,63 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # --- ❌ O'tkazib yuborish ---
+    if action == "agfikr":
+        _fikr_kutilmoqda[query.from_user.id] = post_id
+        await query.answer()
+        await context.bot.send_message(
+            chat_id=query.from_user.id,
+            text=("✍️ Shu postga o'z fikringizni yozing (2-3 jumla).\n\n"
+                  "Nima diqqatingizni tortdi, nega muhim deb bilasiz — "
+                  "o'z so'zingiz bilan.\n\n"
+                  "Bekor qilish uchun: /bekor"))
+        conn.close()
+        return
+
     if action == "agskip":
         conn.execute("UPDATE agent_posts SET status='skipped' WHERE id=?", (post_id,))
         conn.commit()
         await query.answer("O'tkazib yuborildi.")
         await query.edit_message_text(f"❌ O'TKAZILDI\n\n{text}")
     conn.close()
+
+
+async def cmd_bekor(update, context):
+    """/bekor — fikr yozishni bekor qiladi."""
+    if update.effective_user is None or update.effective_user.id != ADMIN_ID:
+        return
+    if _fikr_kutilmoqda.pop(update.effective_user.id, None):
+        await update.message.reply_text("Bekor qilindi.")
+    else:
+        await update.message.reply_text("Kutilayotgan ish yo'q.")
+
+
+async def on_fikr_text(update, context):
+    """Admin ✍️ Fikr bosgandan keyin yozgan matnni postga qo'shadi.
+    Kutilmayotgan bo'lsa — hech narsa qilmaydi, xabar boshqa modullarga o'tadi."""
+    uid = update.effective_user.id if update.effective_user else None
+    post_id = _fikr_kutilmoqda.get(uid)
+    if post_id is None:
+        return                      # bu bizga tegishli emas
+    fikr = (update.message.text or "").strip()
+    if not fikr:
+        return
+    _fikr_kutilmoqda.pop(uid, None)
+
+    conn = db()
+    row = conn.execute("SELECT text FROM agent_posts WHERE id=?", (post_id,)).fetchone()
+    if not row:
+        conn.close()
+        await update.message.reply_text("Post topilmadi (o'chirilgan bo'lishi mumkin).")
+        raise ApplicationHandlerStop
+    yangi = matnga_fikr_qosh(row[0], fikr)
+    conn.execute("UPDATE agent_posts SET text=? WHERE id=?", (yangi, post_id))
+    conn.commit()
+    conn.close()
+
+    await update.message.reply_text(
+        f"✍️ Fikringiz qo'shildi:\n\n{yangi}",
+        reply_markup=draft_keyboard(post_id))
+    raise ApplicationHandlerStop
 
 
 # ======================================================================
@@ -2362,7 +2476,13 @@ def register(app: Application):
     app.add_handler(CommandHandler("rich_oxirgi", cmd_rich_oxirgi))
     app.add_handler(CommandHandler("rich_rasm", cmd_rich_rasm))
     app.add_handler(CommandHandler("rich_media", cmd_rich_media))
-    app.add_handler(CallbackQueryHandler(on_button, pattern=r"^(agpub|agpubv|agskip|agok|agrd|agtxt|agno|agopen|agclean):\d+"))
+    app.add_handler(CommandHandler("bekor", cmd_bekor))
+    app.add_handler(CallbackQueryHandler(on_button, pattern=r"^(agpub|agpubv|agskip|agok|agrd|agtxt|agno|agopen|agclean|agfikr):\d+"))
+    # Fikr matni: group=-1 — ustoz.py dagi matn ishlovchisidan OLDIN ishlaydi.
+    # Kutilmayotgan paytda hech narsa qilmaydi, xabar odatdagidek o'tib ketadi.
+    app.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND & filters.User(user_id=ADMIN_ID),
+        on_fikr_text), group=-1)
     app.add_handler(MessageHandler(
         filters.VOICE & filters.User(user_id=ADMIN_ID), on_voice))
 
