@@ -285,7 +285,16 @@ _UMUMIY_QOIDALAR = """Qat'iy qoidalar:
 ko'chirma ("AI-enabled" → "AI-lekin" kabi so'zma-so'z tarjima TAQIQLANADI). \
 Yomon: "Yangi AI-lekin himoyada: Savi Security". \
 Yaxshi: "Savi Security: AI endi firibgarlardan himoya qiladi".
-4. Kompaniya, mahsulot, model va odam nomlari asl holicha qoladi.
+4. Kompaniya, mahsulot, model nomlari asl holicha qoladi (Google, Chelsea, \
+Gemini). LEKIN sharq (arab, fors, turk) ismlari o'zbek an'anaviy shaklida \
+yoziladi, inglizcha transliteratsiya EMAS. \
+Yomon: "Abbas Araghchi", "Mohammed". Yaxshi: "Abbos Araqchi", "Muhammad". \
+G'arb ismlari asl holicha: "Donald Trump", "Xabi Alonso".
+4a. VALYUTA belgisi emas, so'z bilan yoziladi. \
+Yomon: "£117 mln", "$20". Yaxshi: "117 mln funt sterling", "20 dollar".
+4b. RUSCHA-INGLIZCHA KO'CHIRMA IBORALAR TAQIQ. \
+Yomon: "bayonot yangradi" (прозвучало). Yaxshi: "bayonot e'lon qilindi". \
+Yomon: "e'tibor qaratildi" o'rniga har joyda. Yaxshi: tabiiy fe'l tanla.
 5. Terminlar: birinchi ishlatishda o'zbekcha + qavsda asli. \
 Masalan: "katta til modeli (LLM)".
 6. Sonlar va sanalar o'zbekcha: 15-iyul, 3 mln, 40 foiz (yoki 40%).
@@ -612,6 +621,53 @@ def ai_score(conn, title, summary, rubrika=None):
         return 0
 
 
+POLISH_SOURCE_LIMIT = 2000     # tahrirchiga beriladigan manba qismi (belgi)
+
+EDIT_PROMPT_SOURCE = """Sen o'zbek nashrining MAS'UL MUHARRIRISAN. Senga ikki \
+matn beriladi: inglizcha MANBA va uning asosida yozilgan O'ZBEKCHA POST. \
+Vazifang — postni manba bilan solishtirib, xatolarini tuzatish.
+
+A. FAKT TEKSHIRUVI (birinchi navbatda):
+1. RAQAMLAR: summa, foiz, sana, miqdor, muddat manbaga mos keladimi? Mos \
+kelmasa — manbadagisiga to'g'rila.
+2. ISM VA NOMLAR: kim nima qilgani chalkashib ketmaganmi? Tashkilot nomi \
+to'g'rimi?
+3. TUSHIB QOLGAN KALIT SO'Z: manbadagi ma'noni o'zgartiradigan so'z postda \
+bormi? Masalan "consecutive" (ketma-ket), "warned" (ogohlantirdi), "urged" \
+(chaqirdi), "denied" (rad etdi), "alleged" (da'vo qilinmoqda), "may/could" \
+(mumkin). Bunday so'z tushib qolgan bo'lsa — QAYTA KIRIT.
+4. SARLAVHA xabarning o'zagini aks ettiradimi? Manbadagi asosiy jihat \
+sarlavhada yo'q bo'lsa — sarlavhani to'g'rila. \
+Yomon: "13-kecha zarba berdi" (ketma-ketlik yo'qolgan). \
+Yaxshi: "ketma-ket 13-kecha zarba berdi".
+5. MANBADA YO'Q narsa qo'shilganmi? Qo'shilgan bo'lsa — o'chir.
+6. KUCHI YUMSHATILGANMI? "raid/incursion" → "kirish" emas, "bostirib kirish"; \
+"condemned" → "e'tiroz bildirdi" emas, "qoraladi".
+
+B. TIL TAHRIRI:
+1. Noto'g'ri so'z yasalishi: "Uganda ayolasi" → "ugandalik ayol".
+2. Joy nomlarida ortiqcha apostrof: "Uganda'da" → "Ugandada".
+3. "Ushbu", "mazkur" → "bu"; "hisoblanadi" → tushirib qoldir.
+4. Idoraviy fe'llar: "amalga oshirmoqda" → "qilmoqda".
+5. Bir jumlada ikkita "uchun"/"tomonidan" — qayta tuz.
+6. 20 so'zdan uzun jumlani bo'l.
+7. Sarlavha "-gani/-ekani/-ligi" bilan tugamasin.
+8. Mavhum ot aniq harakat o'rnida turmasin ("voqea", "holat", "vaziyat").
+9. Ruscha-inglizcha ko'chirmalar: "yangradi" (прозвучало) → "e'lon qilindi"; \
+"issiq to'lqinlar" → "jazirama issiq".
+10. Sharq ismlari o'zbekcha an'anaviy shaklda: "Araghchi" → "Araqchi", \
+"Muhammad" inglizcha "Mohammed" emas. G'arb ismlari asl holicha qoladi.
+11. Valyuta so'z bilan: "£117 mln" → "117 mln funt sterling"; "$20" → \
+"20 dollar"; "€5 mln" → "5 mln yevro".
+12. O'zbek o'quvchisiga notanish o'lchov birligi qavsda tushuntirilsin \
+(bushel, funt, gallon, akr, barrel).
+
+TEGMA: emoji, qatorlar tartibi, havolalar, hashtag, manba nomi, kompaniya va \
+mahsulot nomlari (Google, Chelsea, Gemini — asl holicha).
+MUHIM: postni qayta yozma, uzaytirma — faqat xato joyini tuzat.
+FAQAT tuzatilgan post matnini qaytar, izohsiz."""
+
+
 EDIT_PROMPT = """Sen o'zbek tilining professional muharririsan. Quyida Telegram \
 post berilgan. Vazifang: MAZMUNIGA TEGMASDAN faqat TILINI tuzatish.
 
@@ -644,16 +700,26 @@ TEGMA: emoji, tuzilma (qatorlar tartibi), havolalar, hashtag, manba nomi, \
 raqamlar, atoqli otlar (kompaniya/odam/tashabbus nomlari asl holicha).
 FAQAT tuzatilgan matnni qaytar, izohsiz."""
 
-def ai_polish(conn, post_text):
-    """Ikkinchi o'tish: tayyor postni faqat til jihatidan tozalaydi."""
+def ai_polish(conn, post_text, article_text=None):
+    """Ikkinchi o'tish — tahrirchi.
+    Manba matni berilsa, tahrirchi postni MANBA BILAN SOLISHTIRIB tekshiradi:
+    raqam, ism, sana, tushib qolgan kalit so'z. Bu qo'shimcha API chaqiruvi
+    emas — bir so'rov ichida ko'proq matn beriladi, kunlik limitga tegmaydi."""
     if api_calls_today(conn) >= MAX_API_CALLS_PER_DAY:
         return post_text
     try:
         api_call_inc(conn)
+        if article_text:
+            sys_prompt = EDIT_PROMPT_SOURCE
+            user = (f"=== MANBA (asl matn) ===\n{article_text[:POLISH_SOURCE_LIMIT]}\n\n"
+                    f"=== O'ZBEKCHA POST ===\n{post_text}")
+        else:
+            sys_prompt = EDIT_PROMPT
+            user = post_text
         resp = ai_client().chat.completions.create(
-            model=MODEL_SMART, max_completion_tokens=700,
-            messages=[{"role": "system", "content": EDIT_PROMPT},
-                      {"role": "user", "content": post_text}])
+            model=MODEL_SMART, max_completion_tokens=900,
+            messages=[{"role": "system", "content": sys_prompt},
+                      {"role": "user", "content": user}])
         polished = resp.choices[0].message.content.strip()
         # Himoya: tahrirchi tuzilmani buzsa (juda qisqarib/uzayib ketsa) — aslini qoldir
         if 0.6 < len(polished) / max(len(post_text), 1) < 1.4:
@@ -677,7 +743,8 @@ def ai_write_post(conn, url, article_text, rubrika="ai"):
         ],
     )
     draft = resp.choices[0].message.content.strip()
-    draft = ai_polish(conn, draft)   # ikkinchi o'tish: til tahriri
+    # ikkinchi o'tish: tahrirchi manba bilan solishtirib tekshiradi
+    draft = ai_polish(conn, draft, article_text)
     # Rubrika boshqa kanalga chiqsa — imzo ham o'sha kanalniki
     chan = RUBRIKA_CHANNELS.get(rubrika)
     if chan:
