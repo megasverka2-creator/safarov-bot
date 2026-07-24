@@ -335,11 +335,39 @@ L) "...bo'yicha" ulagichi idoraviy — imkon boricha tushirib qoldir. \
 Yomon: "don eksporti bo'yicha xavotirlar kuchaydi". \
 Yaxshi: "don eksportidan xavotir kuchaydi".
 
+MAZMUNGA SODIQLIK (eng muhim bo'lim — buzilsa post yaroqsiz):
+S1) HARAKAT EGASI DOIM KO'RSATILADI: kim, kimga/nimaga, qachon qildi. \
+Mavhum ot bilan almashtirish TAQIQ ("voqea", "holat", "vaziyat", "hodisa", \
+"ma'lum bir tomon"). \
+Yomon: "Sakkiz davlat masjid hududidagi voqeani qoraladi". \
+Yaxshi: "Sakkiz davlat tashqi ishlar vaziri isroilliklarning Al-Aqso \
+masjidiga ommaviy kirishini qoraladi".
+S2) MANBADAGI ASOSIY TALAB, RAQAM YOKI XULOSA TUSHIRILMAYDI. Postni qisqartirish \
+mumkin, lekin xabarning o'zagini olib tashlab bo'lmaydi. Agar bayonotda aniq \
+talab bo'lsa (masalan, biror huquqni tan olishga chaqiriq) — u yoziladi.
+S3) BETARAFLIK = NISBAT BERISH, o'chirish emas. Baholovchi so'zlarni o'zingdan \
+yozma, lekin tomonning so'zini nisbat bilan keltir. \
+Yomon: baholovchi so'zni butunlay olib tashlash. \
+Yomon: "Bu noqonuniy harakat" (o'zingdan baho). \
+Yaxshi: "Bayonotda bu harakat 'noqonuniy va ekstremistik' deb atalgan".
+S4) YUMSHATIB YUBORMA: manbadagi so'zning kuchi saqlansin. \
+"bostirib kirish / reyd" → "kirish" emas; "ogohlantirdi" → "bildirdi" emas; \
+"qat'iy qoraladi" → "e'tiroz bildirdi" emas.
+S5) "Nega muhim / Bu bizga nima beradi" — O'QUVCHI UCHUN KONTEKST, manba \
+jumlasining takrori EMAS. Bu yerda savolga javob ber: bu xabar O'zbekistondagi \
+o'quvchiga nima uchun ahamiyatli? Agar aytadigan yangi gap bo'lmasa, bu qatorni \
+umuman yozma.
+S6) Post o'qilgach o'quvchi quyidagilarga javob topa olsin: NIMA bo'ldi? KIM \
+qildi? QAChON? NATIJA yoki TALAB nima? Bittasi yo'q bo'lsa — post qayta yoziladi.
+
 O'Z-O'ZINI TEKSHIRISH (majburiy yakuniy qadam): postni yozib bo'lgach, har \
 jumlani ovoz chiqarib o'qiyotgandek tekshir: (1) o'zbek suhbatida shunday \
 deyiladimi? (2) bitta jumlada ikki "uchun"/"tomonidan"/"ushbu" yo'qmi? \
-(3) jumla 20 so'zdan oshmadimi? Muammoli jumlani QAYTA yoz, keyin yakuniy \
-matnni qaytar.
+(3) jumla 20 so'zdan oshmadimi? (4) harakat egasi aniqmi — "kim nima qildi" \
+ko'rinib turibdimi, mavhum ot bilan almashtirilmaganmi? (5) manbadagi asosiy \
+talab, raqam yoki xulosa saqlanganmi? (6) manbada bo'lmagan tafsilot \
+qo'shilmaganmi? Muammoli jumlani QAYTA yoz, keyin yakuniy matnni qaytar.
+
 FAQAT tayyor post matnini qaytar, izohsiz."""
 
 POST_PROMPTS = {
@@ -537,6 +565,11 @@ ENG QAT'IY TALABLAR (bu rubrika uchun alohida mas'uliyat):
 ko'rsatmasi, oyat-hadis talqini YOZMA — faqat voqea faktlari.
 - Mazhab, oqim va davlatlararo bahslarda MUTLAQO betaraf tur: hech bir \
 tomonni qo'llama, ayblama, baholama. Ichki nizolarni qo'zg'aydigan ohang TAQIQ.
+- LEKIN BETARAFLIK — FAKTNI O'CHIRISH EMAS. Kim nima qilgani, qachon va qayerda \
+bo'lgani ANIQ yoziladi. Baho beruvchi so'zlar faqat nisbat bilan keltiriladi \
+("bayonotda ... deb atalgan", "vazirlar ... deb hisoblaydi"). Voqeani "hodisa", \
+"vaziyat" kabi mavhum so'z bilan almashtirish TAQIQ — o'quvchi nima bo'lganini \
+tushunmay qolsa, post vazifasini bajarmagan bo'ladi.
 - Muqaddas tushunchalar haqida faqat hurmatli shakllarda yoz.
 - Diniy sanalar (Ramazon, hayit boshlanishi kabi) faqat manbada rasmiy e'lon \
 sifatida kelgan bo'lsa yoziladi, taxmin qilinmaydi.
@@ -599,6 +632,13 @@ yoqilg'i" → "pista ko'mir".
 keltir.
 9. Sarlavha "-gani/-ekani/-ligi" bilan tugagan bo'lsa, tugallangan shaklga \
 keltir: "muammo ekani" → "muammo ekan" yoki "— muammo".
+10. MAVHUMLIK: agar sarlavha yoki matnda "voqea", "holat", "vaziyat", "hodisa" \
+kabi mavhum so'z aniq harakat o'rniga ishlatilgan bo'lsa va matnning o'zida \
+aniqrog'i bor bo'lsa — o'shanga almashtir. Matnda ham aniqlik bo'lmasa, \
+tegma (o'zingdan fakt QO'SHMA).
+11. Kuchini yo'qotgan fe'llarni tikla: "bildirdi" → manbada ogohlantirish \
+bo'lsa "ogohlantirdi"; "e'tiroz bildirdi" → qoralash bo'lsa "qoraladi". \
+Bunda faqat matnning o'zidagi ma'noga tayan.
 
 TEGMA: emoji, tuzilma (qatorlar tartibi), havolalar, hashtag, manba nomi, \
 raqamlar, atoqli otlar (kompaniya/odam/tashabbus nomlari asl holicha).
