@@ -132,7 +132,9 @@ MODEL = MODEL_FAST  # eski nom bilan moslik
 MIN_SCORE = 6                  # nomzodlik chegarasi (siz baribir qo'lda tanlaysiz)
 MAX_POSTS_PER_DAY = 12         # kunlik post-nomzodlar (5 rubrika uchun)
 MAX_PER_RUBRIKA = 2            # bitta yo'nalish kunni bosib ketmasligi uchun
-MAX_API_CALLS_PER_DAY = 150    # 15 manba uchun; baribir kuniga ~$0.03 atrofida
+MAX_API_CALLS_PER_DAY = int(os.environ.get("MAX_API_CALLS_PER_DAY", "150"))
+# Railway Variables orqali oshirish mumkin. To'plamli saralashdan keyin
+# 150 odatda yetadi; kerak bo'lsa 300 qilinsa ham xarajat kuniga bir necha sent.
 SCORING_RESERVE = MAX_POSTS_PER_DAY  # post yozish uchun doim zaxira chaqiruv qoladi
 ARTICLE_CHAR_LIMIT = 8000
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) AppleWebKit/537.36"
@@ -627,6 +629,52 @@ def ai_score(conn, title, summary, rubrika=None):
         return int(json.loads(resp.choices[0].message.content).get("score", 0))
     except (json.JSONDecodeError, ValueError, TypeError):
         return 0
+
+
+SCORE_BATCH = 10      # bitta so'rovda nechta maqola baholanadi
+
+
+def ai_score_batch(conn, items):
+    """Bir nechta maqolani BITTA so'rovda baholaydi — chaqiruvni ~10 barobar tejaydi.
+    items: [(url, title, summary, rubrika), ...]
+    Qaytaradi: {url: ball}. Xato bo'lsa bo'sh lug'at (chaqiruvchi tomon hal qiladi)."""
+    if not items:
+        return {}
+    if api_calls_today(conn) >= MAX_API_CALLS_PER_DAY:
+        return None
+    api_call_inc(conn)
+    satrlar = []
+    for i, (_, title, summary, rubrika) in enumerate(items, 1):
+        satrlar.append(f"[{i}] Rubrika: {rubrika or 'nomaʼlum'}\n"
+                       f"Sarlavha: {title}\n"
+                       f"Annotatsiya: {summary[:400]}")
+    sov = ("Quyidagi materiallarni birma-bir bahola. Har biri uchun alohida ball ber.\n\n"
+           + "\n\n".join(satrlar) +
+           '\n\nJavobni shu ko\'rinishda qaytar: {"ballar": [{"n": 1, "score": 7}, ...]}'
+           "\nHar bir raqam uchun bittadan ball bo'lishi shart.")
+    try:
+        resp = ai_client().chat.completions.create(
+            model=MODEL,
+            response_format={"type": "json_object"},
+            max_completion_tokens=60 * len(items) + 100,
+            messages=[
+                {"role": "system", "content": SCORE_PROMPT},
+                {"role": "user", "content": sov},
+            ],
+        )
+        data = json.loads(resp.choices[0].message.content)
+    except Exception as e:
+        log.warning("To'plamli saralash xatosi: %s", e)
+        return {}
+    natija = {}
+    for el in (data.get("ballar") or []):
+        try:
+            n = int(el.get("n", 0))
+            if 1 <= n <= len(items):
+                natija[items[n - 1][0]] = int(el.get("score", 0))
+        except (TypeError, ValueError):
+            continue
+    return natija
 
 
 POLISH_SOURCE_LIMIT = 2000     # tahrirchiga beriladigan manba qismi (belgi)
@@ -1648,19 +1696,30 @@ async def run_agent(context: ContextTypes.DEFAULT_TYPE):
     log.info("Agent: yangi maqolalar %d", added)
 
     # --- Bosqich A: saralash ('new' navbatidan; post yozish uchun zaxira qoladi) ---
+    # To'plamli baholash: 10 tadan bitta so'rovda — API chaqiruvini ~10 barobar tejaydi.
     queue = conn.execute(
         "SELECT url, title, COALESCE(summary,''), COALESCE(rubrika,'ai') "
         "FROM agent_articles "
         "WHERE status='new' ORDER BY seen_at DESC LIMIT 30").fetchall()
-    for url, title, summary, rubrika in queue:
+    for i in range(0, len(queue), SCORE_BATCH):
         if api_calls_today(conn) >= MAX_API_CALLS_PER_DAY - SCORING_RESERVE:
             log.info("Saralash to'xtadi — zaxira limitiga yetildi, qolgani ertaga.")
             break
-        score = ai_score(conn, title, summary, rubrika)
-        if score is None:
+        bolak = queue[i:i + SCORE_BATCH]
+        ballar = ai_score_batch(conn, bolak)
+        if ballar is None:          # kunlik limit tugadi
             break
-        conn.execute("UPDATE agent_articles SET score=?, status='scored' WHERE url=?",
-                     (score, url))
+        for url, title, summary, rubrika in bolak:
+            score = ballar.get(url)
+            if score is None:       # to'plamda tushib qolgan bo'lsa — bittalab
+                if api_calls_today(conn) >= MAX_API_CALLS_PER_DAY - SCORING_RESERVE:
+                    break
+                score = ai_score(conn, title, summary, rubrika)
+                if score is None:
+                    break
+            conn.execute(
+                "UPDATE agent_articles SET score=?, status='scored' WHERE url=?",
+                (score, url))
     conn.commit()
 
     # --- Bosqich B: nomzodlar (har rubrikadan ko'pi bilan MAX_PER_RUBRIKA ta) ---
