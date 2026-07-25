@@ -131,8 +131,14 @@ MODEL_FAST = os.environ.get("AI_MODEL_FAST", "gpt-5.4-nano")
 MODEL_SMART = os.environ.get("AI_MODEL_SMART", "gpt-5.6-luna")
 MODEL = MODEL_FAST  # eski nom bilan moslik
 MIN_SCORE = 6                  # nomzodlik chegarasi (siz baribir qo'lda tanlaysiz)
-MAX_POSTS_PER_DAY = 12         # kunlik post-nomzodlar (5 rubrika uchun)
-MAX_PER_RUBRIKA = 2            # bitta yo'nalish kunni bosib ketmasligi uchun
+MAX_POSTS_PER_DAY = int(os.environ.get("MAX_POSTS_PER_DAY", "12"))
+# Vaqtincha o'chirilgan rubrikalar (Railway: RUBRIKA_OFF=dunyo,uzb,sport,smm).
+# O'chirilgan rubrika: RSS ham o'qilmaydi, saralanmaydi, post ham yozilmaydi —
+# ya'ni API xarajati to'liq to'xtaydi. Kanal va manbalar joyida qoladi.
+RUBRIKA_OFF = {r.strip().lower() for r in
+               os.environ.get("RUBRIKA_OFF", "").split(",") if r.strip()}
+MAX_PER_RUBRIKA = int(os.environ.get("MAX_PER_RUBRIKA", "2"))
+# 1 qilinsa — har rubrikadan kuniga bittadan nomzod (xarajat ~2 barobar kam)
 MAX_API_CALLS_PER_DAY = int(os.environ.get("MAX_API_CALLS_PER_DAY", "150"))
 # Railway Variables orqali oshirish mumkin. To'plamli saralashdan keyin
 # 150 odatda yetadi; kerak bo'lsa 300 qilinsa ham xarajat kuniga bir necha sent.
@@ -250,6 +256,19 @@ def api_calls_today(conn):
 
 def api_call_inc(conn):
     meta_set(conn, "api_calls", api_calls_today(conn) + 1)
+
+
+def posts_today(conn):
+    """Bugun yozilgan post-nomzodlar soni (kunlik, run bo'yicha emas)."""
+    today = date.today().isoformat()
+    if meta_get(conn, "post_day") != today:
+        meta_set(conn, "post_day", today)
+        meta_set(conn, "post_count", "0")
+    return int(meta_get(conn, "post_count", "0"))
+
+
+def post_inc(conn):
+    meta_set(conn, "post_count", posts_today(conn) + 1)
 
 
 # ======================================================================
@@ -1717,6 +1736,8 @@ def fetch_new_articles(conn):
     'scrape:NOM' ko'rinishidagi manba RSS emas — SCRAPERS dagi funksiya o'qiydi."""
     added = 0
     for source_name, feed_url, rubrika in SOURCES:
+        if rubrika in RUBRIKA_OFF:      # vaqtincha o'chirilgan — o'qilmaydi ham
+            continue
         if feed_url.startswith("scrape:"):
             entries = SCRAPERS.get(feed_url[7:], lambda: [])()
         else:
@@ -1760,10 +1781,11 @@ async def run_agent(context: ContextTypes.DEFAULT_TYPE):
 
     # --- Bosqich A: saralash ('new' navbatidan; post yozish uchun zaxira qoladi) ---
     # To'plamli baholash: 10 tadan bitta so'rovda — API chaqiruvini ~10 barobar tejaydi.
-    queue = conn.execute(
+    queue = [r for r in conn.execute(
         "SELECT url, title, COALESCE(summary,''), COALESCE(rubrika,'ai') "
         "FROM agent_articles "
-        "WHERE status='new' ORDER BY seen_at DESC LIMIT 30").fetchall()
+        "WHERE status='new' ORDER BY seen_at DESC LIMIT 60").fetchall()
+        if r[3] not in RUBRIKA_OFF][:30]
     for i in range(0, len(queue), SCORE_BATCH):
         if api_calls_today(conn) >= MAX_API_CALLS_PER_DAY - SCORING_RESERVE:
             log.info("Saralash to'xtadi — zaxira limitiga yetildi, qolgani ertaga.")
@@ -1790,17 +1812,26 @@ async def run_agent(context: ContextTypes.DEFAULT_TYPE):
         "SELECT url, title, source, score, COALESCE(summary,''), "
         "COALESCE(rubrika,'ai') FROM agent_articles "
         "WHERE status='scored' AND score>=? "
-        "ORDER BY score DESC, seen_at DESC LIMIT 30",
+        "ORDER BY score DESC, seen_at DESC LIMIT 60",
         (MIN_SCORE,)).fetchall()
     sent_count = 0
+    # Kunlik chegara: MAX_POSTS_PER_DAY endi HAQIQATAN kunlik (run bo'yicha emas)
+    qoldiq = MAX_POSTS_PER_DAY - posts_today(conn)
+    if qoldiq <= 0:
+        log.info("Kunlik post chegarasi to'ldi (%d) — qolgani ertaga.",
+                 MAX_POSTS_PER_DAY)
+        conn.close()
+        return 0
     candidates, taken = [], {}
     for row in rows:
         rub = row[5]
+        if rub in RUBRIKA_OFF:          # vaqtincha o'chirilgan rubrika
+            continue
         if taken.get(rub, 0) >= MAX_PER_RUBRIKA:
             continue
         taken[rub] = taken.get(rub, 0) + 1
         candidates.append(row)
-        if len(candidates) >= MAX_POSTS_PER_DAY:
+        if len(candidates) >= qoldiq:
             break
     log.info("Nomzodlar: %d (%s)", len(candidates), taken)
 
@@ -1820,6 +1851,7 @@ async def run_agent(context: ContextTypes.DEFAULT_TYPE):
             conn.execute("UPDATE agent_articles SET status='posted' WHERE url=?", (url,))
             conn.commit()
             post_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+            post_inc(conn)
             emoji = RUBRIKA_EMOJI.get(rubrika, "📬")
             nomi = RUBRIKA_NOMI.get(rubrika, rubrika)
             await context.bot.send_message(
@@ -2156,8 +2188,11 @@ async def cmd_status(update, context):
     drafts = conn.execute("SELECT COUNT(*) FROM agent_posts WHERE status='draft'").fetchone()[0]
     pub = conn.execute("SELECT COUNT(*) FROM agent_posts WHERE status='published'").fetchone()[0]
     calls = api_calls_today(conn)
+    bugun_post = posts_today(conn)
     paused = meta_get(conn, "paused") == "1"
     conn.close()
+    ochiq = [r for r in RUBRIKA_NOMI if r not in RUBRIKA_OFF]
+    ochirilgan = ", ".join(sorted(RUBRIKA_OFF)) if RUBRIKA_OFF else "yo'q"
     await update.message.reply_text(
         f"📊 Agent holati\n"
         f"Holat: {'⏸ pauzada' if paused else '▶️ ishlamoqda'}\n"
@@ -2165,7 +2200,11 @@ async def cmd_status(update, context):
         f"Kutayotgan postlar: {drafts}\n"
         f"Jami chiqarilgan: {pub}\n"
         f"Bugungi API chaqiruvlar: {calls}/{MAX_API_CALLS_PER_DAY}\n"
-        f"Taxminiy bugungi xarajat: ~${calls * 0.001:.3f}")
+        f"Bugungi postlar: {bugun_post}/{MAX_POSTS_PER_DAY}\n"
+        f"Taxminiy bugungi xarajat: ~${calls * 0.008:.3f}\n\n"
+        f"Faol rubrikalar: {len(ochiq)} ta\n"
+        f"⏹ O'chirilgan: {ochirilgan}\n"
+        f"Har rubrikadan kuniga: {MAX_PER_RUBRIKA} ta")
 
 
 @admin_only
