@@ -2447,6 +2447,8 @@ async def cmd_sources(update, context):
 # BUYRUQLAR MENYUSI (Telegram'da avtomatik ko'rinadi)
 # ======================================================================
 PUBLIC_COMMANDS = [
+    BotCommand("zikr",    "📿 Zikr eslatmasini yoqish"),
+    BotCommand("zikr_off","🔕 Zikr eslatmasini to'xtatish"),
     BotCommand("start",   "🏠 Bosh menyu"),
     BotCommand("konkurs", "🏆 Konkurs haqida"),
     BotCommand("raqam",   "🔢 Konkursdagi raqamim"),
@@ -2455,6 +2457,8 @@ PUBLIC_COMMANDS = [
     BotCommand("kanallar","📣 Kanallarimiz"),
 ]
 ADMIN_COMMANDS = [
+    BotCommand("zikr",          "📿 Zikr eslatmasini yoqish"),
+    BotCommand("zikr_off",      "🔕 Zikr eslatmasini to'xtatish"),
     BotCommand("panel",         "🏛 BOSHQARUV PANELI — hammasi shu yerda"),
     BotCommand("postlar",       "📥 Kutayotgan postlar ro'yxati"),
     BotCommand("agent_run",     "🔍 Agentni hozir ishga tushirish"),
