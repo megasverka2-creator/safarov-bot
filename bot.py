@@ -795,6 +795,12 @@ async def on_webapp_data(update, context):
                 f"Yo'nalish: {role}\n\nIsm/yosh: {name}\nSabab: {reason}", reply_markup=kb)
         await update.message.reply_text("✅ Arizangiz qabul qilindi! Tez orada bog'lanamiz. Rahmat! 🤝")
 
+    elif action == "zikr":
+        await zikr.cmd_zikr(update, context)
+
+    elif action == "zikr_off":
+        await zikr.cmd_zikr_off(update, context)
+
     elif action == "k2":
         await k2_join(update, context)
 
