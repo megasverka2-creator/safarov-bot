@@ -523,6 +523,9 @@ async def start(update, context):
     user = update.effective_user
     track_user(user)
     args = context.args
+    if args and args[0] == "zikr":
+        await zikr.cmd_zikr(update, context)
+        return
     if args and args[0] == "k2":
         await k2_join(update, context)
         return

@@ -2457,6 +2457,7 @@ PUBLIC_COMMANDS = [
 ADMIN_COMMANDS = [
     BotCommand("zikr",          "📿 Zikr eslatmasini yoqish"),
     BotCommand("zikr_off",      "🔕 Zikr eslatmasini to'xtatish"),
+    BotCommand("zikr_elon",     "📿 Kanalga zikr banneri"),
     BotCommand("panel",         "🏛 BOSHQARUV PANELI — hammasi shu yerda"),
     BotCommand("postlar",       "📥 Kutayotgan postlar ro'yxati"),
     BotCommand("agent_run",     "🔍 Agentni hozir ishga tushirish"),

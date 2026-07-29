@@ -19,6 +19,7 @@ import logging
 import os
 import random
 import sqlite3
+from io import BytesIO
 from datetime import datetime, date, time as dtime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -31,10 +32,16 @@ from telegram.ext import (
     ContextTypes,
 )
 
+try:  # Pillow — kanal banneri uchun. Bo'lmasa modul banner'siz ishlayveradi.
+    from PIL import Image, ImageDraw, ImageFont, ImageFilter
+except Exception:
+    Image = None
+
 log = logging.getLogger(__name__)
 TZ = ZoneInfo("Asia/Tashkent")
 
 DB_PATH = os.path.join(os.environ.get("DATA_DIR", "."), "zikr.db")
+ADMIN_ID = int(os.environ.get("ADMIN_ID", "0") or "0")
 
 # Kuniga nechta eslatma
 PER_DAY = int(os.environ.get("ZIKR_PER_DAY", "3"))
@@ -325,6 +332,91 @@ async def job_tekshir(context: ContextTypes.DEFAULT_TYPE):
 
 
 # ======================================================================
+# KANAL BANNERI — /zikr_elon
+# ======================================================================
+CHANNEL_ID = os.environ.get("CHANNEL_ID", "@safaroov_blog")
+BOT_USERNAME = os.environ.get("BOT_USERNAME", "safarovblog_bot")
+
+_FONT_B = ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+           "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+           "/System/Library/Fonts/Supplemental/Arial Bold.ttf"]
+_FONT_R = ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+           "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+           "/System/Library/Fonts/Supplemental/Arial.ttf"]
+
+
+def _fnt(paths, size):
+    for p in paths:
+        if os.path.exists(p):
+            try:
+                return ImageFont.truetype(p, size)
+            except Exception:
+                pass
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:
+        return ImageFont.load_default()
+
+
+def make_banner():
+    """Kanal uchun banner (1280x720). Mini App bilan bir xil binafsha-lavanda uslub.
+    Arabcha matn QO'YILMAYDI — Pillow arab harflarini to'g'ri ulamaydi."""
+    if Image is None:
+        return None
+    W, H = 1280, 720
+    LAV, LAV_DIM = (210, 195, 246), (150, 138, 182)
+    img = Image.new("RGB", (W, H), (15, 10, 28))
+    d = ImageDraw.Draw(img)
+    for y in range(H):                     # yumshoq vertikal gradient
+        t = y / H * 0.75
+        d.line([(0, y), (W, y)],
+               fill=(int(15 + 39 * t), int(10 + 27 * t), int(28 + 64 * t)))
+    glow = Image.new("RGB", (W, H), (0, 0, 0))
+    g = ImageDraw.Draw(glow)
+    g.ellipse([W * .52, -H * .35, W * 1.25, H * .72], fill=(75, 51, 132))
+    g.ellipse([-W * .15, H * .45, W * .38, H * 1.35], fill=(54, 37, 92))
+    img = Image.blend(img, glow.filter(ImageFilter.GaussianBlur(150)), 0.5)
+
+    d = ImageDraw.Draw(img)
+    d.text((90, 250), "ZIKR HALQASI", font=_fnt(_FONT_B, 86), fill=LAV)
+    f34 = _fnt(_FONT_R, 34)
+    d.text((94, 372), "Kun davomida uch marta qisqa eslatma", font=f34, fill=LAV)
+    d.text((94, 420), "Vaqti tasodifiy. Xohlagan payt to'xtatasiz.",
+           font=f34, fill=LAV_DIM)
+    d.line([(94, 540), (320, 540)], fill=LAV, width=2)
+    d.text((94, 566), CHANNEL_ID, font=_fnt(_FONT_R, 26), fill=LAV_DIM)
+
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+async def cmd_zikr_elon(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/zikr_elon — kanalga banner + tugma joylaydi (faqat admin).
+    DIQQAT: kanal postida Mini App tugmasi ishlamaydi, shuning uchun
+    havola tugmasi qo'yiladi — u botni ochib, zikrni darrov yoqadi."""
+    if update.effective_user is None or update.effective_user.id != ADMIN_ID:
+        return
+    rasm = make_banner()
+    if rasm is None:
+        await update.message.reply_text("Pillow yo'q — banner yasab bo'lmadi.")
+        return
+    tugma = InlineKeyboardMarkup([[InlineKeyboardButton(
+        "Zikr halqasiga qo'shilish",
+        url=f"https://t.me/{BOT_USERNAME}?start=zikr")]])
+    matn = ("Zikr halqasi\n\n"
+            "Botimizda kun davomida qisqa zikr eslatmalari keladi.")
+    try:
+        await context.bot.send_photo(chat_id=CHANNEL_ID, photo=rasm,
+                                     caption=matn, reply_markup=tugma)
+        await update.message.reply_text(f"Banner {CHANNEL_ID} ga joylandi.")
+    except Exception as e:
+        await update.message.reply_text(
+            f"Joylab bo'lmadi: {e}\n\n"
+            f"Bot {CHANNEL_ID} da 'Post messages' huquqli admin ekanini tekshiring.")
+
+
+# ======================================================================
 # RO'YXATGA OLISH
 # ======================================================================
 def register(app: Application):
@@ -332,6 +424,7 @@ def register(app: Application):
     init_db()
     app.add_handler(CommandHandler("zikr", cmd_zikr))
     app.add_handler(CommandHandler("zikr_off", cmd_zikr_off))
+    app.add_handler(CommandHandler("zikr_elon", cmd_zikr_elon))
     app.add_handler(CallbackQueryHandler(on_aytdim, pattern=r"^zikr_ok$"))
 
     jq = getattr(app, "job_queue", None)
