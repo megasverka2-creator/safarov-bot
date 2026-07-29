@@ -674,13 +674,16 @@ async def stats(update, context):
                     f"Yetib boradi: <b>{len(users) - blocked}</b>") if blocked else \
                    "\n🚫 Bloklaganlar: <i>aniqlash uchun /tekshir bosing</i>"
 
+    konkurs_line = (f"🏆 Konkurs ishtirokchilari: <b>{parts}</b>{top_line}\n"
+                    if parts else "")
+
     await update.message.reply_text(
         f"📊 <b>Statistika</b>\n\n"
         f"👥 Jami foydalanuvchi: <b>{len(users)}</b>{blocked_line}\n"
         f"🟢 Bugun faol: <b>{active}</b> · Haftada: <b>{active7}</b>\n"
         f"🆕 Haftada yangi: <b>{week_new}</b>\n"
         f"🤝 Jamoaga arizalar: <b>{len(apps)}</b>\n"
-        f"🏆 Konkurs ishtirokchilari: <b>{parts}</b>{top_line}\n"
+        f"{konkurs_line}"
         f"🧩 Testlar: <b>{q_made}</b> yaratilgan · <b>{q_played}</b> o'ynalgan\n\n"
         f"📈 <b>Yangi foydalanuvchilar (7 kun):</b>\n"
         f"<pre>{chart}</pre>\n\n"
@@ -1241,6 +1244,37 @@ async def k2_elon(update, context):
             f"Bot @{K2_POST_CHANNEL} da 'Post Messages' huquqli admin ekanini tekshiring.")
 
 
+async def k1_reset(update, context):
+    """ /reset1 — 1-Mini Konkurs natijalarini tozalaydi.
+    Ma'lumot yo'qolmasin: avval arxiv faylga saqlanadi. """
+    if update.effective_user.id != ADMIN_ID:
+        return
+    users = load_json(USERS_FILE, {})
+    ishtirokchi = {uid: {"name": u.get("name", ""), "points": u.get("points", 0)}
+                   for uid, u in users.items() if u.get("points", 0) > 0}
+    if not ishtirokchi:
+        await update.message.reply_text("Tozalanadigan natija yo'q — allaqachon bo'sh.")
+        return
+
+    arxiv_yol = os.path.join(DATA_DIR, "konkurs1_arxiv.json")
+    arxiv = load_json(arxiv_yol, [])
+    arxiv.append({"sana": time.strftime("%Y-%m-%d %H:%M"),
+                  "natijalar": ishtirokchi})
+    save_json(arxiv_yol, arxiv)
+
+    for uid in ishtirokchi:
+        users[uid]["points"] = 0
+    save_json(USERS_FILE, users)
+
+    eng = max(ishtirokchi.values(), key=lambda x: x["points"])
+    await update.message.reply_text(
+        f"♻️ 1-Mini Konkurs tozalandi.\n\n"
+        f"• {len(ishtirokchi)} ishtirokchi ochkosi nolga qaytdi\n"
+        f"• Yetakchi edi: {eng['name']} ({eng['points']} ochko)\n"
+        f"• Natijalar konkurs1_arxiv.json ga saqlandi\n\n"
+        f"Endi /stats da konkurs qatori ko'rinmaydi.")
+
+
 async def k2_reset(update, context):
     """ /reset2 — admin konkursni toza holatga qaytaradi (raqamlar 1 dan boshlanadi). """
     if update.effective_user.id != ADMIN_ID:
@@ -1369,6 +1403,7 @@ def main():
     app.add_handler(CommandHandler("raqam", k2_cmd))
     app.add_handler(CommandHandler("elon2", k2_elon))
     app.add_handler(CommandHandler("reset2", k2_reset))
+    app.add_handler(CommandHandler("reset1", k1_reset))
     app.add_handler(CommandHandler("golib2", k2_golib))
     app.add_handler(CallbackQueryHandler(on_gen, pattern="^gen:"))
     app.add_handler(CallbackQueryHandler(on_contest_cb, pattern="^con_"))
