@@ -47,17 +47,21 @@ HOUR_TO = int(os.environ.get("ZIKR_TO", "22"))
 # ZIKR RO'YXATI — qat'iy, AI tegmaydi
 # ======================================================================
 ZIKRLAR = [
-    ("الحمد لله", "Alhamdulillah"),
-    ("سبحان الله", "Subhanallah"),
-    ("الله أكبر", "Allahu Akbar"),
-    ("أستغفر الله", "Astaghfirullah"),
-    ("لا إله إلا الله محمد رسول الله",
-     "la Ilaha Illa Allah Muhammad Rasul Allah"),
+    ("الحمد لله", "Alhamdulillah",
+     "Barcha maqtov — hamd Allohnikidir!"),
+    ("سبحان الله", "Subhanalloh",
+     "Alloh pok va benuqsondir!"),
+    ("الله أكبر", "Allohu Akbar",
+     "Alloh eng buyukdir!"),
+    ("أستغفر الله", "Astag'firulloh",
+     "Allohdan mag'firat so'rayman!"),
+    ("لا إله إلا الله محمد رسول الله", "La ilaha illalloh, Muhammadur Rasululloh",
+     "Allohdan o'zga iloh yo'q, Muhammad Uning elchisidir!"),
 ]
 
 
-def zikr_matni(arab, lotin):
-    return f"Ayting:\n\n{arab}\n{lotin}"
+def zikr_matni(arab, lotin, mano):
+    return f"{arab}\n\n«{lotin} ({mano})», deb ayting."
 
 
 # ======================================================================
@@ -299,10 +303,11 @@ async def job_tekshir(context: ContextTypes.DEFAULT_TYPE):
     tugma = InlineKeyboardMarkup(
         [[InlineKeyboardButton("Aytdim", callback_data="zikr_ok")]])
     for uid, t in navbat:
-        arab, lotin = random.choice(ZIKRLAR)
+        arab, lotin, mano = random.choice(ZIKRLAR)
         try:
             await context.bot.send_message(
-                chat_id=uid, text=zikr_matni(arab, lotin), reply_markup=tugma)
+                chat_id=uid, text=zikr_matni(arab, lotin, mano),
+                reply_markup=tugma)
         except Forbidden:
             # bloklagan — ro'yxatdan chiqadi
             conn.execute("UPDATE zikr_users SET active=0 WHERE uid=?", (uid,))
