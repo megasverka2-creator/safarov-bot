@@ -2450,8 +2450,6 @@ PUBLIC_COMMANDS = [
     BotCommand("zikr",    "📿 Zikr eslatmasini yoqish"),
     BotCommand("zikr_off","🔕 Zikr eslatmasini to'xtatish"),
     BotCommand("start",   "🏠 Bosh menyu"),
-    BotCommand("konkurs", "🏆 Konkurs haqida"),
-    BotCommand("raqam",   "🔢 Konkursdagi raqamim"),
     BotCommand("sinov",   "🧩 Bilim testi"),
     BotCommand("shaxs",   "🧠 Shaxsiyat testi"),
     BotCommand("kanallar","📣 Kanallarimiz"),
@@ -2469,17 +2467,10 @@ ADMIN_COMMANDS = [
     BotCommand("tekshir",       "🔎 Bloklaganlarni aniqlash"),
     BotCommand("xabar",         "📢 Hammaga xabar yuborish"),
     BotCommand("agent_status",  "📊 Agent holati"),
-    BotCommand("rich_test",     "🧪 Rich (maqola) format sinovi"),
-    BotCommand("rich_oxirgi",   "🧪 Oxirgi postni rich formatda ko'rish"),
-    BotCommand("rich_rasm",     "🧪 Rasm maqola ichida sinovi"),
-    BotCommand("rich_media",    "🧪 Muqova maqola ichida (havolasiz)"),
     BotCommand("agent_sources", "📡 Agent manbalari"),
     BotCommand("agent_requeue", "♻️ Maqolalarni navbatga qaytarish"),
     BotCommand("agent_pause",   "⏸ Agentni to'xtatish"),
     BotCommand("agent_resume",  "▶️ Agentni davom ettirish"),
-    BotCommand("elon2",  "📚 Konkurs e'lonini joylash"),
-    BotCommand("golib2", "🎉 Konkurs g'olibini tanlash"),
-    BotCommand("reset2", "🧹 Konkursni tozalash"),
 ] + PUBLIC_COMMANDS
 
 
