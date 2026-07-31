@@ -358,11 +358,12 @@ def _fnt(paths, size):
         return ImageFont.load_default()
 
 
-def make_banner():
+def make_banner(kanal=None):
     """Kanal uchun banner (1280x720). Mini App bilan bir xil binafsha-lavanda uslub.
     Arabcha matn QO'YILMAYDI — Pillow arab harflarini to'g'ri ulamaydi."""
     if Image is None:
         return None
+    kanal = kanal or CHANNEL_ID
     W, H = 1280, 720
     LAV, LAV_DIM = (210, 195, 246), (150, 138, 182)
     img = Image.new("RGB", (W, H), (15, 10, 28))
@@ -384,7 +385,7 @@ def make_banner():
     d.text((94, 420), "Vaqti tasodifiy. Xohlagan payt to'xtatasiz.",
            font=f34, fill=LAV_DIM)
     d.line([(94, 540), (320, 540)], fill=LAV, width=2)
-    d.text((94, 566), CHANNEL_ID, font=_fnt(_FONT_R, 26), fill=LAV_DIM)
+    d.text((94, 566), kanal, font=_fnt(_FONT_R, 26), fill=LAV_DIM)
 
     buf = BytesIO()
     img.save(buf, format="PNG")
@@ -392,28 +393,38 @@ def make_banner():
 
 
 async def cmd_zikr_elon(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/zikr_elon — kanalga banner + tugma joylaydi (faqat admin).
+    """/zikr_elon [@kanal] — kanalga banner + tugma joylaydi (faqat admin).
+    Kanal ko'rsatilmasa CHANNEL_ID ga tushadi.
+      /zikr_elon                 -> @safaroov_blog
+      /zikr_elon @Sutuur_uz      -> o'sha kanalga
     DIQQAT: kanal postida Mini App tugmasi ishlamaydi, shuning uchun
     havola tugmasi qo'yiladi — u botni ochib, zikrni darrov yoqadi."""
     if update.effective_user is None or update.effective_user.id != ADMIN_ID:
         return
-    rasm = make_banner()
+    kanal = (context.args[0] if context.args else CHANNEL_ID).strip()
+    if not kanal.startswith("@") and not kanal.startswith("-"):
+        kanal = "@" + kanal
+
+    rasm = make_banner(kanal)
     if rasm is None:
         await update.message.reply_text("Pillow yo'q — banner yasab bo'lmadi.")
         return
     tugma = InlineKeyboardMarkup([[InlineKeyboardButton(
-        "Zikr halqasiga qo'shilish",
+        "ZIKRNI YOQISH ✅",
         url=f"https://t.me/{BOT_USERNAME}?start=zikr")]])
     matn = ("Zikr halqasi\n\n"
             "Botimizda kun davomida qisqa zikr eslatmalari keladi.")
     try:
-        await context.bot.send_photo(chat_id=CHANNEL_ID, photo=rasm,
+        await context.bot.send_photo(chat_id=kanal, photo=rasm,
                                      caption=matn, reply_markup=tugma)
-        await update.message.reply_text(f"Banner {CHANNEL_ID} ga joylandi.")
+        await update.message.reply_text(
+            f"Banner {kanal} ga joylandi.\n\n"
+            f"Endi o'sha postni PIN qiling — shunda tugma yuqoridagi "
+            f"panelda doim ko'rinib turadi.")
     except Exception as e:
         await update.message.reply_text(
             f"Joylab bo'lmadi: {e}\n\n"
-            f"Bot {CHANNEL_ID} da 'Post messages' huquqli admin ekanini tekshiring.")
+            f"Bot {kanal} da 'Post messages' huquqli admin ekanini tekshiring.")
 
 
 # ======================================================================
