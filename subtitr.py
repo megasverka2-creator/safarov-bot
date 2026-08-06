@@ -26,8 +26,16 @@ import shutil
 import subprocess
 import tempfile
 
-from telegram import Update
-from telegram.ext import Application, MessageHandler, ContextTypes, filters
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    Application,
+    ApplicationHandlerStop,
+    CallbackQueryHandler,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
+)
 
 log = logging.getLogger(__name__)
 
@@ -39,7 +47,15 @@ MAX_SECONDS = int(os.environ.get("SUBTITR_MAX_SEC", "300"))  # 5 daqiqa
 MAX_LINE = int(os.environ.get("SUBTITR_LINE", "24"))  # bir ko'rinishdagi belgi
 FONT_SIZE = int(os.environ.get("SUBTITR_FONT_SIZE", "12"))  # qat'iy, masshtablanmaydi
 FONTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
+BRAND = os.environ.get("SUBTITR_BRAND", "@safaroov_blog")   # videodagi yozuv
+KANAL = os.environ.get("CHANNEL_ID", "@safaroov_blog")      # qaysi kanalga
 FONT_NAME = os.environ.get("SUBTITR_FONT", "Liberation Sans")
+
+_FONT_YOLLARI = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+]
 
 _client = None
 
@@ -274,12 +290,144 @@ def _kuydir(video_yol, srt_yol, chiqish_yol):
     filtr = f"subtitles={nom}:force_style='{uslub}'"
     if os.path.isdir(FONTS_DIR):      # repodagi fonts/ papkasidan shrift olinadi
         filtr += f":fontsdir={FONTS_DIR}"
+    brend_shrift = next((f for f in _FONT_YOLLARI if os.path.exists(f)), None)
+    if BRAND and brend_shrift:        # kanal nomi — yuqori chapda, yarim shaffof
+        matn = BRAND.replace("'", "").replace(":", "")
+        filtr += (f",drawtext=fontfile='{brend_shrift}':text='{matn}'"
+                  f":fontcolor=white@0.55:fontsize=h/38:x=w*0.045:y=h*0.055"
+                  f":shadowcolor=black@0.4:shadowx=1:shadowy=1")
     r = subprocess.run(
         ["ffmpeg", "-i", video_yol, "-vf", filtr,
          "-c:a", "copy", "-preset", "veryfast", "-y", chiqish_yol],
         capture_output=True, text=True, cwd=papka)
     if r.returncode != 0:
         raise RuntimeError(f"Subtitr kuydirilmadi: {r.stderr[-300:]}")
+
+
+MAQOLA_PROMPT = """Sen o'zbek Telegram kanalining muharririsan. Senga video \
+nutqining o'zbekcha tarjimasi beriladi. Undan qisqa KANAL POSTI yoz.
+
+QOIDALAR:
+1. Sarlavha — qisqa, tasdiqlovchi gap (40-60 belgi). Emoji YO'Q. \
+Videoning eng kuchli fikrini aks ettirsin.
+2. 2-3 gap: nutqda nima aytilgani. Kim gapiryapti — agar matndan aniq \
+bo'lsa, ismini yoz.
+3. Oxirida bitta qator: "Nima qilish kerak:" — o'quvchi uchun amaliy xulosa. \
+Agar aytadigan yangi gap bo'lmasa, bu qatorni umuman yozma.
+4. Jonli, tabiiy o'zbek tili. Kitobiy iboralar taqiq: "ushbu", "mazkur", \
+"hisoblanadi", "amalga oshirmoqda".
+5. Matnda YO'Q narsani qo'shma. To'qima fakt, to'qima iqtibos TAQIQ.
+6. Ismlar va kompaniya nomlari asl holicha (Mark Zuckerberg, Alphabet).
+
+JAVOB — faqat post matni, izohsiz. Shu tuzilmada:
+
+[Sarlavha]
+
+[2-3 gap]
+
+Nima qilish kerak: [bir gap]"""
+
+
+def _maqola_yoz(tarjima_matni):
+    """Tarjimadan kanal posti yasaydi."""
+    r = ai().chat.completions.create(
+        model=MODEL_SMART, max_completion_tokens=500,
+        messages=[{"role": "system", "content": MAQOLA_PROMPT},
+                  {"role": "user", "content": tarjima_matni[:6000]}])
+    return (r.choices[0].message.content or "").strip()
+
+
+def _post_matni(maqola, kanal):
+    """Post oxiriga hashtag va kanal imzosini qo'shadi."""
+    maqola = maqola.strip()
+    if "#" not in maqola.split("\n")[-1]:
+        maqola += f"\n\n#video · {kanal}"
+    return maqola
+
+
+# --- Qoralamalar: {id: {file_id, matn, kanal}} ---
+_qoralama = {}
+_kutilmoqda = {}          # {admin_id: (draft_id, "fikr" yoki "tahrir")}
+_navbat = [0]
+
+
+def _qoralama_tugmalari(qid):
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Kanalga", callback_data=f"vpub:{qid}"),
+        InlineKeyboardButton("✍️ Fikr", callback_data=f"vfikr:{qid}"),
+    ], [
+        InlineKeyboardButton("✏️ Tahrir", callback_data=f"vtah:{qid}"),
+        InlineKeyboardButton("❌ Bekor", callback_data=f"vno:{qid}"),
+    ]])
+
+
+async def on_video_tugma(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    amal, qid = q.data.split(":", 1)
+    d = _qoralama.get(qid)
+    if not d:
+        await q.answer("Qoralama topilmadi (bot qayta ishga tushgan).",
+                       show_alert=True)
+        return
+
+    if amal == "vno":
+        _qoralama.pop(qid, None)
+        await q.answer("Bekor qilindi.")
+        await q.edit_message_text("❌ BEKOR QILINDI")
+        return
+
+    if amal in ("vfikr", "vtah"):
+        _kutilmoqda[q.from_user.id] = (qid, "fikr" if amal == "vfikr" else "tahrir")
+        await q.answer()
+        matn = ("✍️ Fikringizni yozing (2-3 jumla) — u post oxiriga qo'shiladi."
+                if amal == "vfikr" else
+                "✏️ Post matnini to'liq qayta yozib yuboring.")
+        await context.bot.send_message(chat_id=q.from_user.id,
+                                       text=matn + "\n\nBekor qilish: /bekor")
+        return
+
+    if amal == "vpub":
+        kanal = d["kanal"]
+        try:
+            await context.bot.send_video(
+                chat_id=kanal, video=d["file_id"],
+                caption=_post_matni(d["matn"], kanal)[:1024])
+            _qoralama.pop(qid, None)
+            await q.answer("Kanalga chiqdi ✅")
+            await q.edit_message_text(f"✅ {kanal} GA CHIQDI\n\n{d['matn']}")
+        except Exception as e:
+            await q.answer(f"Xato: {e}", show_alert=True)
+
+
+async def on_qoralama_matn(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Fikr yoki tahrir matnini qabul qiladi."""
+    uid = update.effective_user.id if update.effective_user else None
+    holat = _kutilmoqda.get(uid)
+    if not holat:
+        return                       # bizga tegishli emas — o'tib ketsin
+    qid, turi = holat
+    d = _qoralama.get(qid)
+    matn = (update.message.text or "").strip()
+    if not matn:
+        return
+    _kutilmoqda.pop(uid, None)
+    if not d:
+        await update.message.reply_text("Qoralama topilmadi.")
+        raise ApplicationHandlerStop
+
+    if turi == "tahrir":
+        d["matn"] = matn
+    else:
+        qoshimcha = matn if matn.endswith("?") else matn + "\n\nSiz nima deb o'ylaysiz?"
+        d["matn"] = d["matn"].rstrip() + "\n\n" + qoshimcha
+    await update.message.reply_text(
+        f"Yangilandi:\n\n{d['matn']}", reply_markup=_qoralama_tugmalari(qid))
+    raise ApplicationHandlerStop
+
+
+async def cmd_bekor(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user and _kutilmoqda.pop(update.effective_user.id, None):
+        await update.message.reply_text("Bekor qilindi.")
 
 
 # ======================================================================
@@ -344,13 +492,33 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await holat.edit_text("📤 Yuborilmoqda...")
         with open(chiqish, "rb") as f:
-            await msg.reply_video(video=f, caption="O'zbekcha subtitr bilan")
+            yuborilgan = await msg.reply_video(
+                video=f, caption="O'zbekcha subtitr bilan")
         with open(srt_yol, "rb") as f:
             await msg.reply_document(document=f, filename="subtitr.srt",
                                      caption="Montaj uchun subtitr fayli")
 
         toliq = " ".join(uz)
-        await msg.reply_text("📄 To'liq tarjima:\n\n" + toliq[:3800])
+        await holat.edit_text("📰 Kanal posti tayyorlanmoqda...")
+        try:
+            maqola = await asyncio.to_thread(_maqola_yoz, toliq)
+        except Exception as e:
+            log.warning("Maqola yozilmadi: %s", e)
+            maqola = ""
+
+        file_id = None
+        if yuborilgan and yuborilgan.video:
+            file_id = yuborilgan.video.file_id
+
+        if maqola and file_id:
+            _navbat[0] += 1
+            qid = str(_navbat[0])
+            _qoralama[qid] = {"file_id": file_id, "matn": maqola, "kanal": KANAL}
+            await msg.reply_text(
+                f"📰 KANAL POSTI ({KANAL})\n\n{maqola}",
+                reply_markup=_qoralama_tugmalari(qid))
+        else:
+            await msg.reply_text("📄 To'liq tarjima:\n\n" + toliq[:3800])
         await holat.delete()
 
     except Exception as e:
@@ -371,5 +539,13 @@ def register(app: Application):
     app.add_handler(MessageHandler(
         (filters.VIDEO | filters.Document.VIDEO) & filters.User(user_id=ADMIN_ID),
         on_video))
+    app.add_handler(CallbackQueryHandler(
+        on_video_tugma, pattern=r"^(vpub|vfikr|vtah|vno):"))
+    app.add_handler(CommandHandler("bekor", cmd_bekor), group=-2)
+    # group=-2 — agent.py dagi matn ishlovchisidan (group=-1) OLDIN ishlaydi.
+    # Kutilmayotgan paytda hech narsaga aralashmaydi.
+    app.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND & filters.User(user_id=ADMIN_ID),
+        on_qoralama_matn), group=-2)
     log.info("Subtitr moduli yoqildi (ffmpeg: %s)",
              "bor" if ffmpeg_bor() else "YO'Q")
