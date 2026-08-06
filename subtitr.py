@@ -36,8 +36,9 @@ MODEL_SMART = os.environ.get("AI_MODEL_SMART", "gpt-5.6-terra")
 STT_MODEL = os.environ.get("AI_MODEL_STT", "whisper-1")   # vaqt belgisi beradi
 
 MAX_SECONDS = int(os.environ.get("SUBTITR_MAX_SEC", "300"))  # 5 daqiqa
-MAX_LINE = int(os.environ.get("SUBTITR_LINE", "34"))  # qatordagi belgi
-FONT_SIZE = int(os.environ.get("SUBTITR_FONT_SIZE", "15"))  # qat'iy, masshtablanmaydi
+MAX_LINE = int(os.environ.get("SUBTITR_LINE", "24"))  # bir ko'rinishdagi belgi
+FONT_SIZE = int(os.environ.get("SUBTITR_FONT_SIZE", "12"))  # qat'iy, masshtablanmaydi
+FONTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
 FONT_NAME = os.environ.get("SUBTITR_FONT", "Liberation Sans")
 
 _client = None
@@ -135,13 +136,61 @@ def _satrlarga_bol(matn, eni=MAX_LINE):
     return natija[0] + "\n" + ikki
 
 
+def _bolaklarga(matn, eni):
+    """Matnni qisqa bo'laklarga bo'ladi (so'z chegarasida)."""
+    matn = " ".join(matn.split())
+    if not matn:
+        return []
+    if len(matn) <= eni:
+        return [matn]
+    natija, joriy = [], ""
+    for s in matn.split(" "):
+        while len(s) > eni:                    # bo'shliqsiz uzun bo'lak
+            if joriy:
+                natija.append(joriy)
+                joriy = ""
+            natija.append(s[:eni - 1] + "-")
+            s = s[eni - 1:]
+        nomzod = (joriy + " " + s).strip()
+        if len(nomzod) <= eni:
+            joriy = nomzod
+        else:
+            if joriy:
+                natija.append(joriy)
+            joriy = s
+    if joriy:
+        natija.append(joriy)
+    return natija
+
+
+def vaqtga_taqsimla(segmentlar, tarjimalar, eni=None):
+    """Har segmentni qisqa bo'laklarga bo'lib, vaqtini proporsional taqsimlaydi.
+    Natija: professional subtitr kabi — ekranda bir vaqtda BITTA qisqa qator.
+    Uzun segment ekranni to'ldirib, videoni yopib qo'ymaydi."""
+    eni = eni or MAX_LINE
+    natija = []
+    for (b, o, _), matn in zip(segmentlar, tarjimalar):
+        bolaklar = _bolaklarga(matn, eni)
+        if not bolaklar:
+            continue
+        davom = max(float(o) - float(b), 0.8)
+        jami = sum(len(x) for x in bolaklar) or 1
+        t = float(b)
+        for i, bo in enumerate(bolaklar):
+            ulush = davom * (len(bo) / jami)
+            oxiri = float(o) if i == len(bolaklar) - 1 else t + ulush
+            natija.append((t, oxiri, bo))
+            t += ulush
+    return natija
+
+
 def srt_yasa(segmentlar):
     """[(bosh, oxir, matn), ...] -> .srt matni"""
     qismlar = []
     for i, (b, o, m) in enumerate(segmentlar, 1):
         if o <= b:
             o = b + 1.2
-        qismlar.append(f"{i}\n{_vaqt(b)} --> {_vaqt(o)}\n{_satrlarga_bol(m)}\n")
+        qismlar.append(f"{i}\n{_vaqt(b)} --> {_vaqt(o)}\n{m.strip()}\n")
     return "\n".join(qismlar)
 
 
@@ -217,13 +266,16 @@ def _kuydir(video_yol, srt_yol, chiqish_yol):
     Shuning uchun FontSize QAT'IY qoladi — video eniga qarab kattalashtirilsa,
     ikki marta masshtablanib, matn ekrandan chiqib ketadi."""
     uslub = (f"FontName={FONT_NAME},FontSize={FONT_SIZE},PrimaryColour=&HFFFFFF,"
-             f"OutlineColour=&H502010,BorderStyle=1,Outline=1.5,Shadow=0,"
-             f"MarginV=60,MarginL=40,MarginR=40,Bold=1")
+             f"OutlineColour=&H000000,BackColour=&H80000000,BorderStyle=1,"
+             f"Outline=0.8,Shadow=1.2,MarginV=70,MarginL=20,MarginR=20,"
+             f"Bold=1,Spacing=0.2")
     papka = os.path.dirname(srt_yol) or "."
     nom = os.path.basename(srt_yol)
+    filtr = f"subtitles={nom}:force_style='{uslub}'"
+    if os.path.isdir(FONTS_DIR):      # repodagi fonts/ papkasidan shrift olinadi
+        filtr += f":fontsdir={FONTS_DIR}"
     r = subprocess.run(
-        ["ffmpeg", "-i", video_yol, "-vf",
-         f"subtitles={nom}:force_style='{uslub}'",
+        ["ffmpeg", "-i", video_yol, "-vf", filtr,
          "-c:a", "copy", "-preset", "veryfast", "-y", chiqish_yol],
         capture_output=True, text=True, cwd=papka)
     if r.returncode != 0:
@@ -280,7 +332,8 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🌐 Tarjima qilinmoqda ({len(segmentlar)} segment, manba: {til})...")
         uz = await asyncio.to_thread(_tarjima, segmentlar)
 
-        srt = srt_yasa([(b, o, uz[i]) for i, (b, o, _) in enumerate(segmentlar)])
+        bolaklar = vaqtga_taqsimla(segmentlar, uz)
+        srt = srt_yasa(bolaklar)
         srt_yol = os.path.join(ish, "subtitr.srt")
         with open(srt_yol, "w", encoding="utf-8") as f:
             f.write(srt)
