@@ -36,7 +36,8 @@ MODEL_SMART = os.environ.get("AI_MODEL_SMART", "gpt-5.6-terra")
 STT_MODEL = os.environ.get("AI_MODEL_STT", "whisper-1")   # vaqt belgisi beradi
 
 MAX_SECONDS = int(os.environ.get("SUBTITR_MAX_SEC", "300"))  # 5 daqiqa
-MAX_LINE = int(os.environ.get("SUBTITR_LINE", "36"))  # qatordagi belgi
+MAX_LINE = int(os.environ.get("SUBTITR_LINE", "34"))  # qatordagi belgi
+FONT_SIZE = int(os.environ.get("SUBTITR_FONT_SIZE", "15"))  # qat'iy, masshtablanmaydi
 FONT_NAME = os.environ.get("SUBTITR_FONT", "Liberation Sans")
 
 _client = None
@@ -210,28 +211,14 @@ def _tarjima(segmentlar):
             for i in range(1, len(segmentlar) + 1)]
 
 
-def _video_eni(video_yol):
-    """Video enini piksel bilan qaytaradi (shrift o'lchamini moslash uchun)."""
-    r = subprocess.run(
-        ["ffprobe", "-v", "error", "-select_streams", "v:0",
-         "-show_entries", "stream=width", "-of",
-         "default=noprint_wrappers=1:nokey=1", video_yol],
-        capture_output=True, text=True)
-    try:
-        return int(r.stdout.strip())
-    except ValueError:
-        return 720
-
-
 def _kuydir(video_yol, srt_yol, chiqish_yol):
-    """Subtitrni videoga kuydiradi. Shrift o'lchami video eniga moslanadi —
-    tik (vertical) videoda ham matn ekrandan chiqib ketmaydi."""
-    eni = _video_eni(video_yol)
-    # ASS o'lchami 384px kenglikka nisbatan hisoblanadi
-    olcham = max(11, min(22, int(eni / 384 * 11)))
-    uslub = (f"FontName={FONT_NAME},FontSize={olcham},PrimaryColour=&HFFFFFF,"
-             f"OutlineColour=&H502010,BorderStyle=1,Outline=2,Shadow=0,"
-             f"MarginV=45,MarginL=30,MarginR=30,Bold=1")
+    """Subtitrni videoga kuydiradi.
+    DIQQAT: libass shriftni video o'lchamiga O'ZI masshtablaydi (384px etalon).
+    Shuning uchun FontSize QAT'IY qoladi — video eniga qarab kattalashtirilsa,
+    ikki marta masshtablanib, matn ekrandan chiqib ketadi."""
+    uslub = (f"FontName={FONT_NAME},FontSize={FONT_SIZE},PrimaryColour=&HFFFFFF,"
+             f"OutlineColour=&H502010,BorderStyle=1,Outline=1.5,Shadow=0,"
+             f"MarginV=60,MarginL=40,MarginR=40,Bold=1")
     papka = os.path.dirname(srt_yol) or "."
     nom = os.path.basename(srt_yol)
     r = subprocess.run(
