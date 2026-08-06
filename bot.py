@@ -32,7 +32,8 @@ from telegram.ext import (
 )
 
 import agent
-import zikr  # AI Yangiliklar Agenti moduli
+import zikr
+import subtitr  # Video subtitr (faqat admin)
 import kurs   # Marketing kursi moduli (Stars to'lovi bilan)
 import ustoz  # AI Ustoz: topshiriq tekshirish va savol-javob
 import farosat  # Farosatdan kanali uchun kontent-agent
@@ -1422,7 +1423,8 @@ def main():
     app.add_handler(CallbackQueryHandler(admin_decide, pattern="^(acc|rej):"))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
     agent.register(app)
-    zikr.register(app)  # AI Yangiliklar Agenti (07:00 avtomatik, /agent_run)
+    zikr.register(app)
+    subtitr.register(app)  # Video subtitr (admin video tashlaydi)
     kurs.register(app)   # Marketing kursi (/kurs, 10 Stars)
     ustoz.register(app)  # AI Ustoz (/topshiriq, /savol)
     farosat.register(app)  # Farosat-agent (/farosat)
