@@ -1,2 +1,5 @@
+# Railway (nixpacks) — ffmpeg o'rnatish uchun.
+# DIQQAT: "..." belgisi standart paketlarni saqlaydi.
+# Usiz Python muhiti buziladi va deploy yiqiladi.
 [phases.setup]
-aptPkgs = ["ffmpeg"]
+aptPkgs = ["...", "ffmpeg"]
