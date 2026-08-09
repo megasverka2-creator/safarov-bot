@@ -299,16 +299,19 @@ def _video_olchami(video_yol):
 
 
 def mavjud_subtitr_bormi(video_yol, davomiylik):
-    """Videoda ALLAQACHON kuydirilgan subtitr bor-yo'qligini aniqlaydi.
-    Pastki qismdan bir necha kadr olib, oq matn piksellarini sanaydi.
-    Qaytaradi: pastdan qancha foiz band (0.0 - 1.0).
+    """Videoda ALLAQACHON kuydirilgan subtitr bor-yo'qligini VA qayerdaligini
+    aniqlaydi. Bir necha kadrni tekshirib, matnga o'xshash sohani qidiradi.
 
-    DIQQAT: bu taxminiy usul. Oq kiyim yoki yorug' fon ham 'matn' deb
-    hisoblanishi mumkin — shuning uchun chegara ehtiyotkor qo'yilgan."""
+    Qaytaradi: (band_ulush, eng_yuqori_nuqta)
+      band_ulush     — 0.0-1.0, nechta kadrda matn topilgani
+      eng_yuqori_nuqta — matn boshlanadigan joy (0.0 = tepa, 1.0 = past)
+
+    DIQQAT: taxminiy usul. Oq kiyim yoki yorug' fon ham 'matn' deb
+    hisoblanishi mumkin, shuning uchun chegara ehtiyotkor qo'yilgan."""
     if Image is None:
-        return 0.0
-    band = 0
-    tekshirildi = 0
+        return 0.0, 1.0
+    band, tekshirildi = 0, 0
+    eng_yuqori = 1.0
     nuqtalar = [davomiylik * k for k in (0.2, 0.4, 0.6, 0.8)]
     papka = tempfile.mkdtemp(prefix="scan_")
     try:
@@ -316,26 +319,42 @@ def mavjud_subtitr_bormi(video_yol, davomiylik):
             kadr = os.path.join(papka, f"k{i}.png")
             r = subprocess.run(
                 ["ffmpeg", "-ss", f"{t:.2f}", "-i", video_yol, "-frames:v", "1",
-                 "-vf", "scale=320:-1", "-y", kadr],
-                capture_output=True)
+                 "-vf", "scale=320:-1", "-y", kadr], capture_output=True)
             if r.returncode != 0 or not os.path.exists(kadr):
                 continue
             im = Image.open(kadr).convert("L")
             W, H = im.size
-            # pastki 12-28% — odatda subtitr shu yerda turadi
-            past = im.crop((0, int(H * 0.72), W, int(H * 0.92)))
-            px = list(past.getdata())
-            oq = sum(1 for p in px if p > 225)
-            qora = sum(1 for p in px if p < 60)
-            # matnga xos: oq piksellar bor VA yonida qora kontur bor
-            if px and oq / len(px) > 0.012 and qora / len(px) > 0.05:
-                band += 1
             tekshirildi += 1
+            topildi_kadrda = False
+            # pastki yarmini yupqa yo'laklarga bo'lib skanerlaymiz
+            yolak = max(int(H * 0.03), 4)
+            y = int(H * 0.45)
+            while y + yolak <= H:
+                qism = im.crop((0, y, W, y + yolak))
+                px = list(qism.getdata())
+                if px:
+                    oq = sum(1 for p in px if p > 225) / len(px)
+                    qora = sum(1 for p in px if p < 60) / len(px)
+                    if oq > 0.02 and qora > 0.05:      # matnga xos qarama-qarshilik
+                        topildi_kadrda = True
+                        eng_yuqori = min(eng_yuqori, y / H)
+                        break
+                y += yolak
+            if topildi_kadrda:
+                band += 1
     except Exception as e:
         log.warning("Kadr tahlili xatosi: %s", e)
     finally:
         shutil.rmtree(papka, ignore_errors=True)
-    return (band / tekshirildi) if tekshirildi else 0.0
+    return ((band / tekshirildi) if tekshirildi else 0.0), eng_yuqori
+
+
+def margin_hisobla(eng_yuqori):
+    """Mavjud subtitr tepasiga bizning matnni joylash uchun MarginV.
+    ASS o'lchovi 288 birlik balandlikka nisbatan hisoblanadi."""
+    pastdan = (1.0 - eng_yuqori) * 288       # mavjud matn qayerdan boshlanadi
+    kerak = int(pastdan + 26)                # + o'z matnimiz balandligi va bo'shliq
+    return max(MARGIN_ODDIY, min(kerak, 170))
 # ======================================================================
 # BLOKLOVCHI ISHLAR (to_thread orqali chaqiriladi)
 # ======================================================================
@@ -436,6 +455,92 @@ def _kuydir(video_yol, srt_yol, chiqish_yol, fs=None, marginv=None,
         raise RuntimeError(f"Subtitr kuydirilmadi: {r.stderr[-300:]}")
 
 
+# ======================================================================
+# OVOZLI VARIANT (dublyaj) — OpenAI TTS
+# ======================================================================
+TTS_MODEL = os.environ.get("SUBTITR_TTS_MODEL", "gpt-4o-mini-tts")
+TTS_VOICE = os.environ.get("SUBTITR_TTS_VOICE", "onyx")
+TTS_INSTR = os.environ.get(
+    "SUBTITR_TTS_INSTR",
+    "Speak in Uzbek with natural Uzbek pronunciation. "
+    "Calm, clear, neutral narrator tone. Do not add an English accent.")
+ASL_OVOZ = float(os.environ.get("SUBTITR_ASL_OVOZ", "0.18"))   # asl ovoz darajasi
+
+
+def _tts_bytes(matn):
+    """Bitta bo'lak uchun o'zbekcha ovoz (mp3 baytlari)."""
+    kw = {"model": TTS_MODEL, "voice": TTS_VOICE, "input": matn[:1800],
+          "response_format": "mp3"}
+    if TTS_MODEL.startswith("gpt-"):        # yangi modellar yo'riqnoma qabul qiladi
+        kw["instructions"] = TTS_INSTR
+    r = ai().audio.speech.create(**kw)
+    return r.content
+
+
+def _audio_davomiylik(yol):
+    r = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", yol],
+        capture_output=True, text=True)
+    try:
+        return float(r.stdout.strip())
+    except ValueError:
+        return 0.0
+
+
+def _ovoz_bolaklari(segmentlar, matnlar, papka):
+    """Har segment uchun TTS yasaydi va uni segment vaqtiga moslaydi.
+    O'zbekcha matn odatda uzunroq chiqadi — ovoz biroz tezlashtiriladi.
+    Tezlik 0.75-1.6 oralig'ida cheklangan: undan tashqarida ovoz buziladi."""
+    natija = []
+    for i, ((b, o, _), m) in enumerate(zip(segmentlar, matnlar)):
+        m = (m or "").strip()
+        if not m:
+            continue
+        yol = os.path.join(papka, f"tts{i}.mp3")
+        try:
+            with open(yol, "wb") as f:
+                f.write(_tts_bytes(m))
+        except Exception as e:
+            log.warning("TTS xatosi (%d): %s", i, e)
+            continue
+        d = _audio_davomiylik(yol)
+        maqsad = max(float(o) - float(b), 0.6)
+        if d > 0.1:
+            tempo = max(0.75, min(d / maqsad, 1.6))
+            if abs(tempo - 1.0) > 0.04:
+                tez = os.path.join(papka, f"tez{i}.mp3")
+                r = subprocess.run(
+                    ["ffmpeg", "-i", yol, "-filter:a", f"atempo={tempo:.3f}",
+                     "-y", tez], capture_output=True)
+                if r.returncode == 0:
+                    yol = tez
+        natija.append((float(b), yol))
+    return natija
+
+
+def _dublyaj_qil(video_yol, bolaklar, chiqish_yol):
+    """Asl ovozni pasaytirib, ustiga o'zbekcha ovozni qo'yadi."""
+    if not bolaklar:
+        raise RuntimeError("Ovoz bo'laklari yasalmadi")
+    inp = ["-i", video_yol]
+    for _, y in bolaklar:
+        inp += ["-i", y]
+    filt = [f"[0:a]volume={ASL_OVOZ}[orig]"]
+    for i, (b, _) in enumerate(bolaklar, start=1):
+        ms = int(max(b, 0) * 1000)
+        filt.append(f"[{i}:a]adelay={ms}|{ms}[d{i}]")
+    yorliq = "[orig]" + "".join(f"[d{i}]" for i in range(1, len(bolaklar) + 1))
+    filt.append(f"{yorliq}amix=inputs={len(bolaklar) + 1}"
+                f":duration=first:normalize=0[a]")
+    r = subprocess.run(
+        ["ffmpeg", *inp, "-filter_complex", ";".join(filt),
+         "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac",
+         "-y", chiqish_yol], capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError(f"Dublyaj xatosi: {r.stderr[-300:]}")
+
+
 MAQOLA_PROMPT = """Sen o'zbek Telegram kanalining muharririsan. Senga video \
 nutqining o'zbekcha tarjimasi beriladi. Undan qisqa KANAL POSTI yoz.
 
@@ -489,6 +594,8 @@ def _qoralama_tugmalari(qid):
         InlineKeyboardButton("✍️ Fikr", callback_data=f"vfikr:{qid}"),
     ], [
         InlineKeyboardButton("✏️ Tahrir", callback_data=f"vtah:{qid}"),
+        InlineKeyboardButton("🔊 Ovozli", callback_data=f"vovoz:{qid}"),
+    ], [
         InlineKeyboardButton("❌ Bekor", callback_data=f"vno:{qid}"),
     ]])
 
@@ -516,6 +623,47 @@ async def on_video_tugma(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "✏️ Post matnini to'liq qayta yozib yuboring.")
         await context.bot.send_message(chat_id=q.from_user.id,
                                        text=matn + "\n\nBekor qilish: /bekor")
+        return
+
+    if amal == "vovoz":
+        segs = d.get("segmentlar") or []
+        trs = d.get("tarjimalar") or []
+        if not segs or not trs:
+            await q.answer("Segment ma'lumoti yo'q.", show_alert=True)
+            return
+        await q.answer("Ovoz tayyorlanmoqda...")
+        holat = await context.bot.send_message(
+            chat_id=q.from_user.id,
+            text=f"🔊 O'zbekcha ovoz yasalmoqda ({len(segs)} bo'lak)...\n"
+                 f"Bu bir necha daqiqa olishi mumkin.")
+        ish = tempfile.mkdtemp(prefix="dub_")
+        try:
+            fayl = await context.bot.get_file(d["file_id"])
+            video_yol = os.path.join(ish, "kirish.mp4")
+            await fayl.download_to_drive(video_yol)
+
+            bolaklar = await asyncio.to_thread(_ovoz_bolaklari, segs, trs, ish)
+            if not bolaklar:
+                await holat.edit_text("Ovoz yasalmadi — TTS javob bermadi.")
+                return
+            await holat.edit_text(
+                f"🎚 Ovoz aralashtirilmoqda ({len(bolaklar)} bo'lak)...")
+            chiqish = os.path.join(ish, "ovozli.mp4")
+            await asyncio.to_thread(_dublyaj_qil, video_yol, bolaklar, chiqish)
+
+            with open(chiqish, "rb") as f:
+                await context.bot.send_video(
+                    chat_id=q.from_user.id, video=f,
+                    caption="O'zbekcha ovoz bilan (asl ovoz pastda)")
+            await holat.delete()
+        except Exception as e:
+            log.exception("Dublyaj xatosi")
+            try:
+                await holat.edit_text(f"Xato: {e}")
+            except Exception:
+                pass
+        finally:
+            shutil.rmtree(ish, ignore_errors=True)
         return
 
     if amal == "vpub":
@@ -626,11 +774,12 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Format va joylashuvni videoning o'ziga moslashtirmiz
         en, bal = await asyncio.to_thread(_video_olchami, video_yol)
         fs, _ = format_sozlamasi(en, bal)
-        band = await asyncio.to_thread(mavjud_subtitr_bormi, video_yol, uzunlik)
+        band, eng_yuqori = await asyncio.to_thread(
+            mavjud_subtitr_bormi, video_yol, uzunlik)
         marginv = MARGIN_ODDIY
         izoh = ""
         if band >= 0.5:      # videoda allaqachon subtitr bor — tepasiga chiqamiz
-            marginv = MARGIN_YUQORI
+            marginv = margin_hisobla(eng_yuqori)
             izoh = "\n\n⚠️ Videoda allaqachon subtitr bor — matn tepasiga qo'yildi."
         await asyncio.to_thread(_kuydir, video_yol, srt_yol, chiqish,
                                 fs, marginv, USLUB)
@@ -658,7 +807,8 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if maqola and file_id:
             _navbat[0] += 1
             qid = str(_navbat[0])
-            _qoralama[qid] = {"file_id": file_id, "matn": maqola, "kanal": KANAL}
+            _qoralama[qid] = {"file_id": file_id, "matn": maqola, "kanal": KANAL,
+                              "segmentlar": segmentlar, "tarjimalar": uz}
             await msg.reply_text(
                 f"📰 KANAL POSTI ({KANAL})\n\n{maqola}{izoh}",
                 reply_markup=_qoralama_tugmalari(qid))
@@ -685,7 +835,7 @@ def register(app: Application):
         (filters.VIDEO | filters.Document.VIDEO) & filters.User(user_id=ADMIN_ID),
         on_video))
     app.add_handler(CallbackQueryHandler(
-        on_video_tugma, pattern=r"^(vpub|vfikr|vtah|vno):"))
+        on_video_tugma, pattern=r"^(vpub|vfikr|vtah|vno|vovoz):"))
     app.add_handler(CommandHandler("bekor", cmd_bekor), group=-2)
     # group=-2 — agent.py dagi matn ishlovchisidan (group=-1) OLDIN ishlaydi.
     # Kutilmayotgan paytda hech narsaga aralashmaydi.
