@@ -37,6 +37,11 @@ from telegram.ext import (
     filters,
 )
 
+try:  # Pillow — mavjud subtitrni aniqlash uchun
+    from PIL import Image
+except Exception:
+    Image = None
+
 log = logging.getLogger(__name__)
 
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "0") or "0")
@@ -75,22 +80,51 @@ def ffmpeg_bor():
 # ======================================================================
 # TARJIMA PROMPTI — subtitr uchun maxsus (qisqalik muhim)
 # ======================================================================
-TARJIMA_PROMPT = """Sen professional subtitr tarjimonisan. Senga video \
-nutqining segmentlari beriladi. Ularni O'ZBEK TILIGA (lotin yozuvida) o'gir.
+TARJIMA_PROMPT = """Sen ikki tomonlama mutaxassissan: chet tilini eng yuqori \
+darajada tushunasan va o'zbek tilining professional muharririsan. Vazifang — \
+video nutqini O'ZBEK TILIGA (lotin yozuvida) subtitr qilib o'girish.
 
-SUBTITR QOIDALARI:
-1. QISQA yoz — subtitr ekranda 2-4 soniya turadi. Uzun jumlani qisqart, \
-lekin ma'noni yo'qotma.
-2. Har segment ALOHIDA tarjima qilinadi, lekin oldingi segment bilan \
-mazmunan bog'lansin. Segmentlarni birlashtirma yoki bo'lma.
-3. Jonli, tabiiy o'zbek tili. Kitobiy va idoraviy iboralar taqiq: \
-"ushbu", "mazkur", "amalga oshirmoqda", "hisoblanadi".
-4. Atamalarni o'zbek auditoriyasi tushunadigan qilib ber. Kompaniya, \
-mahsulot va odam nomlari MANBADAGIDEK qoladi (OpenAI, Whisper, Mark Dowd).
-5. Manbada YO'Q narsani qo'shma. Nutqda bo'lmagan izoh yozma.
-6. So'zlovchi ikkilanib gapirsa ("uh", "you know", takrorlar) — ularni \
-tushirib qoldir, toza jumla yoz.
-7. Ma'noni yumshatma: "dangerous" -> "xavfli", "muhim emas" emas.
+A. MA'NONI TO'G'RI OLISH (birinchi navbatda):
+1. IBORALARNI so'zma-so'z o'girma — o'zbekcha muqobilini top. \
+"it's a game changer" -> "bu hammasini o'zgartiradi" (o'yin almashtirgich EMAS). \
+"reach out" -> "murojaat qilish". "keep up with" -> "ortda qolmaslik".
+2. OHANGNI SAQLA: ishonchsizlik ("I guess", "sort of", "maybe") -> \
+"menimcha", "shekilli", "balki". Qat'iylik ("absolutely", "definitely") -> \
+"albatta", "shubhasiz". Yumshatib yoki kuchaytirib yuborma.
+3. FE'L ZAMONI va shaxsni aniq ber. "we were building" -> "qurayotgan edik" \
+(qurdik EMAS).
+4. ATAMALAR: keng tarqalgani o'zbekcha ("model", "ma'lumot", "tarmoq"), \
+lekin sohaviy atama tarjimasiz tushunarliroq bo'lsa — asl holicha \
+("machine learning" -> "machine learning" emas, "mashinali o'qitish"; \
+lekin "startup" -> "startap", "AI" -> "AI").
+5. Ism, kompaniya, mahsulot nomlari MANBADAGIDEK: Mark Zuckerberg, Alphabet, \
+Steve Jobs. O'zbekchalashtirishga urinma.
+
+B. SUBTITR TALABLARI:
+6. QISQA yoz. Subtitr ekranda 2-4 soniya turadi — o'quvchi o'qib ulgurishi \
+kerak. Uzun jumlani ikkiga bo'lib emas, QISQARTIRIB ber.
+7. Har segment alohida tarjima qilinadi, lekin oldingisi bilan mazmunan \
+bog'lansin. Segmentlarni birlashtirma yoki bo'lma.
+8. Nutqdagi ikkilanish, takror, "uh", "you know", "I mean" — TUSHIRIB QOLDIR. \
+Toza, tugallangan jumla yoz.
+
+C. O'ZBEK TILI SIFATI:
+9. Jonli, og'zaki-adabiy til. Kitobiy va idoraviy iboralar TAQIQ: "ushbu", \
+"mazkur", "hisoblanadi", "amalga oshirmoqda", "e'tibor qaratmoq", \
+"...bo'yicha", "...tomonidan".
+10. Bitta jumlada ikkita "uchun" yoki "ushbu" bo'lmasin.
+11. Ruscha-inglizcha ko'chirmalar taqiq: "yangradi" (прозвучало) -> \
+"aytildi"; "issiq to'lqinlar" -> "jazirama issiq".
+12. Sonlar: to'rt xonagacha so'z bilan qulay ("uch yil"), kattalari raqamda \
+("117 mln"). Valyuta belgisi emas, so'z bilan: "$20" -> "20 dollar".
+
+D. QAT'IY TAQIQ:
+13. Manbada YO'Q narsani QO'SHMA. To'qima fakt, to'qima izoh, "menimcha" \
+qabilidagi o'z fikring — TAQIQ.
+14. Tushunmagan joyingni tashlab ketma — eng yaqin ma'noni ber.
+
+O'Z-O'ZINI TEKSHIRISH: har qatorni o'qib chiq — (1) o'zbek shunday gapiradimi? \
+(2) 2-4 soniyada o'qib bo'ladimi? (3) manbadagi ma'no to'liq saqlanganmi?
 
 JAVOB SHAKLI — faqat JSON, izohsiz:
 {"lines": [{"n": 1, "uz": "tarjima"}, {"n": 2, "uz": "tarjima"}]}
@@ -211,6 +245,98 @@ def srt_yasa(segmentlar):
 
 
 # ======================================================================
+# USLUB TO'PLAMLARI
+# ======================================================================
+# Har uslub: ASS force_style bo'lagi. FontSize va MarginV kod tomonidan
+# qo'shiladi (video formatiga va mavjud subtitrga qarab).
+USLUBLAR = {
+    "klassik": ("Oq qalin, ingichka kontur — universal",
+                "PrimaryColour=&HFFFFFF,OutlineColour=&H000000,"
+                "BorderStyle=1,Outline=0.8,Shadow=1.2,Bold=1,Spacing=0.2"),
+    "qutili": ("Yarim shaffof qora qutida — har qanday fonda o'qiladi",
+               "PrimaryColour=&HFFFFFF,BackColour=&HA0000000,"
+               "BorderStyle=3,Outline=0.6,Shadow=0,Bold=1,Spacing=0.2"),
+    "kontrast": ("Qalin qora kontur — sershovqin videolar uchun",
+                 "PrimaryColour=&HFFFFFF,OutlineColour=&H000000,"
+                 "BorderStyle=1,Outline=2.2,Shadow=0,Bold=1,Spacing=0.1"),
+    "oltin": ("Sariq-oltin urg'u — reels uslubi",
+              "PrimaryColour=&H4FD7FF,OutlineColour=&H000000,"
+              "BorderStyle=1,Outline=1.4,Shadow=0.8,Bold=1,Spacing=0.2"),
+    "yumshoq": ("Konturisiz, faqat soya — tinch videolar uchun",
+                "PrimaryColour=&HFFFFFF,OutlineColour=&H000000,"
+                "BorderStyle=1,Outline=0,Shadow=2,Bold=1,Spacing=0.3"),
+}
+USLUB = os.environ.get("SUBTITR_USLUB", "klassik")
+MARGIN_ODDIY = int(os.environ.get("SUBTITR_MARGIN", "70"))    # pastdan masofa
+MARGIN_YUQORI = int(os.environ.get("SUBTITR_MARGIN2", "150"))  # mavjud subtitr bo'lsa
+
+
+def format_sozlamasi(en, balandlik):
+    """Video nisbatiga qarab shrift o'lchami va qator enini tanlaydi.
+    O'lchovlar amaliy sinovdan olingan (matn eni 60-85% bo'lishi maqsad)."""
+    if balandlik <= 0:
+        return FONT_SIZE, MAX_LINE
+    nisbat = en / balandlik
+    if nisbat < 0.70:            # 9:16 — Reels, TikTok, Shorts
+        return 12, 24
+    if nisbat < 0.95:            # 4:5 — Instagram
+        return 13, 27
+    if nisbat < 1.30:            # 1:1 — kvadrat
+        return 14, 30
+    return 17, 36                # 16:9 — YouTube, gorizontal
+
+
+def _video_olchami(video_yol):
+    r = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0",
+         "-show_entries", "stream=width,height", "-of", "csv=p=0", video_yol],
+        capture_output=True, text=True)
+    try:
+        w, h = r.stdout.strip().split(",")[:2]
+        return int(w), int(h)
+    except (ValueError, IndexError):
+        return 720, 1280
+
+
+def mavjud_subtitr_bormi(video_yol, davomiylik):
+    """Videoda ALLAQACHON kuydirilgan subtitr bor-yo'qligini aniqlaydi.
+    Pastki qismdan bir necha kadr olib, oq matn piksellarini sanaydi.
+    Qaytaradi: pastdan qancha foiz band (0.0 - 1.0).
+
+    DIQQAT: bu taxminiy usul. Oq kiyim yoki yorug' fon ham 'matn' deb
+    hisoblanishi mumkin — shuning uchun chegara ehtiyotkor qo'yilgan."""
+    if Image is None:
+        return 0.0
+    band = 0
+    tekshirildi = 0
+    nuqtalar = [davomiylik * k for k in (0.2, 0.4, 0.6, 0.8)]
+    papka = tempfile.mkdtemp(prefix="scan_")
+    try:
+        for i, t in enumerate(nuqtalar):
+            kadr = os.path.join(papka, f"k{i}.png")
+            r = subprocess.run(
+                ["ffmpeg", "-ss", f"{t:.2f}", "-i", video_yol, "-frames:v", "1",
+                 "-vf", "scale=320:-1", "-y", kadr],
+                capture_output=True)
+            if r.returncode != 0 or not os.path.exists(kadr):
+                continue
+            im = Image.open(kadr).convert("L")
+            W, H = im.size
+            # pastki 12-28% — odatda subtitr shu yerda turadi
+            past = im.crop((0, int(H * 0.72), W, int(H * 0.92)))
+            px = list(past.getdata())
+            oq = sum(1 for p in px if p > 225)
+            qora = sum(1 for p in px if p < 60)
+            # matnga xos: oq piksellar bor VA yonida qora kontur bor
+            if px and oq / len(px) > 0.012 and qora / len(px) > 0.05:
+                band += 1
+            tekshirildi += 1
+    except Exception as e:
+        log.warning("Kadr tahlili xatosi: %s", e)
+    finally:
+        shutil.rmtree(papka, ignore_errors=True)
+    return (band / tekshirildi) if tekshirildi else 0.0
+# ======================================================================
 # BLOKLOVCHI ISHLAR (to_thread orqali chaqiriladi)
 # ======================================================================
 def _ovoz_ajrat(video_yol, ovoz_yol):
@@ -276,15 +402,21 @@ def _tarjima(segmentlar):
             for i in range(1, len(segmentlar) + 1)]
 
 
-def _kuydir(video_yol, srt_yol, chiqish_yol):
+def _kuydir(video_yol, srt_yol, chiqish_yol, fs=None, marginv=None,
+            uslub_nomi=None):
     """Subtitrni videoga kuydiradi.
+    fs        — shrift o'lchami (video formatiga qarab tanlanadi)
+    marginv   — pastdan masofa (mavjud subtitr bo'lsa oshiriladi)
+    uslub_nomi— USLUBLAR dan biri
+
     DIQQAT: libass shriftni video o'lchamiga O'ZI masshtablaydi (384px etalon).
-    Shuning uchun FontSize QAT'IY qoladi — video eniga qarab kattalashtirilsa,
-    ikki marta masshtablanib, matn ekrandan chiqib ketadi."""
-    uslub = (f"FontName={FONT_NAME},FontSize={FONT_SIZE},PrimaryColour=&HFFFFFF,"
-             f"OutlineColour=&H000000,BackColour=&H80000000,BorderStyle=1,"
-             f"Outline=0.8,Shadow=1.2,MarginV=70,MarginL=20,MarginR=20,"
-             f"Bold=1,Spacing=0.2")
+    Shuning uchun fs video eniga qarab kattalashtirilmaydi."""
+    fs = fs or FONT_SIZE
+    marginv = marginv if marginv is not None else 70
+    _, uslub_qismi = USLUBLAR.get(uslub_nomi or USLUB, USLUBLAR["klassik"])
+    uslub = (f"FontName={FONT_NAME},FontSize={fs},{uslub_qismi},"
+             f"MarginV={marginv},MarginL=20,MarginR=20")
+
     papka = os.path.dirname(srt_yol) or "."
     nom = os.path.basename(srt_yol)
     filtr = f"subtitles={nom}:force_style='{uslub}'"
@@ -480,7 +612,9 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🌐 Tarjima qilinmoqda ({len(segmentlar)} segment, manba: {til})...")
         uz = await asyncio.to_thread(_tarjima, segmentlar)
 
-        bolaklar = vaqtga_taqsimla(segmentlar, uz)
+        en0, bal0 = await asyncio.to_thread(_video_olchami, video_yol)
+        _, qator_eni = format_sozlamasi(en0, bal0)
+        bolaklar = vaqtga_taqsimla(segmentlar, uz, qator_eni)
         srt = srt_yasa(bolaklar)
         srt_yol = os.path.join(ish, "subtitr.srt")
         with open(srt_yol, "w", encoding="utf-8") as f:
@@ -488,7 +622,18 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await holat.edit_text("🎞 Subtitr videoga kuydirilmoqda...")
         chiqish = os.path.join(ish, "natija.mp4")
-        await asyncio.to_thread(_kuydir, video_yol, srt_yol, chiqish)
+
+        # Format va joylashuvni videoning o'ziga moslashtirmiz
+        en, bal = await asyncio.to_thread(_video_olchami, video_yol)
+        fs, _ = format_sozlamasi(en, bal)
+        band = await asyncio.to_thread(mavjud_subtitr_bormi, video_yol, uzunlik)
+        marginv = MARGIN_ODDIY
+        izoh = ""
+        if band >= 0.5:      # videoda allaqachon subtitr bor — tepasiga chiqamiz
+            marginv = MARGIN_YUQORI
+            izoh = "\n\n⚠️ Videoda allaqachon subtitr bor — matn tepasiga qo'yildi."
+        await asyncio.to_thread(_kuydir, video_yol, srt_yol, chiqish,
+                                fs, marginv, USLUB)
 
         await holat.edit_text("📤 Yuborilmoqda...")
         with open(chiqish, "rb") as f:
@@ -515,7 +660,7 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             qid = str(_navbat[0])
             _qoralama[qid] = {"file_id": file_id, "matn": maqola, "kanal": KANAL}
             await msg.reply_text(
-                f"📰 KANAL POSTI ({KANAL})\n\n{maqola}",
+                f"📰 KANAL POSTI ({KANAL})\n\n{maqola}{izoh}",
                 reply_markup=_qoralama_tugmalari(qid))
         else:
             await msg.reply_text("📄 To'liq tarjima:\n\n" + toliq[:3800])
