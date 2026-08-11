@@ -6,13 +6,20 @@ Ishlash tartibi:
   1. Foydalanuvchi /zikr bosadi -> obuna bo'ladi ("Yoqildi")
   2. Har kuni bot o'sha foydalanuvchi uchun 3 ta TASODIFIY vaqt tanlaydi
   3. Vaqt kelganda ro'yxatdan tasodifiy zikr yuboriladi + "Aytdim" tugmasi
-  4. Tugma bosilsa xabar o'rnida faqat "Hammamiz bugun: N" qoladi
-  5. Kunlik hisob 00:00 da nolga qaytadi, oylik hisob yig'ilib boradi
-  6. Oy oxirida obunachilarga umumiy natija yuboriladi
-  7. /zikr_off -> "To'xtadi"
+  4. Tugma TASBEHDEK 3 marta bosiladi (ZIKR_TAKROR).
+     Har bosishda tasbeh chizig'i to'ladi: ○○○ -> ●○○ -> ●●○ -> ●●●
+     Oxirgi bosishda xabar o'rnida "Hammamiz bugun: N" qoladi.
+  5. Kunning BARCHA eslatmalari to'liq aytib bo'linganda — yakuniy xabar
+     (ketma-ketlik + kunlik natija). Unga vaqti-vaqti bilan "Do'stni taklif
+     qilish" tugmasi qo'shiladi (har kuni emas — ZIKR_TAKLIF_KUN kunda bir).
+  6. Kunlik hisob 00:00 da nolga qaytadi, oylik hisob yig'ilib boradi
+  7. Oy oxirida obunachilarga umumiy natija yuboriladi
+  8. /zikr_off -> "To'xtadi"
 
 MUHIM: bu yerda AI ISHLATILMAYDI. Zikr matnlari qat'iy ro'yxatdan olinadi,
 shuning uchun noto'g'ri matn yozilishi mumkin emas va xarajat = $0.
+Taklif matni ham qo'lda yozilgan — hech qanday diniy hukm yoki savob va'dasi
+yo'q, faqat samimiy chaqiruv.
 """
 
 import logging
@@ -20,6 +27,7 @@ import os
 import random
 import sqlite3
 from io import BytesIO
+from urllib.parse import quote
 from datetime import datetime, date, time as dtime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -45,10 +53,17 @@ ADMIN_ID = int(os.environ.get("ADMIN_ID", "0") or "0")
 
 # Kuniga nechta eslatma
 PER_DAY = int(os.environ.get("ZIKR_PER_DAY", "3"))
+# Bitta eslatma nechta marta aytiladi (tasbeh). 1 qilinsa — eski tartib.
+TAKROR = max(1, int(os.environ.get("ZIKR_TAKROR", "3")))
+# Taklif tugmasi necha kunda bir ko'rsatilsin (0 = umuman ko'rsatilmasin)
+TAKLIF_HAR = int(os.environ.get("ZIKR_TAKLIF_KUN", "7"))
 # Tasodifiy vaqt shu oraliqdan tanlanadi (tunda bezovta qilmaslik uchun).
 # To'liq sutka kerak bo'lsa: ZIKR_FROM=0, ZIKR_TO=23
 HOUR_FROM = int(os.environ.get("ZIKR_FROM", "7"))
 HOUR_TO = int(os.environ.get("ZIKR_TO", "22"))
+
+CHANNEL_ID = os.environ.get("CHANNEL_ID", "@safaroov_blog")
+BOT_USERNAME = os.environ.get("BOT_USERNAME", "safarovblog_bot")
 
 # ======================================================================
 # ZIKR RO'YXATI — qat'iy, AI tegmaydi
@@ -67,8 +82,24 @@ ZIKRLAR = [
 ]
 
 
-def zikr_matni(arab, lotin, mano):
-    return f"{arab}\n\n«{lotin} ({mano})», deb ayting."
+def tasbeh(bosildi, jami=None):
+    """0,3 -> '○○○'   1,3 -> '●○○'   3,3 -> '●●●'"""
+    jami = jami or TAKROR
+    bosildi = max(0, min(bosildi, jami))
+    return "●" * bosildi + "○" * (jami - bosildi)
+
+
+def zikr_matni(arab, lotin, mano, bosildi=0):
+    matn = f"{arab}\n\n«{lotin} ({mano})», deb ayting."
+    if TAKROR > 1:
+        matn += f"\n\n{tasbeh(bosildi)}   {bosildi}/{TAKROR}"
+    return matn
+
+
+def _tugma(kun, vaqt):
+    """Callback ichida kun va vaqt — qaysi eslatma ekani aniq bo'lsin."""
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("Aytdim", callback_data=f"zikr_ok|{kun}|{vaqt}")]])
 
 
 # ======================================================================
@@ -78,6 +109,14 @@ def db():
     conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.execute("PRAGMA journal_mode=WAL")
     return conn
+
+
+def _ustun(conn, jadval, nom, tur):
+    """Mavjud bazaga ustun qo'shish (eski bazani buzmasdan)."""
+    try:
+        conn.execute(f"ALTER TABLE {jadval} ADD COLUMN {nom} {tur}")
+    except sqlite3.OperationalError:
+        pass  # allaqachon bor
 
 
 def init_db():
@@ -94,6 +133,16 @@ def init_db():
         PRIMARY KEY (uid, kun, vaqt))""")
     conn.execute("""CREATE TABLE IF NOT EXISTS zikr_meta (
         k TEXT PRIMARY KEY, v TEXT)""")
+    # kunlik yakun bir martadan ortiq yuborilmasligi uchun
+    conn.execute("""CREATE TABLE IF NOT EXISTS zikr_yakun (
+        uid INTEGER, kun TEXT, PRIMARY KEY (uid, kun))""")
+
+    # --- migratsiya: yangi ustunlar ---
+    _ustun(conn, "zikr_plan", "bosildi", "INTEGER DEFAULT 0")
+    _ustun(conn, "zikr_plan", "zikr_idx", "INTEGER DEFAULT 0")
+    _ustun(conn, "zikr_users", "streak", "INTEGER DEFAULT 0")
+    _ustun(conn, "zikr_users", "oxirgi_kun", "TEXT")
+    _ustun(conn, "zikr_users", "oxirgi_taklif", "TEXT")
     conn.commit()
     conn.close()
 
@@ -183,18 +232,175 @@ async def cmd_zikr_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("To'xtadi")
 
 
+# ======================================================================
+# "AYTDIM" — tasbehdek TAKROR marta bosiladi
+# ======================================================================
 async def on_aytdim(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """'Aytdim' bosildi — xabar o'rnida faqat umumiy hisob qoladi."""
     query = update.callback_query
+    uid = query.from_user.id
+    data = query.data or ""
+    bolak = data.split("|")
+
     conn = db()
-    kun = hisob_oshir(conn)
+    row = None
+    kun = vaqt = None
+    if len(bolak) == 3:
+        kun, vaqt = bolak[1], bolak[2]
+        row = conn.execute(
+            "SELECT bosildi, zikr_idx FROM zikr_plan "
+            "WHERE uid=? AND kun=? AND vaqt=?", (uid, kun, vaqt)).fetchone()
+
+    # Eski format (zikr_ok) yoki reja tozalangan — bir marta hisoblab yopamiz
+    if row is None:
+        kunlik = hisob_oshir(conn)
+        conn.commit()
+        conn.close()
+        await query.answer()
+        try:
+            await query.edit_message_text(f"Hammamiz bugun: {raqam(kunlik)}")
+        except BadRequest as e:
+            log.warning("Zikr xabarini tahrirlab bo'lmadi: %s", e)
+        return
+
+    bosildi, idx = int(row[0] or 0), int(row[1] or 0)
+    if bosildi >= TAKROR:                      # ikki marta bosib yuborilgan
+        conn.close()
+        await query.answer()
+        return
+
+    bosildi += 1
+    conn.execute(
+        "UPDATE zikr_plan SET bosildi=? WHERE uid=? AND kun=? AND vaqt=?",
+        (bosildi, uid, kun, vaqt))
+    kunlik = hisob_oshir(conn)
     conn.commit()
-    conn.close()
     await query.answer()
+
+    # --- hali tasbeh to'lmadi ---
+    if bosildi < TAKROR:
+        arab, lotin, mano = ZIKRLAR[idx % len(ZIKRLAR)]
+        try:
+            await query.edit_message_text(
+                zikr_matni(arab, lotin, mano, bosildi),
+                reply_markup=_tugma(kun, vaqt))
+        except BadRequest as e:
+            log.warning("Zikr tasbehini yangilab bo'lmadi: %s", e)
+        conn.close()
+        return
+
+    # --- bu eslatma to'liq aytildi ---
     try:
-        await query.edit_message_text(f"Hammamiz bugun: {raqam(kun)}")
+        await query.edit_message_text(f"Hammamiz bugun: {raqam(kunlik)}")
     except BadRequest as e:
         log.warning("Zikr xabarini tahrirlab bo'lmadi: %s", e)
+
+    # --- kunning hamma eslatmasi tugadimi? ---
+    if _kun_yakunlandimi(conn, uid, kun):
+        streak = _streak_yangila(conn, uid, kun)
+        taklif = _taklif_vaqtimi(conn, uid, kun)
+        if taklif:
+            conn.execute("UPDATE zikr_users SET oxirgi_taklif=? WHERE uid=?",
+                         (kun, uid))
+        conn.commit()
+        await _kun_yakun_xabar(context, uid, kun, streak, kunlik, taklif)
+    conn.commit()
+    conn.close()
+
+
+# ======================================================================
+# KUNLIK YAKUN
+# ======================================================================
+def _kun_yakunlandimi(conn, uid, kun):
+    """Shu kundagi barcha eslatmalar yuborilgan VA har biri TAKROR marta
+    bosilgan bo'lsa — True. Faqat bir marta True qaytaradi."""
+    row = conn.execute(
+        "SELECT COUNT(*), "
+        "       SUM(CASE WHEN yuborildi=1 THEN 1 ELSE 0 END), "
+        "       SUM(CASE WHEN bosildi>=? THEN 1 ELSE 0 END) "
+        "FROM zikr_plan WHERE uid=? AND kun=?",
+        (TAKROR, uid, kun)).fetchone()
+    jami = int(row[0] or 0)
+    yuborilgan = int(row[1] or 0)
+    tugagan = int(row[2] or 0)
+    if jami == 0 or yuborilgan < jami or tugagan < jami:
+        return False
+    if conn.execute("SELECT 1 FROM zikr_yakun WHERE uid=? AND kun=?",
+                    (uid, kun)).fetchone():
+        return False                            # allaqachon yuborilgan
+    conn.execute("INSERT OR IGNORE INTO zikr_yakun (uid, kun) VALUES (?, ?)",
+                 (uid, kun))
+    return True
+
+
+def _streak_yangila(conn, uid, kun):
+    """Ketma-ket to'liq kunlar soni."""
+    row = conn.execute(
+        "SELECT streak, oxirgi_kun FROM zikr_users WHERE uid=?",
+        (uid,)).fetchone()
+    streak = int(row[0] or 0) if row else 0
+    oxirgi = row[1] if row else None
+    if oxirgi == kun:
+        return streak or 1
+    try:
+        kecha = (date.fromisoformat(kun) - timedelta(days=1)).isoformat()
+    except Exception:
+        kecha = None
+    streak = streak + 1 if (oxirgi and oxirgi == kecha) else 1
+    conn.execute("UPDATE zikr_users SET streak=?, oxirgi_kun=? WHERE uid=?",
+                 (streak, kun, uid))
+    return streak
+
+
+def _taklif_vaqtimi(conn, uid, kun):
+    """Taklif tugmasi HAR KUNI chiqmaydi — birinchi to'liq kunda, keyin
+    TAKLIF_HAR kunda bir marta. Aks holda zerikartiradi."""
+    if TAKLIF_HAR <= 0:
+        return False
+    row = conn.execute("SELECT oxirgi_taklif FROM zikr_users WHERE uid=?",
+                       (uid,)).fetchone()
+    oxirgi = row[0] if row else None
+    if not oxirgi:
+        return True
+    try:
+        farq = (date.fromisoformat(kun) - date.fromisoformat(oxirgi)).days
+    except Exception:
+        return True
+    return farq >= TAKLIF_HAR
+
+
+# --- Taklif matni va tugmasi -------------------------------------------
+# DIQQAT: bu matnda diniy hukm, savob va'dasi yoki iqtibos YO'Q — faqat
+# samimiy chaqiruv. O'zgartirish kerak bo'lsa — shu ikki qatorni tahrirlang.
+ULASH_MATNI = ("Zikr halqasi. Kun davomida uch marta qisqa eslatma keladi — "
+               "aytasiz va tugmani bosasiz, xolos. Qo'shilasizmi?")
+
+
+def _taklif_tugma():
+    havola = f"https://t.me/{BOT_USERNAME}?start=zikr"
+    ulash = (f"https://t.me/share/url?url={quote(havola, safe='')}"
+             f"&text={quote(ULASH_MATNI, safe='')}")
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("Yaqinlaringizni taklif qiling", url=ulash)]])
+
+
+async def _kun_yakun_xabar(context, uid, kun, streak, kunlik, taklif):
+    qatorlar = ["Bugungi halqa to'ldi."]
+    if streak >= 2:
+        qatorlar.append(f"Ketma-ket {streak}-kun.")
+    qatorlar.append(f"Hammamiz bugun: {raqam(kunlik)} marta.")
+    if taklif:
+        qatorlar.append(
+            "\nHalqamiz qanchalik keng bo'lsa, kun shunchalik yorug' o'tadi. "
+            "Yaqinlaringizni ham chaqiring — bir tugma, xolos.")
+    matn = "\n".join(qatorlar)
+    try:
+        await context.bot.send_message(
+            chat_id=uid, text=matn,
+            reply_markup=_taklif_tugma() if taklif else None)
+    except Forbidden:
+        pass
+    except Exception as e:
+        log.warning("Zikr yakuniy xabari (%s): %s", uid, e)
 
 
 # ======================================================================
@@ -253,6 +459,7 @@ async def job_kunlik_reja(context: ContextTypes.DEFAULT_TYPE):
     # --- eski rejalarni tozalash (3 kundan eski) ---
     chegara = (datetime.now(TZ).date() - timedelta(days=3)).isoformat()
     conn.execute("DELETE FROM zikr_plan WHERE kun < ?", (chegara,))
+    conn.execute("DELETE FROM zikr_yakun WHERE kun < ?", (chegara,))
 
     # --- bugungi reja ---
     users = conn.execute(
@@ -279,7 +486,8 @@ async def _oylik_xabar(context, conn, oy_nomi, jami):
     yuborildi = 0
     for (uid,) in users:
         try:
-            await context.bot.send_message(chat_id=uid, text=matn)
+            await context.bot.send_message(chat_id=uid, text=matn,
+                                           reply_markup=_taklif_tugma())
             yuborildi += 1
         except Forbidden:
             conn.execute("UPDATE zikr_users SET active=0 WHERE uid=?", (uid,))
@@ -307,14 +515,13 @@ async def job_tekshir(context: ContextTypes.DEFAULT_TYPE):
         conn.close()
         return
 
-    tugma = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("Aytdim", callback_data="zikr_ok")]])
     for uid, t in navbat:
-        arab, lotin, mano = random.choice(ZIKRLAR)
+        idx = random.randrange(len(ZIKRLAR))
+        arab, lotin, mano = ZIKRLAR[idx]
         try:
             await context.bot.send_message(
-                chat_id=uid, text=zikr_matni(arab, lotin, mano),
-                reply_markup=tugma)
+                chat_id=uid, text=zikr_matni(arab, lotin, mano, 0),
+                reply_markup=_tugma(kun, t))
         except Forbidden:
             # bloklagan — ro'yxatdan chiqadi
             conn.execute("UPDATE zikr_users SET active=0 WHERE uid=?", (uid,))
@@ -325,18 +532,48 @@ async def job_tekshir(context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             log.warning("Zikr yuborishda xato (%s): %s", uid, e)
         conn.execute(
-            "UPDATE zikr_plan SET yuborildi=1 WHERE uid=? AND kun=? AND vaqt=?",
-            (uid, kun, t))
+            "UPDATE zikr_plan SET yuborildi=1, zikr_idx=?, bosildi=0 "
+            "WHERE uid=? AND kun=? AND vaqt=?", (idx, uid, kun, t))
     conn.commit()
     conn.close()
 
 
 # ======================================================================
+# SINOV BUYRUQLARI (faqat admin)
+# ======================================================================
+async def cmd_zikr_sinov(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/zikr_sinov — o'zingizga darhol bitta eslatma yuboradi.
+    Reja jadvaliga yozilmaydi, shuning uchun kunlik yakunga ta'sir qilmaydi."""
+    if update.effective_user is None or update.effective_user.id != ADMIN_ID:
+        return
+    idx = random.randrange(len(ZIKRLAR))
+    arab, lotin, mano = ZIKRLAR[idx]
+    conn = db()
+    kun, t = _bugun(), "00:00"
+    conn.execute(
+        "INSERT OR REPLACE INTO zikr_plan (uid, kun, vaqt, yuborildi, "
+        "bosildi, zikr_idx) VALUES (?, ?, ?, 1, 0, ?)",
+        (update.effective_user.id, kun, t, idx))
+    conn.commit()
+    conn.close()
+    await update.message.reply_text(zikr_matni(arab, lotin, mano, 0),
+                                    reply_markup=_tugma(kun, t))
+
+
+async def cmd_zikr_yakun(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/zikr_yakun — kunlik yakuniy xabarni taklif tugmasi bilan ko'rsatadi."""
+    if update.effective_user is None or update.effective_user.id != ADMIN_ID:
+        return
+    conn = db()
+    kunlik = kunlik_hisob(conn)
+    conn.close()
+    await _kun_yakun_xabar(context, update.effective_user.id, _bugun(),
+                           4, kunlik, True)
+
+
+# ======================================================================
 # KANAL BANNERI — /zikr_elon
 # ======================================================================
-CHANNEL_ID = os.environ.get("CHANNEL_ID", "@safaroov_blog")
-BOT_USERNAME = os.environ.get("BOT_USERNAME", "safarovblog_bot")
-
 _FONT_B = ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
            "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
            "/System/Library/Fonts/Supplemental/Arial Bold.ttf"]
@@ -413,7 +650,8 @@ async def cmd_zikr_elon(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "ZIKRNI YOQISH ✅",
         url=f"https://t.me/{BOT_USERNAME}?start=zikr")]])
     matn = ("Zikr halqasi\n\n"
-            "Botimizda kun davomida qisqa zikr eslatmalari keladi.")
+            "Botimizda kun davomida qisqa zikr eslatmalari keladi. "
+            "Har birini tasbehdek uch marta aytasiz.")
     try:
         await context.bot.send_photo(chat_id=kanal, photo=rasm,
                                      caption=matn, reply_markup=tugma)
@@ -436,7 +674,10 @@ def register(app: Application):
     app.add_handler(CommandHandler("zikr", cmd_zikr))
     app.add_handler(CommandHandler("zikr_off", cmd_zikr_off))
     app.add_handler(CommandHandler("zikr_elon", cmd_zikr_elon))
-    app.add_handler(CallbackQueryHandler(on_aytdim, pattern=r"^zikr_ok$"))
+    app.add_handler(CommandHandler("zikr_sinov", cmd_zikr_sinov))
+    app.add_handler(CommandHandler("zikr_yakun", cmd_zikr_yakun))
+    # eski "zikr_ok" ham, yangi "zikr_ok|kun|vaqt" ham shu handlerga tushadi
+    app.add_handler(CallbackQueryHandler(on_aytdim, pattern=r"^zikr_ok"))
 
     jq = getattr(app, "job_queue", None)
     if jq is None:
@@ -445,5 +686,5 @@ def register(app: Application):
     jq.run_daily(job_kunlik_reja, time=dtime(0, 5, tzinfo=TZ),
                  name="zikr_reja")
     jq.run_repeating(job_tekshir, interval=60, first=20, name="zikr_tekshir")
-    log.info("Zikr moduli yoqildi (kuniga %d ta, %02d:00-%02d:00 oralig'ida)",
-             PER_DAY, HOUR_FROM, HOUR_TO)
+    log.info("Zikr moduli yoqildi (kuniga %d ta x %d takror, %02d:00-%02d:00)",
+             PER_DAY, TAKROR, HOUR_FROM, HOUR_TO)
