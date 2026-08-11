@@ -49,10 +49,18 @@ MODEL_SMART = os.environ.get("AI_MODEL_SMART", "gpt-5.6-terra")
 STT_MODEL = os.environ.get("AI_MODEL_STT", "whisper-1")   # vaqt belgisi beradi
 
 MAX_SECONDS = int(os.environ.get("SUBTITR_MAX_SEC", "300"))  # 5 daqiqa
-MAX_LINE = int(os.environ.get("SUBTITR_LINE", "24"))  # bir ko'rinishdagi belgi
-FONT_SIZE = int(os.environ.get("SUBTITR_FONT_SIZE", "12"))  # qat'iy, masshtablanmaydi
+# Bo'sh qoldirilsa — video formatiga qarab AVTOMATIK tanlanadi.
+# Qiymat berilsa — o'sha ustuvor (shrift almashganda qo'l bilan sozlash uchun).
+_LINE_ENV = os.environ.get("SUBTITR_LINE", "").strip()
+_FS_ENV = os.environ.get("SUBTITR_FONT_SIZE", "").strip()
+MAX_LINE = int(_LINE_ENV) if _LINE_ENV.isdigit() else 24
+FONT_SIZE = int(_FS_ENV) if _FS_ENV.isdigit() else 12
 FONTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
 BRAND = os.environ.get("SUBTITR_BRAND", "@safaroov_blog")   # videodagi yozuv
+BRAND_OLCHAM = int(os.environ.get("SUBTITR_BRAND_OLCHAM", "28"))  # h/28 — kichikroq son = kattaroq yozuv
+BRAND_ORQA = os.environ.get("SUBTITR_BRAND_ORQA", "0.92")         # matn shaffofligi
+BRAND_QUTI = os.environ.get("SUBTITR_BRAND_QUTI", "0.35")         # orqa quti (0 = quti yo'q)
+BRAND_JOY = os.environ.get("SUBTITR_BRAND_JOY", "tepa_chap")      # tepa_chap/tepa_ong/past_chap/past_ong
 KANAL = os.environ.get("CHANNEL_ID", "@safaroov_blog")      # qaysi kanalga
 FONT_NAME = os.environ.get("SUBTITR_FONT", "Liberation Sans")
 
@@ -273,12 +281,16 @@ MARGIN_YUQORI = int(os.environ.get("SUBTITR_MARGIN2", "150"))  # mavjud subtitr 
 
 def format_sozlamasi(en, balandlik):
     """Video nisbatiga qarab shrift o'lchami va qator enini tanlaydi.
-    O'lchovlar amaliy sinovdan olingan (matn eni 60-85% bo'lishi maqsad)."""
+    O'lchovlar amaliy sinovdan olingan (matn eni 60-85% bo'lishi maqsad).
+    Env orqali qiymat berilgan bo'lsa — O'SHA ustuvor."""
+    if _FS_ENV.isdigit() and _LINE_ENV.isdigit():
+        return FONT_SIZE, MAX_LINE
     if balandlik <= 0:
         return FONT_SIZE, MAX_LINE
     nisbat = en / balandlik
     if nisbat < 0.70:            # 9:16 — Reels, TikTok, Shorts
-        return 12, 24
+        return (FONT_SIZE if _FS_ENV.isdigit() else 12,
+                MAX_LINE if _LINE_ENV.isdigit() else 24)
     if nisbat < 0.95:            # 4:5 — Instagram
         return 13, 27
     if nisbat < 1.30:            # 1:1 — kvadrat
@@ -442,17 +454,93 @@ def _kuydir(video_yol, srt_yol, chiqish_yol, fs=None, marginv=None,
     if os.path.isdir(FONTS_DIR):      # repodagi fonts/ papkasidan shrift olinadi
         filtr += f":fontsdir={FONTS_DIR}"
     brend_shrift = next((f for f in _FONT_YOLLARI if os.path.exists(f)), None)
-    if BRAND and brend_shrift:        # kanal nomi — yuqori chapda, yarim shaffof
+    if BRAND and brend_shrift:
         matn = BRAND.replace("'", "").replace(":", "")
+        joy = {"tepa_chap":  ("w*0.04", "h*0.035"),
+               "tepa_ong":   ("w-tw-w*0.04", "h*0.035"),
+               "past_chap":  ("w*0.04", "h-th-h*0.05"),
+               "past_ong":   ("w-tw-w*0.04", "h-th-h*0.05")}
+        x, y = joy.get(BRAND_JOY, joy["tepa_chap"])
         filtr += (f",drawtext=fontfile='{brend_shrift}':text='{matn}'"
-                  f":fontcolor=white@0.55:fontsize=h/38:x=w*0.045:y=h*0.055"
-                  f":shadowcolor=black@0.4:shadowx=1:shadowy=1")
+                  f":fontcolor=white@{BRAND_ORQA}:fontsize=h/{BRAND_OLCHAM}"
+                  f":x={x}:y={y}"
+                  f":box=1:boxcolor=black@{BRAND_QUTI}:boxborderw=h/140"
+                  f":shadowcolor=black@0.5:shadowx=1:shadowy=1")
     r = subprocess.run(
         ["ffmpeg", "-i", video_yol, "-vf", filtr,
          "-c:a", "copy", "-preset", "veryfast", "-y", chiqish_yol],
         capture_output=True, text=True, cwd=papka)
     if r.returncode != 0:
         raise RuntimeError(f"Subtitr kuydirilmadi: {r.stderr[-300:]}")
+
+
+def _shrift_nomlari(yol):
+    """TTF/OTF faylidan shrift OILA NOMINI o'qiydi ('name' jadvalidan).
+    ffmpeg shriftni fayl nomi bilan emas, shu nom bilan topadi."""
+    import struct
+    try:
+        with open(yol, "rb") as f:
+            data = f.read()
+        if len(data) < 12:
+            return []
+        jadval_soni = struct.unpack(">H", data[4:6])[0]
+        nom_ofset = nom_uzunlik = None
+        for i in range(jadval_soni):
+            p = 12 + i * 16
+            teg = data[p:p + 4]
+            if teg == b"name":
+                nom_ofset, nom_uzunlik = struct.unpack(">II", data[p + 8:p + 16])
+                break
+        if nom_ofset is None:
+            return []
+        n = data[nom_ofset:nom_ofset + nom_uzunlik]
+        soni = struct.unpack(">H", n[2:4])[0]
+        satr_ofset = struct.unpack(">H", n[4:6])[0]
+        natija = []
+        for i in range(soni):
+            p = 6 + i * 12
+            plat, enc, lang, nom_id, uzun, ofs = struct.unpack(">HHHHHH", n[p:p + 12])
+            if nom_id not in (1, 4):          # 1 = oila, 4 = to'liq nom
+                continue
+            xom = n[satr_ofset + ofs: satr_ofset + ofs + uzun]
+            try:
+                matn = xom.decode("utf-16-be") if plat == 3 else xom.decode("latin-1")
+            except Exception:
+                continue
+            matn = matn.strip()
+            if matn and matn not in natija:
+                natija.append(matn)
+        return natija
+    except Exception as e:
+        log.warning("Shrift o'qilmadi (%s): %s", yol, e)
+        return []
+
+
+async def cmd_shriftlar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/shriftlar — fonts/ papkasidagi shriftlarning ANIQ nomlarini ko'rsatadi.
+    SUBTITR_FONT ga aynan shu nom yozilishi kerak."""
+    if update.effective_user is None or update.effective_user.id != ADMIN_ID:
+        return
+    if not os.path.isdir(FONTS_DIR):
+        await update.message.reply_text(
+            "fonts/ papkasi yo'q.\n\n"
+            "Repoda 'fonts' papkasini ochib, .ttf faylni o'sha yerga qo'ying, "
+            "keyin qayta deploy qiling.")
+        return
+    qatorlar = []
+    for f in sorted(os.listdir(FONTS_DIR)):
+        if not f.lower().endswith((".ttf", ".otf")):
+            continue
+        nomlar = _shrift_nomlari(os.path.join(FONTS_DIR, f))
+        qatorlar.append(f"📄 {f}\n   → " + (" · ".join(nomlar[:3]) if nomlar
+                                            else "nom o'qilmadi"))
+    if not qatorlar:
+        await update.message.reply_text("fonts/ papkasi bo'sh (.ttf topilmadi).")
+        return
+    await update.message.reply_text(
+        "Topilgan shriftlar:\n\n" + "\n\n".join(qatorlar) +
+        f"\n\nHozirgi SUBTITR_FONT: {FONT_NAME}\n"
+        "Railway Variables'da SUBTITR_FONT ga yuqoridagi nomlardan birini yozing.")
 
 
 # ======================================================================
@@ -837,6 +925,7 @@ def register(app: Application):
     app.add_handler(CallbackQueryHandler(
         on_video_tugma, pattern=r"^(vpub|vfikr|vtah|vno|vovoz):"))
     app.add_handler(CommandHandler("bekor", cmd_bekor), group=-2)
+    app.add_handler(CommandHandler("shriftlar", cmd_shriftlar))
     # group=-2 — agent.py dagi matn ishlovchisidan (group=-1) OLDIN ishlaydi.
     # Kutilmayotgan paytda hech narsaga aralashmaydi.
     app.add_handler(MessageHandler(
