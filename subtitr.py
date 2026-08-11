@@ -366,7 +366,7 @@ def margin_hisobla(eng_yuqori):
     ASS o'lchovi 288 birlik balandlikka nisbatan hisoblanadi."""
     pastdan = (1.0 - eng_yuqori) * 288       # mavjud matn qayerdan boshlanadi
     kerak = int(pastdan + 26)                # + o'z matnimiz balandligi va bo'shliq
-    return max(MARGIN_ODDIY, min(kerak, 170))
+    return max(MARGIN_ODDIY, min(kerak, 100))
 # ======================================================================
 # BLOKLOVCHI ISHLAR (to_thread orqali chaqiriladi)
 # ======================================================================
@@ -446,7 +446,7 @@ def _kuydir(video_yol, srt_yol, chiqish_yol, fs=None, marginv=None,
     marginv = marginv if marginv is not None else 70
     _, uslub_qismi = USLUBLAR.get(uslub_nomi or USLUB, USLUBLAR["klassik"])
     uslub = (f"FontName={FONT_NAME},FontSize={fs},{uslub_qismi},"
-             f"MarginV={marginv},MarginL=20,MarginR=20")
+             f"Alignment=2,MarginV={marginv},MarginL=20,MarginR=20")
 
     papka = os.path.dirname(srt_yol) or "."
     nom = os.path.basename(srt_yol)
