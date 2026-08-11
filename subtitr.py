@@ -461,17 +461,40 @@ def _kuydir(video_yol, srt_yol, chiqish_yol, fs=None, marginv=None,
                "past_chap":  ("w*0.04", "h-th-h*0.05"),
                "past_ong":   ("w-tw-w*0.04", "h-th-h*0.05")}
         x, y = joy.get(BRAND_JOY, joy["tepa_chap"])
+
+        # Railway'dagi eski/yangi FFmpeg versiyalarida boxborderw uchun
+        # h/140 kabi expression bir xil ishlamaydi. Shuning uchun video
+        # balandligidan piksel qiymatlarini Python'da oldindan hisoblaymiz.
+        _, video_h = _video_olchami(video_yol)
+        brand_font_px = max(16, int(round(video_h / max(BRAND_OLCHAM, 1))))
+        brand_box_px = max(1, int(round(video_h / 140)))
+
         filtr += (f",drawtext=fontfile='{brend_shrift}':text='{matn}'"
-                  f":fontcolor=white@{BRAND_ORQA}:fontsize=h/{BRAND_OLCHAM}"
+                  f":fontcolor=white@{BRAND_ORQA}:fontsize={brand_font_px}"
                   f":x={x}:y={y}"
-                  f":box=1:boxcolor=black@{BRAND_QUTI}:boxborderw=h/140"
+                  f":box=1:boxcolor=black@{BRAND_QUTI}:boxborderw={brand_box_px}"
                   f":shadowcolor=black@0.5:shadowx=1:shadowy=1")
-    r = subprocess.run(
-        ["ffmpeg", "-i", video_yol, "-vf", filtr,
-         "-c:a", "copy", "-preset", "veryfast", "-y", chiqish_yol],
-        capture_output=True, text=True, cwd=papka)
+
+    def _ishga_tushir(vf):
+        return subprocess.run(
+            ["ffmpeg", "-hide_banner", "-i", video_yol, "-vf", vf,
+             "-c:v", "libx264", "-pix_fmt", "yuv420p",
+             "-c:a", "copy", "-preset", "veryfast", "-movflags", "+faststart",
+             "-y", chiqish_yol],
+            capture_output=True, text=True, cwd=papka)
+
+    r = _ishga_tushir(filtr)
+
+    # Brend drawtext Railway FFmpeg build'ida ishlamasa ham subtitrning
+    # o'zi to'xtab qolmasin: brendsiz qayta urinib ko'ramiz.
+    if r.returncode != 0 and ",drawtext=" in filtr:
+        log.warning("drawtext ishlamadi, brendsiz qayta urinish: %s",
+                    r.stderr[-1500:])
+        faqat_subtitr = filtr.split(",drawtext=", 1)[0]
+        r = _ishga_tushir(faqat_subtitr)
+
     if r.returncode != 0:
-        raise RuntimeError(f"Subtitr kuydirilmadi: {r.stderr[-300:]}")
+        raise RuntimeError(f"Subtitr kuydirilmadi: {r.stderr[-1500:]}")
 
 
 def _shrift_nomlari(yol):
