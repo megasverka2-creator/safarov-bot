@@ -4,9 +4,11 @@ ZIKR ESLATMA MODULI  (@safarovblog_bot)
 =======================================
 Ishlash tartibi:
   1. Foydalanuvchi /zikr bosadi -> obuna bo'ladi ("Yoqildi")
-  2. Har kuni bot o'sha foydalanuvchi uchun 3 ta TASODIFIY vaqt tanlaydi
-  3. Vaqt kelganda ro'yxatdan tasodifiy zikr yuboriladi + "Aytdim" tugmasi
-  4. Tugma TASBEHDEK 3 marta bosiladi (ZIKR_TAKROR).
+  2. Har kuni bot o'sha foydalanuvchi uchun ZIKR_PER_DAY ta TASODIFIY
+     vaqt tanlaydi (standart 5) va har vaqtga TAKRORSIZ zikr biriktiradi —
+     ya'ni beshala zikr ham kun davomida aynan bir martadan keladi
+  3. Vaqt kelganda rejadagi zikr yuboriladi + "Aytdim" tugmasi
+  4. Tugma TASBEHDEK ZIKR_TAKROR marta bosiladi (standart 3).
      Har bosishda tasbeh chizig'i to'ladi: ○○○ -> ●○○ -> ●●○ -> ●●●
      Oxirgi bosishda xabar o'rnida "Hammamiz bugun: N" qoladi.
   5. Kunning BARCHA eslatmalari to'liq aytib bo'linganda — yakuniy xabar
@@ -52,7 +54,7 @@ DB_PATH = os.path.join(os.environ.get("DATA_DIR", "."), "zikr.db")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "0") or "0")
 
 # Kuniga nechta eslatma
-PER_DAY = int(os.environ.get("ZIKR_PER_DAY", "3"))
+PER_DAY = int(os.environ.get("ZIKR_PER_DAY", "5"))
 # Bitta eslatma nechta marta aytiladi (tasbeh). 1 qilinsa — eski tartib.
 TAKROR = max(1, int(os.environ.get("ZIKR_TAKROR", "3")))
 # Taklif tugmasi necha kunda bir ko'rsatilsin (0 = umuman ko'rsatilmasin)
@@ -61,6 +63,15 @@ TAKLIF_HAR = int(os.environ.get("ZIKR_TAKLIF_KUN", "7"))
 # To'liq sutka kerak bo'lsa: ZIKR_FROM=0, ZIKR_TO=23
 HOUR_FROM = int(os.environ.get("ZIKR_FROM", "7"))
 HOUR_TO = int(os.environ.get("ZIKR_TO", "22"))
+
+_SONLAR = {1: "bir", 2: "ikki", 3: "uch", 4: "to'rt", 5: "besh",
+           6: "olti", 7: "yetti", 8: "sakkiz", 9: "to'qqiz", 10: "o'n"}
+
+
+def son_soz(n):
+    """4 -> "to'rt". Ro'yxatda bo'lmasa raqamning o'zi qaytadi."""
+    return _SONLAR.get(int(n), str(n))
+
 
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "@safaroov_blog")
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "safarovblog_bot")
@@ -139,7 +150,7 @@ def init_db():
 
     # --- migratsiya: yangi ustunlar ---
     _ustun(conn, "zikr_plan", "bosildi", "INTEGER DEFAULT 0")
-    _ustun(conn, "zikr_plan", "zikr_idx", "INTEGER DEFAULT 0")
+    _ustun(conn, "zikr_plan", "zikr_idx", "INTEGER DEFAULT -1")
     _ustun(conn, "zikr_users", "streak", "INTEGER DEFAULT 0")
     _ustun(conn, "zikr_users", "oxirgi_kun", "TEXT")
     _ustun(conn, "zikr_users", "oxirgi_taklif", "TEXT")
@@ -369,10 +380,22 @@ def _taklif_vaqtimi(conn, uid, kun):
 
 
 # --- Taklif matni va tugmasi -------------------------------------------
-# DIQQAT: bu matnda diniy hukm, savob va'dasi yoki iqtibos YO'Q — faqat
-# samimiy chaqiruv. O'zgartirish kerak bo'lsa — shu ikki qatorni tahrirlang.
-ULASH_MATNI = ("Zikr halqasi. Kun davomida uch marta qisqa eslatma keladi — "
-               "aytasiz va tugmani bosasiz, xolos. Qo'shilasizmi?")
+# DIQQAT: quyidagi TAKLIF_MATNI — kanal egasi (Muslim Safarov) tomonidan
+# yozilgan va tasdiqlangan matn. Ichida hadis rivoyati bor.
+# AI bu matnni YOZMAYDI, O'ZGARTIRMAYDI, QISQARTIRMAYDI.
+# Tahrir kerak bo'lsa — faqat egasi qo'li bilan, shu joyda.
+TAKLIF_MATNI = (
+    "Halqamiz qanchalik keng bo‘lsa, hayotimiz shunchalar nurli bo‘ladi.\n\n"
+    "Yaqinlaringizga ham ilining va ikki karra yaxshilik sohibi bo‘ling.\n\n"
+    "Abu Mas’ud Ansoriy roziyallohu anhudan rivoyat qilinadi:\n\n"
+    "«Nabiy sollallohu alayhi vasallam: “Kim bir yaxshilikka dalolat qilsa, "
+    "unga o‘sha yaxshilikni qilganning ajridek ajr beriladi”, dedilar».\n\n"
+    "Muslim rivoyat qilgan."
+)
+
+ULASH_MATNI = (f"Zikr halqasi. Kun davomida {son_soz(PER_DAY)} marta qisqa "
+               f"eslatma keladi — aytasiz va tugmani bosasiz, xolos. "
+               f"Qo'shilasizmi?")
 
 
 def _taklif_tugma():
@@ -389,9 +412,7 @@ async def _kun_yakun_xabar(context, uid, kun, streak, kunlik, taklif):
         qatorlar.append(f"Ketma-ket {streak}-kun.")
     qatorlar.append(f"Hammamiz bugun: {raqam(kunlik)} marta.")
     if taklif:
-        qatorlar.append(
-            "\nHalqamiz qanchalik keng bo'lsa, kun shunchalik yorug' o'tadi. "
-            "Yaqinlaringizni ham chaqiring — bir tugma, xolos.")
+        qatorlar.append("\n" + TAKLIF_MATNI)
     matn = "\n".join(qatorlar)
     try:
         await context.bot.send_message(
@@ -406,9 +427,22 @@ async def _kun_yakun_xabar(context, uid, kun, streak, kunlik, taklif):
 # ======================================================================
 # REJA: har kuni har foydalanuvchiga PER_DAY ta tasodifiy vaqt
 # ======================================================================
+def _zikr_tartibi(nechta):
+    """Zikrlarni TAKRORSIZ taqsimlaydi: ro'yxat aralashtiriladi va navbat
+    bilan beriladi. PER_DAY=5 bo'lsa — beshalasi ham aynan bir martadan.
+    PER_DAY 5 dan kam bo'lsa — tasodifiy shuncha tasi (baribir takrorsiz).
+    5 dan ko'p bo'lsa — ro'yxat qaytadan aralashtirilib davom etadi."""
+    tartib = []
+    while len(tartib) < nechta:
+        bolak = list(range(len(ZIKRLAR)))
+        random.shuffle(bolak)
+        tartib.extend(bolak)
+    return tartib[:nechta]
+
+
 def _reja_tuz(conn, uid, kun):
-    """Shu foydalanuvchiga shu kun uchun tasodifiy vaqtlar tuzadi.
-    Reja allaqachon bor bo'lsa — tegmaydi."""
+    """Shu foydalanuvchiga shu kun uchun tasodifiy vaqtlar tuzadi va har
+    vaqtga TAKRORSIZ zikr biriktiradi. Reja bor bo'lsa — tegmaydi."""
     bor = conn.execute(
         "SELECT COUNT(*) FROM zikr_plan WHERE uid=? AND kun=?",
         (uid, kun)).fetchone()[0]
@@ -417,7 +451,7 @@ def _reja_tuz(conn, uid, kun):
     hozir = datetime.now(TZ)
     vaqtlar = set()
     urinish = 0
-    while len(vaqtlar) < PER_DAY and urinish < 60:
+    while len(vaqtlar) < PER_DAY and urinish < 200:
         urinish += 1
         soat = random.randint(HOUR_FROM, HOUR_TO)
         daqiqa = random.randint(0, 59)
@@ -427,10 +461,13 @@ def _reja_tuz(conn, uid, kun):
             if (soat, daqiqa) <= (hozir.hour, hozir.minute):
                 continue
         vaqtlar.add(t)
-    for t in vaqtlar:
+
+    vaqtlar = sorted(vaqtlar)
+    tartib = _zikr_tartibi(len(vaqtlar))
+    for t, idx in zip(vaqtlar, tartib):
         conn.execute(
-            "INSERT OR IGNORE INTO zikr_plan (uid, kun, vaqt) VALUES (?, ?, ?)",
-            (uid, kun, t))
+            "INSERT OR IGNORE INTO zikr_plan (uid, kun, vaqt, zikr_idx) "
+            "VALUES (?, ?, ?, ?)", (uid, kun, t, idx))
 
 
 async def job_kunlik_reja(context: ContextTypes.DEFAULT_TYPE):
@@ -508,16 +545,19 @@ async def job_tekshir(context: ContextTypes.DEFAULT_TYPE):
     vaqt = hozir.strftime("%H:%M")
     conn = db()
     navbat = conn.execute(
-        "SELECT uid, vaqt FROM zikr_plan "
+        "SELECT uid, vaqt, zikr_idx FROM zikr_plan "
         "WHERE kun=? AND vaqt<=? AND yuborildi=0 LIMIT 100",
         (kun, vaqt)).fetchall()
     if not navbat:
         conn.close()
         return
 
-    for uid, t in navbat:
-        idx = random.randrange(len(ZIKRLAR))
-        arab, lotin, mano = ZIKRLAR[idx]
+    for uid, t, saqlangan in navbat:
+        # reja tuzilganda biriktirilgan zikr. Eski qatorlarda (-1) yo'q —
+        # o'shanda tasodifiy olinadi.
+        idx = int(saqlangan) if saqlangan is not None and int(saqlangan) >= 0 \
+            else random.randrange(len(ZIKRLAR))
+        arab, lotin, mano = ZIKRLAR[idx % len(ZIKRLAR)]
         try:
             await context.bot.send_message(
                 chat_id=uid, text=zikr_matni(arab, lotin, mano, 0),
@@ -618,7 +658,8 @@ def make_banner(kanal=None):
     d = ImageDraw.Draw(img)
     d.text((90, 250), "ZIKR HALQASI", font=_fnt(_FONT_B, 86), fill=LAV)
     f34 = _fnt(_FONT_R, 34)
-    d.text((94, 372), "Kun davomida uch marta qisqa eslatma", font=f34, fill=LAV)
+    d.text((94, 372), f"Kun davomida {son_soz(PER_DAY)} marta qisqa eslatma",
+           font=f34, fill=LAV)
     d.text((94, 420), "Vaqti tasodifiy. Xohlagan payt to'xtatasiz.",
            font=f34, fill=LAV_DIM)
     d.line([(94, 540), (320, 540)], fill=LAV, width=2)
@@ -649,9 +690,10 @@ async def cmd_zikr_elon(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tugma = InlineKeyboardMarkup([[InlineKeyboardButton(
         "ZIKRNI YOQISH ✅",
         url=f"https://t.me/{BOT_USERNAME}?start=zikr")]])
-    matn = ("Zikr halqasi\n\n"
-            "Botimizda kun davomida qisqa zikr eslatmalari keladi. "
-            "Har birini tasbehdek uch marta aytasiz.")
+    matn = (f"Zikr halqasi\n\n"
+            f"Botimizda kun davomida {son_soz(PER_DAY)} marta qisqa zikr "
+            f"eslatmasi keladi. Har birini tasbehdek "
+            f"{son_soz(TAKROR)} marta aytasiz.")
     try:
         await context.bot.send_photo(chat_id=kanal, photo=rasm,
                                      caption=matn, reply_markup=tugma)
