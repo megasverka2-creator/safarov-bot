@@ -33,6 +33,7 @@ from telegram.ext import (
 
 import agent
 import zikr
+import iqtibos  # Iqtibos kartalari (/iqtibos, 3 uslub + AI rasm)
 import subtitr  # Video subtitr (faqat admin)
 import kurs   # Marketing kursi moduli (Stars to'lovi bilan)
 import ustoz  # AI Ustoz: topshiriq tekshirish va savol-javob
@@ -1424,6 +1425,7 @@ def main():
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
     agent.register(app)
     zikr.register(app)
+    iqtibos.register(app)  # Iqtibos kartalari (/iqtibos)
     subtitr.register(app)  # Video subtitr (admin video tashlaydi)
     kurs.register(app)   # Marketing kursi (/kurs, 10 Stars)
     ustoz.register(app)  # AI Ustoz (/topshiriq, /savol)
