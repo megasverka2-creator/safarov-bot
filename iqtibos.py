@@ -36,10 +36,13 @@ import time
 
 from telegram import (Update, InlineKeyboardButton, InlineKeyboardMarkup,
                       InputMediaPhoto)
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, \
-    ContextTypes
+from telegram.ext import (Application, CommandHandler,
+                          CallbackQueryHandler, MessageHandler,
+                          ContextTypes, filters)
 
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
+
+import kirill   # kirill -> lotin o'giruvchi (AI emas, qat'iy jadval)
 
 log = logging.getLogger(__name__)
 
@@ -56,6 +59,10 @@ MODEL_FAST = os.environ.get("AI_MODEL_FAST", "gpt-5.4-nano")
 IMAGE_QUALITY = os.environ.get("IQTIBOS_IMAGE_QUALITY", "low")
 
 MAX_BELGI = int(os.environ.get("IQTIBOS_MAX", "240"))
+# rasmdan o'qishda ishlatiladigan ko'ruvchi model
+MODEL_VISION = os.environ.get("AI_MODEL_VISION",
+                              os.environ.get("AI_MODEL_SMART",
+                                             "gpt-5.6-terra"))
 
 W = H = 1080
 
@@ -550,6 +557,37 @@ YORDAM = (
 )
 
 
+async def _albom_va_tanlov(context, chat_id, kalit):
+    """Uch uslubni ham chizib albom qilib yuboradi va tanlov tugmalarini
+    ko'rsatadi. Qo'lda kiritilgan iqtibos ham, rasmdan o'qilgani ham
+    shu yerdan o'tadi."""
+    d = context.bot_data.get("iqtibos", {}).get(kalit)
+    if not d:
+        return
+    kutish = await context.bot.send_message(chat_id, "Chizilmoqda...")
+    albom = []
+    for nom in ("1", "2", "3"):
+        _, chizuvchi = USLUBLAR[nom]
+        img = await asyncio.to_thread(
+            chizuvchi, d["matn"], d["muallif"], d["kitob"], d["urgu"], None)
+        albom.append(InputMediaPhoto(media=_png(img)))
+    await context.bot.send_media_group(chat_id, albom)
+    await kutish.delete()
+
+    ogoh = ""
+    if not d["muallif"]:
+        ogoh = ("\n\n⚠️ Muallif ko'rsatilmagan. Iqtibosni muallifsiz "
+                "joylash tavsiya etilmaydi.")
+    await context.bot.send_message(
+        chat_id, f"Qaysi uslub?{ogoh}",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("1⃣ Ijtimoiy", callback_data=f"iq_u|{kalit}|1"),
+             InlineKeyboardButton("2⃣ Binafsha", callback_data=f"iq_u|{kalit}|2"),
+             InlineKeyboardButton("3⃣ Qog'oz", callback_data=f"iq_u|{kalit}|3")],
+            [InlineKeyboardButton("❌ Bekor", callback_data=f"iq_x|{kalit}|0")],
+        ]))
+
+
 async def cmd_iqtibos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user is None or update.effective_user.id != ADMIN_ID:
         return
@@ -574,29 +612,7 @@ async def cmd_iqtibos(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "kitob": kitob, "rasm": None, "uslub": None,
     }
 
-    kutish = await update.message.reply_text("Chizilmoqda...")
-    d = context.bot_data["iqtibos"][kalit]
-    albom = []
-    for nom in ("1", "2", "3"):
-        _, chizuvchi = USLUBLAR[nom]
-        img = await asyncio.to_thread(
-            chizuvchi, d["matn"], d["muallif"], d["kitob"], d["urgu"], None)
-        albom.append(InputMediaPhoto(media=_png(img)))
-    await update.message.reply_media_group(albom)
-    await kutish.delete()
-
-    ogoh = ""
-    if not d["muallif"]:
-        ogoh = ("\n\n⚠️ Muallif ko'rsatilmagan. Iqtibosni muallifsiz "
-                "joylash tavsiya etilmaydi.")
-    await update.message.reply_text(
-        f"Qaysi uslub?{ogoh}",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("1⃣ Ijtimoiy", callback_data=f"iq_u|{kalit}|1"),
-             InlineKeyboardButton("2⃣ Binafsha", callback_data=f"iq_u|{kalit}|2"),
-             InlineKeyboardButton("3⃣ Qog'oz", callback_data=f"iq_u|{kalit}|3")],
-            [InlineKeyboardButton("❌ Bekor", callback_data=f"iq_x|{kalit}|0")],
-        ]))
+    await _albom_va_tanlov(context, update.message.chat_id, kalit)
 
 
 # ======================================================================
@@ -661,6 +677,12 @@ async def on_tugma(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.edit_message_text("Bekor qilindi.")
         return
 
+    if amal == "iq_ocr":
+        await q.answer()
+        await q.edit_message_reply_markup(reply_markup=None)
+        await _albom_va_tanlov(context, q.message.chat_id, kalit)
+        return
+
     if amal == "iq_u":
         await q.answer()
         d["uslub"] = uslub
@@ -714,10 +736,151 @@ async def on_tugma(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ======================================================================
 # RO'YXATGA OLISH
 # ======================================================================
+# ======================================================================
+# RASMDAN O'QISH (OCR)
+# ======================================================================
+OCR_KORSATMA = (
+    "You read text from a photo of a printed book page.\n"
+    "Rules:\n"
+    "1. Copy the text EXACTLY as printed. Do not translate. Do not fix "
+    "spelling. Do not modernise the alphabet. If the page is in Cyrillic, "
+    "answer in Cyrillic. If Latin, answer in Latin.\n"
+    "2. If one passage is underlined, highlighted or marked, return ONLY "
+    "that passage. Otherwise return the main paragraph.\n"
+    "3. Never invent words. If a word is unreadable, write it as [?].\n"
+    "4. If the author name or book title is visible on the page, report "
+    "them separately. If not visible, leave them empty. NEVER guess them.\n"
+    "Answer with JSON only, no markdown, no commentary:\n"
+    '{"matn": "...", "muallif": "", "kitob": ""}'
+)
+
+
+def _ocr_sinxron(rasm_baytlar):
+    """Rasmdagi matnni o'qiydi. Alifboni O'ZGARTIRMAYDI —
+    o'girish keyin, kirill.py da qat'iy jadval bilan bajariladi."""
+    import json
+    b64 = base64.b64encode(rasm_baytlar).decode()
+    try:
+        r = _mijoz().chat.completions.create(
+            model=MODEL_VISION,
+            messages=[
+                {"role": "system", "content": OCR_KORSATMA},
+                {"role": "user", "content": [
+                    {"type": "image_url",
+                     "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+                ]},
+            ],
+            max_completion_tokens=1200,
+        )
+        javob = (r.choices[0].message.content or "").strip()
+        javob = re.sub(r"^```(json)?|```$", "", javob, flags=re.M).strip()
+        m = re.search(r"\{.*\}", javob, re.S)
+        if m:
+            javob = m.group(0)
+        ma = json.loads(javob)
+        return (str(ma.get("matn", "")).strip(),
+                str(ma.get("muallif", "")).strip(),
+                str(ma.get("kitob", "")).strip(), None)
+    except Exception as e:
+        log.warning("Iqtibos OCR xatosi: %s", e)
+        return "", "", "", str(e)
+
+
+def _tasdiq_tugma(kalit):
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("\u2705 To'g'ri, kartaga",
+                              callback_data=f"iq_ocr|{kalit}|0")],
+        [InlineKeyboardButton("\u274c Bekor", callback_data=f"iq_x|{kalit}|0")],
+    ])
+
+
+async def _rasmni_oqi(update, context, rasm):
+    """Rasmni o'qib, matnni TASDIQ uchun ko'rsatadi.
+    Karta darrov chizilmaydi — OCR xato qilsa iqtibos buzilgan holda
+    kanalga chiqib ketardi."""
+    kutish = await update.message.reply_text("Rasm o'qilmoqda...")
+    fayl = await context.bot.get_file(rasm.file_id)
+    baytlar = bytes(await fayl.download_as_bytearray())
+
+    matn, muallif, kitob, xato = await asyncio.to_thread(_ocr_sinxron, baytlar)
+    await kutish.delete()
+
+    if xato or not matn:
+        await update.message.reply_text(
+            "Matnni o'qib bo'lmadi.\n\n"
+            "Rasm aniqroq, matn to'g'ri burchakdan tushgan bo'lsa yaxshi "
+            "natija beradi. Yoki matnni /iqtibos bilan qo'lda yuboring.")
+        return
+
+    kirill_edi = kirill.kirill_bormi(matn)
+    matn = kirill.kirill_lotin(matn)
+    muallif = kirill.kirill_lotin(muallif)
+    kitob = kirill.kirill_lotin(kitob)
+
+    kalit = f"iq{int(time.time())}{random.randint(10, 99)}"
+    context.bot_data.setdefault("iqtibos", {})[kalit] = {
+        "matn": matn, "urgu": None, "muallif": muallif,
+        "kitob": kitob, "rasm": None, "uslub": None,
+    }
+
+    qatorlar = [matn]
+    ost = " \u00b7 ".join([x for x in (muallif, kitob) if x])
+    if ost:
+        qatorlar.append(ost)
+    qatorlar.append(f"\u2500\u2500\u2500\n{len(matn)} belgi"
+                    + (" \u00b7 kirilldan o'girildi" if kirill_edi else ""))
+    if len(matn) > MAX_BELGI:
+        qatorlar.append(f"\u26a0\ufe0f Kartaga sig'maydi ({MAX_BELGI} belgi chegara). "
+                        f"Qisqartirib, /iqtibos bilan qayta yuboring.")
+    qatorlar.append("\nMatnni o'qib chiqing. Xato bo'lsa \u2014 tuzatib, "
+                    "/iqtibos bilan qo'lda yuboring.")
+
+    await update.message.reply_text(
+        "\n\n".join(qatorlar),
+        reply_markup=_tasdiq_tugma(kalit) if len(matn) <= MAX_BELGI else None)
+
+
+async def on_rasm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Sarlavhasida /iqtibos bo'lgan rasm."""
+    if update.effective_user is None or update.effective_user.id != ADMIN_ID:
+        return
+    if not update.message or not update.message.photo:
+        return
+    await _rasmni_oqi(update, context, update.message.photo[-1])
+
+
+async def on_rasm_kutilgan(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/iqtibos_rasm dan keyin kelgan birinchi rasm."""
+    if update.effective_user is None or update.effective_user.id != ADMIN_ID:
+        return
+    if not context.user_data.pop("iqtibos_rasm_kutilyapti", False):
+        return
+    if not update.message or not update.message.photo:
+        return
+    await _rasmni_oqi(update, context, update.message.photo[-1])
+
+
+async def cmd_iqtibos_rasm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user is None or update.effective_user.id != ADMIN_ID:
+        return
+    context.user_data["iqtibos_rasm_kutilyapti"] = True
+    await update.message.reply_text(
+        "Kitob sahifasining rasmini yuboring.\n\n"
+        "Kerakli joyni chizib yoki belgilab qo'ysangiz \u2014 faqat o'sha "
+        "qism olinadi. Kirillcha kitob bo'lsa lotinchaga o'giriladi.")
+
+
 def register(app: Application):
     """bot.py dan chaqiriladi: iqtibos.register(app)"""
     app.add_handler(CommandHandler("iqtibos", cmd_iqtibos))
+    app.add_handler(CommandHandler("iqtibos_rasm", cmd_iqtibos_rasm))
+    # sarlavhasi /iqtibos bo'lgan rasm
+    app.add_handler(MessageHandler(
+        filters.PHOTO & filters.CaptionRegex(r"(?i)^/iqtibos"), on_rasm))
+    # /iqtibos_rasm dan keyingi rasm — 1-guruhda, boshqa modullarga xalal
+    # bermasligi uchun (bayroq qo'yilmagan bo'lsa hech narsa qilmaydi)
+    app.add_handler(MessageHandler(filters.PHOTO, on_rasm_kutilgan), group=1)
     app.add_handler(CallbackQueryHandler(
-        on_tugma, pattern=r"^iq_(u|r|nr|ok|x)\|"))
+        on_tugma, pattern=r"^iq_(u|r|nr|ok|x|ocr)\|"))
     log.info("Iqtibos moduli yoqildi (kanal: %s, rasm sifati: %s)",
              CHANNEL_ID, IMAGE_QUALITY)
