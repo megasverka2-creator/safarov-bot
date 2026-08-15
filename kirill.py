@@ -90,3 +90,29 @@ def kirill_lotin(matn):
     matn = matn.replace('\x01', "'")
     matn = re.sub(r"\s+", ' ', matn).strip()
     return matn
+
+
+# ======================================================================
+# QATORDAN KO'CHIRISH CHIZIG'INI TOZALASH
+# ======================================================================
+def defis_biriktir(matn):
+    """Kitobda qator oxirida so'z bo'linadi: "fe'l-atvori- ga".
+    Bunday chiziqcha OLIB TASHLANADI va so'z birlashtiriladi.
+
+    DIQQAT: chiziqchadan keyin BO'SH JOY bo'lsagina birlashtiriladi.
+    Haqiqiy qo'shma so'zlar ("fe'l-atvor", "bir-birini") teginilmaydi,
+    chunki ularda chiziqchadan keyin bo'shliq yo'q.
+    """
+    if not matn:
+        return matn
+    matn = re.sub(r"(\w)[-\u2010\u2011]\s+(\w)", r"\1\2", matn)
+    return matn
+
+
+def tozala(matn):
+    """Rasmdan o'qilgan matnni tartibga soladi."""
+    if not matn:
+        return matn
+    matn = defis_biriktir(matn)
+    matn = re.sub(r"\s+", " ", matn).strip()
+    return matn

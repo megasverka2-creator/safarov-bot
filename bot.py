@@ -25,6 +25,7 @@ from bs4 import BeautifulSoup
 from telegram import (
     Update, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo,
     InlineKeyboardButton, InlineKeyboardMarkup, MenuButtonDefault,
+    BotCommand, BotCommandScopeDefault, BotCommandScopeChat,
 )
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, CallbackQueryHandler,
@@ -1373,6 +1374,53 @@ async def k2_golib(update, context):
         pass
 
 
+# ======================================================================
+# BUYRUQLAR PANELI (Telegram "/" tugmasi)
+# ======================================================================
+# Oddiy foydalanuvchi ko'radigan buyruqlar
+BUYRUQLAR_HAMMA = [
+    ("menu",     "Bosh menyu"),
+    ("zikr",     "Zikr eslatmalarini yoqish"),
+    ("zikr_off", "Zikr eslatmalarini to'xtatish"),
+    ("konkurs",  "Konkursda qatnashish"),
+    ("sinov",    "Do'st testi"),
+    ("shaxs",    "Shaxsiyat testi"),
+    ("kanallar", "Kanallarimiz"),
+]
+
+# Faqat adminga ko'rinadigan buyruqlar (BUYRUQLAR_HAMMA ustiga qo'shiladi)
+BUYRUQLAR_ADMIN = [
+    ("panel",        "Boshqaruv markazi"),
+    ("iqtibos",      "Iqtibos kartasi (matn bilan)"),
+    ("iqtibos_rasm", "Iqtibos kartasi (kitob rasmidan)"),
+    ("postlar",      "Agent nomzodlari"),
+    ("agent_status", "Agent holati"),
+    ("stats",        "Statistika"),
+    ("xabar",        "Ommaviy xabar"),
+    ("zikr_elon",    "Kanalga zikr banneri"),
+    ("zikr_sinov",   "Zikr eslatmasini sinash"),
+    ("shriftlar",    "Subtitr shriftlari ro'yxati"),
+]
+
+
+async def _buyruqlar_panelini_qoy(app):
+    """Telegram'dagi "/" tugmasi ro'yxatini to'ldiradi.
+    Admin buyruqlari FAQAT admin chatida ko'rinadi — obunachilar
+    ro'yxatida keraksiz buyruqlar chiqib qolmasligi uchun."""
+    try:
+        hamma = [BotCommand(n, t) for n, t in BUYRUQLAR_HAMMA]
+        await app.bot.set_my_commands(hamma, scope=BotCommandScopeDefault())
+        if ADMIN_ID:
+            admin_royxat = hamma + [BotCommand(n, t)
+                                    for n, t in BUYRUQLAR_ADMIN]
+            await app.bot.set_my_commands(
+                admin_royxat, scope=BotCommandScopeChat(chat_id=ADMIN_ID))
+        print(f"[MENU] Buyruqlar paneli o'rnatildi "
+              f"({len(hamma)} ta umumiy, {len(BUYRUQLAR_ADMIN)} ta admin)")
+    except Exception as e:
+        print(f"[MENU] Buyruqlar paneli o'rnatilmadi: {e}")
+
+
 async def post_init(app):
     global BOT_USERNAME
     try:
@@ -1385,6 +1433,7 @@ async def post_init(app):
         await app.bot.set_chat_menu_button(menu_button=MenuButtonDefault())
     except Exception:
         pass
+    await _buyruqlar_panelini_qoy(app)
     # 2-Mini Konkurs: belgilangan vaqtda avtomatik g'olib tanlash taymeri
     try:
         jq = app.job_queue

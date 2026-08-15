@@ -58,7 +58,7 @@ MODEL_FAST = os.environ.get("AI_MODEL_FAST", "gpt-5.4-nano")
 # Low ~$0.005, Medium ~$0.04, High ~$0.165 bitta rasm uchun.
 IMAGE_QUALITY = os.environ.get("IQTIBOS_IMAGE_QUALITY", "low")
 
-MAX_BELGI = int(os.environ.get("IQTIBOS_MAX", "240"))
+MAX_BELGI = int(os.environ.get("IQTIBOS_MAX", "320"))
 # rasmdan o'qishda ishlatiladigan ko'ruvchi model
 MODEL_VISION = os.environ.get("AI_MODEL_VISION",
                               os.environ.get("AI_MODEL_SMART",
@@ -677,6 +677,18 @@ async def on_tugma(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.edit_message_text("Bekor qilindi.")
         return
 
+    if amal == "iq_ed":
+        await q.answer()
+        context.user_data["iq_tahrir"] = kalit
+        await q.edit_message_reply_markup(reply_markup=None)
+        await context.bot.send_message(
+            q.message.chat_id,
+            "To'g'rilangan matnni shu yerga yuboring.\n\n"
+            "Muallifni ham o'zgartirmoqchi bo'lsangiz, oxiriga qo'shing:\n"
+            "\u2014 Muallif ismi, \"Kitob nomi\"\n\n"
+            "Urg'u berish uchun *yulduzcha ichiga* oling.")
+        return
+
     if amal == "iq_ocr":
         await q.answer()
         await q.edit_message_reply_markup(reply_markup=None)
@@ -740,37 +752,47 @@ async def on_tugma(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # RASMDAN O'QISH (OCR)
 # ======================================================================
 OCR_KORSATMA = (
-    "You read text from a photo of a printed book page.\n"
+    "You read text from photos of printed book pages.\n"
     "Rules:\n"
     "1. Copy the text EXACTLY as printed. Do not translate. Do not fix "
     "spelling. Do not modernise the alphabet. If the page is in Cyrillic, "
     "answer in Cyrillic. If Latin, answer in Latin.\n"
-    "2. If one passage is underlined, highlighted or marked, return ONLY "
-    "that passage. Otherwise return the main paragraph.\n"
-    "3. Never invent words. If a word is unreadable, write it as [?].\n"
-    "4. If the author name or book title is visible on the page, report "
-    "them separately. If not visible, leave them empty. NEVER guess them.\n"
+    "2. If several images are given, they are CONSECUTIVE pages of the "
+    "same passage, in order. Join them into ONE continuous text. A "
+    "sentence cut off at the end of one image continues in the next.\n"
+    "3. If a word is split by a hyphen at a line or page break, join it "
+    "back into one word.\n"
+    "4. If one passage is underlined, highlighted or marked, return ONLY "
+    "that passage. Otherwise return the main paragraph(s).\n"
+    "5. Never invent words. If a word is unreadable, write it as [?].\n"
+    "6. If the author name or book title is visible, report them "
+    "separately. If not visible, leave them empty. NEVER guess them.\n"
     "Answer with JSON only, no markdown, no commentary:\n"
     '{"matn": "...", "muallif": "", "kitob": ""}'
 )
 
 
-def _ocr_sinxron(rasm_baytlar):
-    """Rasmdagi matnni o'qiydi. Alifboni O'ZGARTIRMAYDI —
-    o'girish keyin, kirill.py da qat'iy jadval bilan bajariladi."""
+def _ocr_sinxron(rasmlar):
+    """Bir yoki bir nechta rasmdagi matnni o'qiydi.
+    Bir nechta sahifa BITTA so'rovda yuboriladi — shunda model gap
+    qayerda uzilib, qayerda davom etganini ko'radi va to'g'ri ulaydi.
+    Alifbo O'ZGARTIRILMAYDI: o'girish keyin, kirill.py da bajariladi."""
     import json
-    b64 = base64.b64encode(rasm_baytlar).decode()
+    if isinstance(rasmlar, (bytes, bytearray)):
+        rasmlar = [rasmlar]
+    bolaklar = []
+    for b in rasmlar[:6]:            # 6 sahifadan ortig'i qabul qilinmaydi
+        b64 = base64.b64encode(b).decode()
+        bolaklar.append({"type": "image_url",
+                         "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
     try:
         r = _mijoz().chat.completions.create(
             model=MODEL_VISION,
             messages=[
                 {"role": "system", "content": OCR_KORSATMA},
-                {"role": "user", "content": [
-                    {"type": "image_url",
-                     "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
-                ]},
+                {"role": "user", "content": bolaklar},
             ],
-            max_completion_tokens=1200,
+            max_completion_tokens=2000,
         )
         javob = (r.choices[0].message.content or "").strip()
         javob = re.sub(r"^```(json)?|```$", "", javob, flags=re.M).strip()
@@ -786,34 +808,48 @@ def _ocr_sinxron(rasm_baytlar):
         return "", "", "", str(e)
 
 
-def _tasdiq_tugma(kalit):
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("\u2705 To'g'ri, kartaga",
-                              callback_data=f"iq_ocr|{kalit}|0")],
-        [InlineKeyboardButton("\u274c Bekor", callback_data=f"iq_x|{kalit}|0")],
-    ])
+def _tasdiq_tugma(kalit, sigadi=True):
+    qatorlar = []
+    if sigadi:
+        qatorlar.append([InlineKeyboardButton(
+            "\u2705 To'g'ri, kartaga", callback_data=f"iq_ocr|{kalit}|0")])
+    qatorlar.append([InlineKeyboardButton(
+        "\u270f\ufe0f Matnni tahrirlash", callback_data=f"iq_ed|{kalit}|0")])
+    qatorlar.append([InlineKeyboardButton(
+        "\u274c Bekor", callback_data=f"iq_x|{kalit}|0")])
+    return InlineKeyboardMarkup(qatorlar)
 
 
-async def _rasmni_oqi(update, context, rasm):
-    """Rasmni o'qib, matnni TASDIQ uchun ko'rsatadi.
+async def _rasmni_oqi(context, chat_id, file_idlar):
+    """Bir yoki bir nechta sahifani o'qib, matnni TASDIQ uchun ko'rsatadi.
     Karta darrov chizilmaydi — OCR xato qilsa iqtibos buzilgan holda
     kanalga chiqib ketardi."""
-    kutish = await update.message.reply_text("Rasm o'qilmoqda...")
-    fayl = await context.bot.get_file(rasm.file_id)
-    baytlar = bytes(await fayl.download_as_bytearray())
+    nechta = len(file_idlar)
+    kutish = await context.bot.send_message(
+        chat_id, f"{nechta} ta sahifa o'qilmoqda..." if nechta > 1
+        else "Rasm o'qilmoqda...")
+
+    baytlar = []
+    for fid in file_idlar:
+        fayl = await context.bot.get_file(fid)
+        baytlar.append(bytes(await fayl.download_as_bytearray()))
 
     matn, muallif, kitob, xato = await asyncio.to_thread(_ocr_sinxron, baytlar)
-    await kutish.delete()
+    try:
+        await kutish.delete()
+    except Exception:
+        pass
 
     if xato or not matn:
-        await update.message.reply_text(
+        await context.bot.send_message(
+            chat_id,
             "Matnni o'qib bo'lmadi.\n\n"
             "Rasm aniqroq, matn to'g'ri burchakdan tushgan bo'lsa yaxshi "
             "natija beradi. Yoki matnni /iqtibos bilan qo'lda yuboring.")
         return
 
     kirill_edi = kirill.kirill_bormi(matn)
-    matn = kirill.kirill_lotin(matn)
+    matn = kirill.tozala(kirill.kirill_lotin(matn))
     muallif = kirill.kirill_lotin(muallif)
     kitob = kirill.kirill_lotin(kitob)
 
@@ -822,42 +858,112 @@ async def _rasmni_oqi(update, context, rasm):
         "matn": matn, "urgu": None, "muallif": muallif,
         "kitob": kitob, "rasm": None, "uslub": None,
     }
+    await _tasdiq_korsat(context, chat_id, kalit,
+                         qoshimcha=(nechta, kirill_edi))
 
+
+async def _tasdiq_korsat(context, chat_id, kalit, qoshimcha=None):
+    """Matnni tugmalar bilan tasdiqqa qo'yadi."""
+    d = context.bot_data.get("iqtibos", {}).get(kalit)
+    if not d:
+        return
+    matn = d["matn"]
     qatorlar = [matn]
-    ost = " \u00b7 ".join([x for x in (muallif, kitob) if x])
+    ost = " \u00b7 ".join([x for x in (d["muallif"], d["kitob"]) if x])
     if ost:
         qatorlar.append(ost)
-    qatorlar.append(f"\u2500\u2500\u2500\n{len(matn)} belgi"
-                    + (" \u00b7 kirilldan o'girildi" if kirill_edi else ""))
-    if len(matn) > MAX_BELGI:
-        qatorlar.append(f"\u26a0\ufe0f Kartaga sig'maydi ({MAX_BELGI} belgi chegara). "
-                        f"Qisqartirib, /iqtibos bilan qayta yuboring.")
-    qatorlar.append("\nMatnni o'qib chiqing. Xato bo'lsa \u2014 tuzatib, "
-                    "/iqtibos bilan qo'lda yuboring.")
 
-    await update.message.reply_text(
-        "\n\n".join(qatorlar),
-        reply_markup=_tasdiq_tugma(kalit) if len(matn) <= MAX_BELGI else None)
+    belgi = f"{len(matn)} belgi"
+    if qoshimcha:
+        nechta, kirill_edi = qoshimcha
+        if nechta > 1:
+            belgi += f" \u00b7 {nechta} sahifa"
+        if kirill_edi:
+            belgi += " \u00b7 kirilldan o'girildi"
+    qatorlar.append("\u2500\u2500\u2500\n" + belgi)
+
+    sigadi = len(matn) <= MAX_BELGI
+    if not sigadi:
+        qatorlar.append(
+            f"\u26a0\ufe0f Kartaga sig'maydi \u2014 chegara {MAX_BELGI} belgi.\n"
+            f"\u270f\ufe0f Tahrirlash tugmasi bilan qisqartiring.")
+    qatorlar.append("\nMatnni o'qib chiqing.")
+
+    await context.bot.send_message(
+        chat_id, "\n\n".join(qatorlar),
+        reply_markup=_tasdiq_tugma(kalit, sigadi))
+
+
+# --- ALBOM: bir necha sahifa birdaniga ------------------------------
+# Telegram albomdagi har rasmni ALOHIDA xabar qilib yuboradi va sarlavha
+# faqat BIRINCHISIDA bo'ladi. Shuning uchun rasmlar yig'iladi, oxirgisidan
+# keyin ALBOM_KUTISH soniya kutiladi va hammasi birga o'qiladi.
+ALBOM_KUTISH = 3.0
+
+
+async def _albom_ishla(context: ContextTypes.DEFAULT_TYPE):
+    """Kutish tugagach ishga tushadi."""
+    ma = context.job.data
+    yigma = context.bot_data.get("iq_yigma", {}).pop(ma["kalit"], None)
+    if not yigma or not yigma["fayllar"]:
+        return
+    await _rasmni_oqi(context, ma["chat_id"], yigma["fayllar"])
+
+
+def _albom_qoshi(context, chat_id, guruh_id, file_id):
+    """Rasmni yig'maga qo'shadi va taymerni qaytadan qo'yadi."""
+    yigmalar = context.bot_data.setdefault("iq_yigma", {})
+    yigma = yigmalar.setdefault(guruh_id, {"fayllar": [], "job": None})
+    yigma["fayllar"].append(file_id)
+    if yigma["job"]:
+        try:
+            yigma["job"].schedule_removal()
+        except Exception:
+            pass
+    jq = getattr(context, "job_queue", None)
+    if jq is None:
+        return False
+    yigma["job"] = jq.run_once(
+        _albom_ishla, when=ALBOM_KUTISH,
+        data={"kalit": guruh_id, "chat_id": chat_id},
+        name=f"iq_albom_{guruh_id}")
+    return True
 
 
 async def on_rasm(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Sarlavhasida /iqtibos bo'lgan rasm."""
+    """Barcha rasmlar shu yerga tushadi. Uch holatda ishlaydi:
+       1) sarlavhasi /iqtibos bo'lsa
+       2) /iqtibos_rasm bosilgan bo'lsa
+       3) allaqachon yig'ilayotgan albomning davomi bo'lsa
+    Boshqa hollarda hech narsa qilmaydi (boshqa modullarga xalal bermaydi).
+    """
     if update.effective_user is None or update.effective_user.id != ADMIN_ID:
         return
-    if not update.message or not update.message.photo:
+    msg = update.message
+    if not msg or not msg.photo:
         return
-    await _rasmni_oqi(update, context, update.message.photo[-1])
 
+    guruh = msg.media_group_id
+    yigilayotgan = guruh and guruh in context.bot_data.get("iq_yigma", {})
+    sarlavha = bool(msg.caption and re.match(r"(?i)^/iqtibos", msg.caption))
+    kutilgan = context.user_data.get("iqtibos_rasm_kutilyapti", False)
 
-async def on_rasm_kutilgan(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/iqtibos_rasm dan keyin kelgan birinchi rasm."""
-    if update.effective_user is None or update.effective_user.id != ADMIN_ID:
+    if not (yigilayotgan or sarlavha or kutilgan):
         return
-    if not context.user_data.pop("iqtibos_rasm_kutilyapti", False):
-        return
-    if not update.message or not update.message.photo:
-        return
-    await _rasmni_oqi(update, context, update.message.photo[-1])
+
+    file_id = msg.photo[-1].file_id
+
+    if guruh:
+        # albomning birinchi rasmi bayroqni o'chiradi, qolganlari
+        # "yigilayotgan" sifatida kiradi
+        context.user_data.pop("iqtibos_rasm_kutilyapti", None)
+        if _albom_qoshi(context, msg.chat_id, guruh, file_id):
+            return
+        # job_queue yo'q bo'lsa \u2014 bittalab ishlaymiz
+    else:
+        context.user_data.pop("iqtibos_rasm_kutilyapti", None)
+
+    await _rasmni_oqi(context, msg.chat_id, [file_id])
 
 
 async def cmd_iqtibos_rasm(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -866,8 +972,39 @@ async def cmd_iqtibos_rasm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["iqtibos_rasm_kutilyapti"] = True
     await update.message.reply_text(
         "Kitob sahifasining rasmini yuboring.\n\n"
+        "Iqtibos ikki sahifada bo'lsa \u2014 ikkalasini BIRGA, bitta albom "
+        "qilib yuboring. Tartib muhim: avval oldingi sahifa.\n\n"
         "Kerakli joyni chizib yoki belgilab qo'ysangiz \u2014 faqat o'sha "
-        "qism olinadi. Kirillcha kitob bo'lsa lotinchaga o'giriladi.")
+        "qism olinadi. Kirillcha kitob lotinchaga o'giriladi.")
+
+
+# --- MATNNI SHU YERNING O'ZIDA TAHRIRLASH ---------------------------
+async def on_tahrir(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Tahrirlash tugmasidan keyin kelgan matn eskisining o'rniga qo'yiladi.
+    /iqtibos ni qayta yozish shart emas."""
+    if update.effective_user is None or update.effective_user.id != ADMIN_ID:
+        return
+    kalit = context.user_data.get("iq_tahrir")
+    if not kalit:
+        return
+    d = context.bot_data.get("iqtibos", {}).get(kalit)
+    if not d:
+        context.user_data.pop("iq_tahrir", None)
+        return
+    xom = (update.message.text or "").strip()
+    if not xom:
+        return
+    context.user_data.pop("iq_tahrir", None)
+
+    matn, urgu, muallif, kitob = parse_iqtibos(xom)
+    d["matn"] = kirill.tozala(kirill.kirill_lotin(matn))
+    d["urgu"] = urgu
+    # muallif/kitob yangi matnda ko'rsatilmagan bo'lsa \u2014 eskisi qoladi
+    if muallif:
+        d["muallif"] = kirill.kirill_lotin(muallif)
+    if kitob:
+        d["kitob"] = kirill.kirill_lotin(kitob)
+    await _tasdiq_korsat(context, update.message.chat_id, kalit)
 
 
 def register(app: Application):
@@ -875,12 +1012,13 @@ def register(app: Application):
     app.add_handler(CommandHandler("iqtibos", cmd_iqtibos))
     app.add_handler(CommandHandler("iqtibos_rasm", cmd_iqtibos_rasm))
     # sarlavhasi /iqtibos bo'lgan rasm
+    # Rasm va tahrir ushlovchilari 1-guruhda — bot.py va boshqa modullar
+    # 0-guruhda ishlaydi, shuning uchun xalal bermaydi. Bayroq qo'yilmagan
+    # bo'lsa bu ushlovchilar hech narsa qilmasdan qaytadi.
+    app.add_handler(MessageHandler(filters.PHOTO, on_rasm), group=1)
     app.add_handler(MessageHandler(
-        filters.PHOTO & filters.CaptionRegex(r"(?i)^/iqtibos"), on_rasm))
-    # /iqtibos_rasm dan keyingi rasm — 1-guruhda, boshqa modullarga xalal
-    # bermasligi uchun (bayroq qo'yilmagan bo'lsa hech narsa qilmaydi)
-    app.add_handler(MessageHandler(filters.PHOTO, on_rasm_kutilgan), group=1)
+        filters.TEXT & ~filters.COMMAND, on_tahrir), group=1)
     app.add_handler(CallbackQueryHandler(
-        on_tugma, pattern=r"^iq_(u|r|nr|ok|x|ocr)\|"))
+        on_tugma, pattern=r"^iq_(u|r|nr|ok|x|ocr|ed)\|"))
     log.info("Iqtibos moduli yoqildi (kanal: %s, rasm sifati: %s)",
              CHANNEL_ID, IMAGE_QUALITY)
