@@ -1082,6 +1082,11 @@ _URGU_TASHLAB = {
     "o'z", "har", "eng", "kabi", "hamda", "yana", "endi", "qanday", "nima",
     "kim", "qachon", "the", "and", "for", "with", "haqida", "bo'ldi",
     "bo'ladi", "qildi", "keyin", "oldin",
+    # olmosh va yordamchi shakllar: uzun bo'lsa ham ma'no tashimaydi
+    "ular", "ularning", "biz", "bizning", "siz", "sizning", "men",
+    "mening", "uning", "o'zining", "o'zlarining", "shuning", "buning",
+    "shunchaki", "faqat", "ya'ni", "bo'lsa", "bo'lgan", "kerak", "mumkin",
+    "qilish", "bo'lish", "hamma", "barcha",
 }
 
 
