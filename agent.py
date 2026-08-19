@@ -52,7 +52,7 @@ import trafilatura
 from openai import OpenAI
 
 try:  # Pillow — post uchun rasm-karta chizadi. Bo'lmasa agent rasmsiz ishlayveradi.
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps
 except Exception:
     Image = None
 
@@ -965,7 +965,11 @@ def matnga_fikr_qosh(matn, fikr):
 # ======================================================================
 # RASM-AGENT — post uchun brendli karta (Pillow, bepul, API'siz)
 # ======================================================================
-CARD_W, CARD_H = 1280, 720
+# Karta formati. "4:5" — Telegram va Instagram lentasida balandroq rasm
+# ekranning ko'proq qismini egallaydi, ya'ni ko'proq e'tibor tortadi.
+CARD_FORMAT = os.environ.get("AGENT_CARD_FORMAT", "4:5").strip()
+CARD_OLCHAMLAR = {"4:5": (1080, 1350), "1:1": (1080, 1080), "16:9": (1280, 720)}
+CARD_W, CARD_H = CARD_OLCHAMLAR.get(CARD_FORMAT, CARD_OLCHAMLAR["4:5"])
 CARD_VARIANTS = 4
 
 # Har rubrika uchun 4 ta dizayn: (yuqori rang, pastki rang, aksent rang)
@@ -990,15 +994,26 @@ CARD_PALETTES = {
                     ("#132f26", "#2a5a48", "#c9a86a"), ("#232526", "#414345", "#a5d6a7")],
 }
 
-_FONT_PATHS = [
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
-    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
-]
+# Repodagi shrift birinchi turadi: Railway'da tizim shriftlari kafolatlanmagan
+# va DejaVu'ning o'z xarakteri yo'q — sarlavha "shablon" bo'lib ko'rinadi.
+FONTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
+_FONT_PATHS = {
+    "qalin": [
+        os.path.join(FONTS_DIR, "Montserrat-ExtraBold.ttf"),
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    ],
+    "orta": [
+        os.path.join(FONTS_DIR, "Montserrat-SemiBold.ttf"),
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+    ],
+}
 
-def _card_font(size):
-    for p in _FONT_PATHS:
+def _card_font(size, ogirlik="qalin"):
+    for p in _FONT_PATHS.get(ogirlik, _FONT_PATHS["qalin"]):
         if os.path.exists(p):
             try:
                 return ImageFont.truetype(p, size)
@@ -1021,69 +1036,172 @@ def _card_title(post_text):
             return t[:120]
     return "Safarov blog"
 
-def _wrap(draw, text, font, max_w):
-    lines, cur = [], ""
-    for word in text.split():
-        trial = (cur + " " + word).strip()
-        if draw.textlength(trial, font=font) <= max_w:
-            cur = trial
+# --- Dizayn yordamchilari ---------------------------------------------
+def _mesh_fon(W, H, ranglar):
+    """Uch nuqtali radial ("mesh") gradient.
+
+    Tekis chiziqli gradient kartani shablon qilib ko'rsatadi. Uch nuqtadan
+    tarqaladigan rang esa yorug'lik tushgandek jonli chiqadi. Kichik
+    tasvirda hisoblanib kattasiga cho'ziladi — sekinlashmaydi."""
+    kw = 56
+    kh = max(int(kw * H / W), 24)
+    fon = Image.new("RGB", (kw, kh))
+    px = fon.load()
+    nuqtalar = [((0.12, 0.05), ranglar[0]),
+                ((1.02, 0.42), ranglar[2]),
+                ((0.38, 1.05), ranglar[1])]
+    for y in range(kh):
+        fy = y / (kh - 1)
+        for x in range(kw):
+            fx = x / (kw - 1)
+            jami = r = g = b = 0.0
+            for (nx, ny), c in nuqtalar:
+                masofa = (fx - nx) ** 2 + (fy - ny) ** 2 + 0.03
+                ogirlik = 1.0 / (masofa * masofa)
+                jami += ogirlik
+                r += c[0] * ogirlik
+                g += c[1] * ogirlik
+                b += c[2] * ogirlik
+            px[x, y] = (int(r / jami), int(g / jami), int(b / jami))
+    return fon.resize((W, H), Image.BICUBIC)
+
+
+def _don_qosh(img, kuch=0.30):
+    """Yengil "film doni". Silliq gradient raqamli va arzon ko'rinadi —
+    mayda don qo'shilsa, rasm bosma nashrga o'xshab qoladi."""
+    try:
+        don = Image.effect_noise(img.size, 13).convert("RGB")
+        return Image.blend(img, ImageChops.overlay(img, don), kuch)
+    except Exception:
+        return img
+
+
+# Urg'u so'zini tanlashda tashlab ketiladigan yordamchi so'zlar
+_URGU_TASHLAB = {
+    "va", "bilan", "uchun", "ham", "lekin", "ammo", "yoki", "bu", "shu",
+    "o'z", "har", "eng", "kabi", "hamda", "yana", "endi", "qanday", "nima",
+    "kim", "qachon", "the", "and", "for", "with", "haqida", "bo'ldi",
+    "bo'ladi", "qildi", "keyin", "oldin",
+}
+
+
+def _urgu_indeksi(sozlar):
+    """Sarlavhaning eng "og'ir" so'zi: raqamli bo'lsa o'sha, aks holda eng
+    uzuni. Bitta so'zni ajratib bo'yash — eng arzon va eng ko'zga
+    tashlanadigan dizayn vositasi."""
+    eng, indeks = 0, -1
+    for i, soz in enumerate(sozlar):
+        toza = soz.strip(".,!?:;()«»\"'’ʻ-").lower()
+        if not toza or toza in _URGU_TASHLAB:
+            continue
+        ogirlik = len(toza) + (7 if any(c.isdigit() for c in toza) else 0)
+        if ogirlik > eng:
+            eng, indeks = ogirlik, i
+    return indeks if eng >= 6 else -1
+
+
+def _wrap_sozlar(d, sozlar, font, maks_en):
+    """So'zlarni qatorlarga bo'ladi, lekin qator ichidagi SO'ZLARNI qaytaradi
+    — shunda kerakli so'zni alohida rangda chizish mumkin bo'ladi."""
+    qatorlar, joriy = [], []
+    for soz in sozlar:
+        nomzod = joriy + [soz]
+        if not joriy or d.textlength(" ".join(nomzod), font=font) <= maks_en:
+            joriy = nomzod
         else:
-            if cur:
-                lines.append(cur)
-            cur = word
-    if cur:
-        lines.append(cur)
-    return lines
+            qatorlar.append(joriy)
+            joriy = [soz]
+    if joriy:
+        qatorlar.append(joriy)
+    return qatorlar
+
+
+def _qator_chiz(d, x, y, sozlar, font, rang, urgu_rang, urgu_no):
+    """Qatorni so'zma-so'z chizadi; urgu_no'inchi so'z boshqa rangda."""
+    for i, soz in enumerate(sozlar):
+        d.text((x, y), soz, font=font,
+               fill=(urgu_rang if i == urgu_no else rang))
+        x += d.textlength(soz + " ", font=font)
+
 
 def make_card(post_text, rubrika, variant=0):
-    """Post uchun 1280x720 brendli karta. PNG baytlari qaytadi."""
+    """Post uchun brendli karta (standart 1080x1350). PNG baytlari qaytadi."""
     if Image is None:
         return None
+    W, H = CARD_W, CARD_H
+    k = H / 1350.0                    # barcha o'lchovlar formatga moslashadi
     pal = CARD_PALETTES.get(rubrika, CARD_PALETTES["ai"])
     top, bottom, accent = pal[variant % len(pal)]
     top, bottom, accent = _hex_rgb(top), _hex_rgb(bottom), _hex_rgb(accent)
 
-    img = Image.new("RGB", (CARD_W, CARD_H), top)
+    # Uchinchi nuqta — pastki rangga aksent aralashmasi. Sof aksent bilan
+    # olsak karta qichqirib ketadi, aralashma esa yengil yorug'lik beradi.
+    uchinchi = tuple(int(b * 0.62 + a * 0.38) for b, a in zip(bottom, accent))
+    img = _don_qosh(_mesh_fon(W, H, (top, bottom, uchinchi)))
     d = ImageDraw.Draw(img, "RGBA")
-    # Gradient fon
-    for y in range(CARD_H):
-        k = y / CARD_H
-        d.line([(0, y), (CARD_W, y)],
-               fill=tuple(int(top[i] + (bottom[i] - top[i]) * k) for i in range(3)))
-    # Bezak doiralar (shaffof)
-    d.ellipse([CARD_W - 380, -220, CARD_W + 160, 320], fill=accent + (26,))
-    d.ellipse([-180, CARD_H - 260, 260, CARD_H + 180], fill=accent + (18,))
+
+    chet = int(84 * k)
+
+    # Orqa fondagi ulkan kun raqami — jurnal muqovasi ko'rinishi.
+    # Yuqoridagi bo'sh maydonga qo'yiladi va o'ng chetdan biroz chiqib
+    # turadi: sarlavha bilan urishmaydi, lekin kompozitsiyani ushlab turadi.
+    kun = datetime.now(TZ).strftime("%d")
+    f_kun = _card_font(int(430 * k))
+    kw = d.textlength(kun, font=f_kun)
+    # Yorug' aksentda bir xil shaffoflik ancha kuchli ko'rinadi — rangning
+    # yorqinligiga qarab pasaytiramiz, raqam fon bo'lib qolsin.
+    yorqinlik = 0.2126 * accent[0] + 0.7152 * accent[1] + 0.0722 * accent[2]
+    d.text((W - kw + int(54 * k), int(78 * k)), kun,
+           font=f_kun, fill=accent + (34 if yorqinlik < 140 else 22,))
 
     # Rubrika yorlig'i (yuqorida)
     label = RUBRIKA_NOMI.get(rubrika, "YANGILIK").upper()
-    f_lbl = _card_font(30)
+    f_lbl = _card_font(int(34 * k))
     lw = d.textlength(label, font=f_lbl)
-    d.rounded_rectangle([70, 70, 70 + lw + 48, 128], radius=29, fill=accent + (46,))
-    d.rounded_rectangle([70, 70, 70 + lw + 48, 128], radius=29, outline=accent, width=2)
-    d.text((94, 84), label, font=f_lbl, fill=accent)
+    quti = [chet, chet, chet + lw + int(52 * k), chet + int(68 * k)]
+    d.rounded_rectangle(quti, radius=int(34 * k), fill=accent + (42,))
+    d.rounded_rectangle(quti, radius=int(34 * k), outline=accent,
+                        width=max(2, int(2 * k)))
+    d.text((chet + int(26 * k), chet + int(16 * k)), label,
+           font=f_lbl, fill=accent)
 
-    # Sarlavha (o'rtada, avtomatik o'lcham)
-    title = _card_title(post_text)
-    for fsize in (76, 64, 54, 46):
-        f_t = _card_font(fsize)
-        lines = _wrap(d, title, f_t, CARD_W - 190)
-        if len(lines) <= 4:
+    # Sarlavha — so'zma-so'z teriladi, urg'u so'zi aksent rangda
+    sozlar = _card_title(post_text).split()
+    urgu = _urgu_indeksi(sozlar)
+    maks_en = W - chet * 2 - int(34 * k)
+    for olcham in (104, 92, 80, 70, 60, 52):
+        f_t = _card_font(int(olcham * k))
+        qatorlar = _wrap_sozlar(d, sozlar, f_t, maks_en)
+        if len(qatorlar) <= 4:
             break
-    lh = int(fsize * 1.25)
-    y0 = max(200, (CARD_H - lh * len(lines)) // 2 - 30)
-    d.rectangle([70, y0 + 8, 82, y0 + lh * len(lines) - 8], fill=accent)  # aksent chiziq
-    for i, ln in enumerate(lines):
-        d.text((108, y0 + i * lh), ln, font=f_t, fill=(255, 255, 255))
+    lh = int(f_t.size * 1.20)
+    pastki = H - int(250 * k)                    # pastki panel uchun joy
+    y0 = max(int(300 * k), pastki - lh * len(qatorlar))
+
+    # Chap tomondagi aksent chizig'i
+    d.rounded_rectangle([chet, y0 + int(10 * k),
+                         chet + int(12 * k), y0 + lh * len(qatorlar) - int(14 * k)],
+                        radius=int(6 * k), fill=accent)
+
+    sanalgan = 0
+    matn_x = chet + int(34 * k)
+    for qator in qatorlar:
+        urgu_no = urgu - sanalgan if 0 <= urgu - sanalgan < len(qator) else -1
+        _qator_chiz(d, matn_x, y0, qator, f_t,
+                    (255, 255, 255), accent, urgu_no)
+        sanalgan += len(qator)
+        y0 += lh
 
     # Pastki panel: brend + sana
-    f_b = _card_font(36)
-    f_s = _card_font(26)
+    f_b = _card_font(int(40 * k))
+    f_s = _card_font(int(30 * k), "orta")
     bname, bhandle = _brand_for(rubrika)
-    d.text((70, CARD_H - 96), bname, font=f_b, fill=(255, 255, 255))
+    d.text((chet, H - int(150 * k)), bname, font=f_b, fill=(255, 255, 255))
+    d.text((chet, H - int(96 * k)), bhandle, font=f_s, fill=accent)
     sana = datetime.now(TZ).strftime("%d.%m.%Y")
-    d.text((70, CARD_H - 50), bhandle, font=f_s, fill=accent)
     sw = d.textlength(sana, font=f_s)
-    d.text((CARD_W - 70 - sw, CARD_H - 56), sana, font=f_s, fill=(255, 255, 255, 210))
+    d.text((W - chet - sw, H - int(104 * k)), sana, font=f_s,
+           fill=(255, 255, 255, 205))
 
     buf = BytesIO()
     img.save(buf, format="PNG")
@@ -1165,70 +1283,103 @@ def ai_cover_title(post_id, post_text, rubrika):
     return title, badge
 
 
+# Duotone: har xil manbadan olingan suratlar kanal lentasida BITTA brend
+# tilida ko'rinadi. 0 = o'chirilgan, 1 = to'liq bo'yalgan.
+DUOTONE_KUCH = float(os.environ.get("AGENT_DUOTONE", "0.72"))
+
+
+def _duotone(img, qorong_rang, yorug_rang, kuch):
+    """Suratni ikki rangli (qorong'i -> yorug') shkalaga o'tkazadi."""
+    if kuch <= 0:
+        return img
+    kul = ImageOps.grayscale(img)
+    duo = ImageOps.colorize(kul, black=qorong_rang, white=yorug_rang)
+    return Image.blend(img, duo, min(kuch, 1.0))
+
+
 def make_photo_card(photo_bytes, post_text, rubrika, cover=None,
                     size=None):
-    """Suratni blog uslubiga keltiradi: qoraytirish + muqova sarlavha + brend."""
+    """Suratni blog uslubiga keltiradi: duotone + muqova sarlavha + brend."""
     if Image is None:
         return None
     W, H = size or (CARD_W, CARD_H)
+    k = H / 1350.0
     pal = CARD_PALETTES.get(rubrika, CARD_PALETTES["ai"])
-    accent = _hex_rgb(pal[0][2])
+    top, accent = _hex_rgb(pal[0][0]), _hex_rgb(pal[0][2])
 
     src = Image.open(BytesIO(photo_bytes)).convert("RGB")
     # Cover-crop: kadr o'lchamiga to'ldirib kesish
-    k = max(W / src.width, H / src.height)
-    src = src.resize((int(src.width * k) + 1, int(src.height * k) + 1))
+    kf = max(W / src.width, H / src.height)
+    src = src.resize((int(src.width * kf) + 1, int(src.height * kf) + 1))
     x = (src.width - W) // 2
     y = (src.height - H) // 2
     img = src.crop((x, y, x + W, y + H))
 
+    # Rubrika rangiga bo'yash — Pexels'dan kelgan begona surat ham
+    # kanalning o'z rangida ko'rinadi.
+    img = _duotone(img,
+                   tuple(int(c * 0.30) for c in top),
+                   tuple(min(255, int(c * 0.40 + 255 * 0.60)) for c in accent),
+                   DUOTONE_KUCH)
+
     d = ImageDraw.Draw(img, "RGBA")
     # Pastdan yuqoriga qorong'i gradient (matn o'qilishi uchun)
     for i in range(H):
-        alpha = int(200 * max(0, (i - H * 0.35) / (H * 0.65)))
+        alpha = int(215 * max(0, (i - H * 0.32) / (H * 0.68)))
         d.line([(0, i), (W, i)], fill=(10, 12, 16, alpha))
-    d.rectangle([0, 0, W, H], fill=(10, 12, 16, 55))  # yengil umumiy dim
+    d.rectangle([0, 0, W, H], fill=(10, 12, 16, 60))  # yengil umumiy dim
 
-    # === MUQOVA USLUBI (techno.kun.uz kabi): markazda katta sarlavha + yorliq ===
+    chet = int(84 * k)
+
+    # === MUQOVA USLUBI: markazda katta sarlavha + yorliq ===
     title, badge = cover if cover else (
         _card_title(post_text).upper()[:28],
         RUBRIKA_NOMI.get(rubrika, "YANGILIK").upper())
 
-    # Katta markaziy sarlavha (1-2 qator)
-    for fsize in (100, 86, 72, 60):
-        f_t = _card_font(fsize)
-        lines = _wrap(d, title, f_t, W - 160)
-        if len(lines) <= 2:
+    # Katta markaziy sarlavha (1-2 qator), urg'u so'zi aksent rangda
+    sozlar = title.split()
+    urgu = _urgu_indeksi(sozlar)
+    for olcham in (118, 100, 86, 72, 62):
+        f_t = _card_font(int(olcham * k))
+        qatorlar = _wrap_sozlar(d, sozlar, f_t, W - chet * 2)
+        if len(qatorlar) <= 2:
             break
-    lh = int(fsize * 1.12)
-    badge_h = 66
-    total_h = lh * len(lines) + 22 + badge_h
-    y0 = H - 120 - total_h
-    for i, ln in enumerate(lines):
-        w = d.textlength(ln, font=f_t)
-        x = (W - w) / 2
-        # yengil soya — o'qilishi uchun
-        d.text((x + 3, y0 + i * lh + 3), ln, font=f_t, fill=(0, 0, 0, 170))
-        d.text((x, y0 + i * lh), ln, font=f_t, fill=(255, 255, 255))
+    lh = int(f_t.size * 1.12)
+    badge_h = int(72 * k)
+    jami_h = lh * len(qatorlar) + int(24 * k) + badge_h
+    y0 = H - int(150 * k) - jami_h
+    sanalgan = 0
+    for qator in qatorlar:
+        matn = " ".join(qator)
+        w = d.textlength(matn, font=f_t)
+        bx = (W - w) / 2
+        # yengil soya — har qanday fonda o'qilsin
+        d.text((bx + 3, y0 + 3), matn, font=f_t, fill=(0, 0, 0, 170))
+        urgu_no = urgu - sanalgan if 0 <= urgu - sanalgan < len(qator) else -1
+        _qator_chiz(d, bx, y0, qator, f_t, (255, 255, 255), accent, urgu_no)
+        sanalgan += len(qator)
+        y0 += lh
 
     # Kategoriya-yorliq (oq pilyulya, qora matn)
-    f_bdg = _card_font(30)
+    f_bdg = _card_font(int(32 * k))
     bw = d.textlength(badge, font=f_bdg)
-    bx = (W - bw - 56) / 2
-    by = y0 + lh * len(lines) + 22
-    d.rounded_rectangle([bx, by, bx + bw + 56, by + badge_h], radius=badge_h // 2,
-                        fill=(245, 245, 245, 235))
-    d.text((bx + 28, by + 16), badge, font=f_bdg, fill=(20, 22, 26))
+    bx = (W - bw - int(60 * k)) / 2
+    by = y0 + int(24 * k)
+    d.rounded_rectangle([bx, by, bx + bw + int(60 * k), by + badge_h],
+                        radius=badge_h // 2, fill=(245, 245, 245, 235))
+    d.text((bx + int(30 * k), by + int(18 * k)), badge, font=f_bdg,
+           fill=(20, 22, 26))
 
-    # Brend (yuqori chapda, mayda) va sana (pastda, mayda)
-    f_s = _card_font(24)
+    # Brend (yuqori chapda) va sana (pastda o'ngda)
+    f_s = _card_font(int(30 * k))
     bname, bhandle = _brand_for(rubrika)
-    d.text((70, 64), bname, font=f_s, fill=(255, 255, 255, 230))
-    d.text((70, 98), bhandle, font=_card_font(20), fill=accent)
+    d.text((chet, int(70 * k)), bname, font=f_s, fill=(255, 255, 255, 235))
+    d.text((chet, int(112 * k)), bhandle, font=_card_font(int(25 * k), "orta"),
+           fill=accent)
     sana = datetime.now(TZ).strftime("%d.%m.%Y")
     sw = d.textlength(sana, font=f_s)
-    d.text((W - 70 - sw, H - 54), sana, font=f_s,
-           fill=(255, 255, 255, 180))
+    d.text((W - chet - sw, H - int(70 * k)), sana, font=f_s,
+           fill=(255, 255, 255, 190))
 
     buf = BytesIO()
     img.save(buf, format="PNG")
