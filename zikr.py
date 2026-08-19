@@ -12,8 +12,13 @@ Ishlash tartibi:
      Har bosishda tasbeh chizig'i to'ladi: ○○○ -> ●○○ -> ●●○ -> ●●●
      Oxirgi bosishda xabar o'rnida "Hammamiz bugun: N" qoladi.
   5. Kunning BARCHA eslatmalari to'liq aytib bo'linganda — yakuniy xabar
-     (ketma-ketlik + kunlik natija). Unga vaqti-vaqti bilan "Do'stni taklif
-     qilish" tugmasi qo'shiladi (har kuni emas — ZIKR_TAKLIF_KUN kunda bir).
+     (ketma-ketlik + kunlik natija). Unga vaqti-vaqti bilan "Yaqinlaringizni
+     taklif qiling" tugmasi qo'shiladi (har kuni emas — ZIKR_TAKLIF_KUN
+     kunda bir). Tugma INLINE rejimda ishlaydi: do'stga havola emas,
+     ustida "Qo'shilish" tugmasi bor xabar boradi — bir bosishda qo'shiladi.
+     Buning uchun BotFather'da inline rejim yoqilgan bo'lishi shart
+     (/setinline). Yoqilmagan bo'lsa ZIKR_TAKLIF_INLINE=0 qo'ying —
+     eski ulashish havolasiga qaytadi.
   6. Kunlik hisob 00:00 da nolga qaytadi, oylik hisob yig'ilib boradi
   7. Oy oxirida obunachilarga umumiy natija yuboriladi
   8. /zikr_off -> "To'xtadi"
@@ -33,12 +38,16 @@ from urllib.parse import quote
 from datetime import datetime, date, time as dtime, timedelta
 from zoneinfo import ZoneInfo
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    Update, InlineKeyboardButton, InlineKeyboardMarkup,
+    InlineQueryResultArticle, InputTextMessageContent,
+)
 from telegram.error import Forbidden, BadRequest
 from telegram.ext import (
     Application,
     CommandHandler,
     CallbackQueryHandler,
+    InlineQueryHandler,
     ContextTypes,
 )
 
@@ -75,6 +84,15 @@ def son_soz(n):
 
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "@safaroov_blog")
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "safarovblog_bot")
+
+# Taklif qanday ketadi:
+#   1 (standart) — INLINE rejim. Do'stga havola emas, "Qo'shilish" TUGMASI
+#                  bor xabar boradi. Buning uchun BotFather'da inline rejim
+#                  yoqilgan bo'lishi SHART: /setinline -> botni tanlang.
+#   0            — eski usul: oddiy ulashish havolasi (inline yoqilmagan
+#                  bo'lsa shuni qo'ying, aks holda tugma ishlamaydi).
+TAKLIF_INLINE = os.environ.get("ZIKR_TAKLIF_INLINE", "1").strip() not in (
+    "0", "yo'q", "false")
 
 # ======================================================================
 # ZIKR RO'YXATI — qat'iy, AI tegmaydi
@@ -398,12 +416,53 @@ ULASH_MATNI = (f"Zikr halqasi. Kun davomida {son_soz(PER_DAY)} marta qisqa "
                f"Qo'shilasizmi?")
 
 
+def _qoshilish_tugma():
+    """Do'stga boradigan xabardagi tugma — bosilsa bot ochiladi va
+    /start zikr ishga tushadi (bot.py shu argumentni tushunadi)."""
+    return InlineKeyboardMarkup([[InlineKeyboardButton(
+        "Qo'shilish", url=f"https://t.me/{BOT_USERNAME}?start=zikr")]])
+
+
 def _taklif_tugma():
+    """Obunachi bosadigan "taklif qilish" tugmasi.
+
+    INLINE rejimda: tugma chat tanlash oynasini ochadi va do'stga HAVOLA
+    emas, ustida "Qo'shilish" tugmasi bor xabar boradi. Havola yuborilsa
+    odam uni ochishi, keyin START bosishi kerak edi — tugma bilan bir
+    bosishda qo'shiladi.
+
+    Inline rejim BotFather'da yoqilmagan bo'lsa (ZIKR_TAKLIF_INLINE=0) —
+    eski ulashish havolasiga qaytadi."""
+    if TAKLIF_INLINE:
+        # Bo'sh so'rov: chat tanlanishi bilan taklif kartasi darrov chiqadi
+        return InlineKeyboardMarkup([[InlineKeyboardButton(
+            "Yaqinlaringizni taklif qiling", switch_inline_query="")]])
     havola = f"https://t.me/{BOT_USERNAME}?start=zikr"
     ulash = (f"https://t.me/share/url?url={quote(havola, safe='')}"
              f"&text={quote(ULASH_MATNI, safe='')}")
     return InlineKeyboardMarkup(
         [[InlineKeyboardButton("Yaqinlaringizni taklif qiling", url=ulash)]])
+
+
+async def on_inline(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Inline so'rov: taklif kartasini qaytaradi.
+
+    Foydalanuvchi chatni tanlagach shu natija ko'rinadi; bosilganda
+    do'stga ULASH_MATNI va "Qo'shilish" tugmasi ketadi.
+
+    So'rov matni tekshirilmaydi — bu botda inline rejimning yagona
+    vazifasi shu taklif."""
+    natija = InlineQueryResultArticle(
+        id="zikr_taklif",
+        title="Zikr halqasiga taklif qilish",
+        description="Do'stingizga qo'shilish tugmasi bilan xabar ketadi",
+        input_message_content=InputTextMessageContent(ULASH_MATNI),
+        reply_markup=_qoshilish_tugma(),
+    )
+    try:
+        await update.inline_query.answer([natija], cache_time=300)
+    except Exception as e:
+        log.warning("Inline taklif javobi ketmadi: %s", e)
 
 
 async def _kun_yakun_xabar(context, uid, kun, streak, kunlik, taklif):
@@ -720,6 +779,10 @@ def register(app: Application):
     app.add_handler(CommandHandler("zikr_yakun", cmd_zikr_yakun))
     # eski "zikr_ok" ham, yangi "zikr_ok|kun|vaqt" ham shu handlerga tushadi
     app.add_handler(CallbackQueryHandler(on_aytdim, pattern=r"^zikr_ok"))
+    if TAKLIF_INLINE:
+        # Botdagi yagona inline funksiya — zikr taklifi.
+        # BotFather: /setinline yoqilmagan bo'lsa tugma javob bermaydi.
+        app.add_handler(InlineQueryHandler(on_inline))
 
     jq = getattr(app, "job_queue", None)
     if jq is None:
@@ -728,5 +791,6 @@ def register(app: Application):
     jq.run_daily(job_kunlik_reja, time=dtime(0, 5, tzinfo=TZ),
                  name="zikr_reja")
     jq.run_repeating(job_tekshir, interval=60, first=20, name="zikr_tekshir")
-    log.info("Zikr moduli yoqildi (kuniga %d ta x %d takror, %02d:00-%02d:00)",
-             PER_DAY, TAKROR, HOUR_FROM, HOUR_TO)
+    log.info("Zikr moduli yoqildi (kuniga %d ta x %d takror, %02d:00-%02d:00, "
+             "taklif: %s)", PER_DAY, TAKROR, HOUR_FROM, HOUR_TO,
+             "inline tugma" if TAKLIF_INLINE else "havola")
