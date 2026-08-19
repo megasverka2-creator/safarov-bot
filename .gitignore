@@ -1,0 +1,8 @@
+# Python kompilyatsiya qilgan bayt-kod. Manba fayl o'zgarganda qayta
+# yasaladi, shuning uchun repoda saqlashning ma'nosi yo'q.
+__pycache__/
+*.py[cod]
+
+# Mahalliy sozlama va ma'lumot fayllari (Railway'da DATA_DIR ichida turadi)
+.env
+*.db
