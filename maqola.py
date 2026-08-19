@@ -175,12 +175,32 @@ M3. O'ZINGDAN FAKT QO'SHMA. Yangi raqam, sana, ism, tadqiqot, iqtibos \
 o'ylab topish — eng og'ir xato. Muallif aytmagan misolni "masalan" deb \
 kiritma. Fikrni kengaytirish mumkin, DALIL to'qish mumkin emas.
 
-M4. TUZILISH:
-    Sarlavha — bitta qator, o'ziga tortadigan, lekin sensatsiyasiz.
-    Kirish — 2-3 gap: o'quvchi nega bu matnni o'qishi kerak.
-    2-4 ta bo'lim — har birida qalin sarlavha (**shunday**) va 1-2 xatboshi.
+M4. TUZILISH. Telegram bu matnni MAQOLA ko'rinishida chiqaradi, shuning
+uchun belgilar aniq ishlatiladi:
+
+    Birinchi qator — sarlavha. Oldiga hech qanday belgi qo'yma, matnning
+    o'zi. O'ziga tortadigan, lekin sensatsiyasiz.
+
+    Keyin kirish — 2-3 gap: o'quvchi nega bu matnni o'qishi kerak.
+
+    2-4 ta bo'lim. Har bo'lim sarlavhasi ALOHIDA QATORDA va "## " bilan
+    boshlanadi. Masalan:
+        ## Nega bu ishlamaydi
+    Sarlavhadan keyin 1-2 xatboshi.
+
+    Maqolaning eng kuchli bitta jumlasini iqtibos bloki qilib ajratasan —
+    alohida qatorda "> " bilan. Faqat BITTA marta, o'zing yozgan
+    jumladan. Bu maqola o'rtasida nafas oladigan joy beradi.
+
+    Sanab o'tish kerak bo'lsa "- " bilan ro'yxat yoz (3-5 band, har biri
+    bir qator). Majburiy emas — mazmunga mos kelsagina.
+
     Xulosa — o'quvchi ertaga qila oladigan ANIQ qadam.
-    Savol — o'quvchiga qaratilgan bitta jonli savol.
+
+    Oxirida o'quvchiga qaratilgan bitta jonli savol.
+
+    Matn ichida ** ** ni faqat alohida so'zga urg'u berish uchun ishlat,
+    bo'lim sarlavhasi uchun EMAS — sarlavha "## " bilan yoziladi.
 
 M5. Og'zaki nutq izlari yo'qolsin: "ha", "ya'ni", "shundaymi", takror \
 gaplar, o'ylab turish. Lekin muallifning O'Z ohangi va o'z misollari \
@@ -246,6 +266,11 @@ masala", "har bir inson buni bilishi kerak").
 9. Xulosada ANIQ, bajarib bo'ladigan qadam bormi — bo'lmasa qo'sh (lekin \
 yangi FAKT qo'shma).
 10. Ohang hurmatli. Diniy va siyosiy mavzuda betaraf.
+11. TUZILISH BELGILARI SAQLANADI: "## " bilan boshlangan bo'lim \
+sarlavhalari, "> " iqtibos bloki va "- " ro'yxat bandlari o'z holicha \
+qoladi. Ularni oddiy matnga aylantirma — Telegram shu belgilar bo'yicha \
+maqolani chiroyli chiqaradi. Bo'lim sarlavhasi ** ** bilan yozilgan \
+bo'lsa, uni "## " ga o'gir.
 
 QAT'IY: yangi fakt, raqam, ism yoki iqtibos QO'SHMAYSAN. Sen faqat \
 mavjud matnni tozalaysan va ravonlashtirasan. Maqola uzunligi \
@@ -395,8 +420,21 @@ async def _korsat(context, chat_id, kalit, hisobot=True):
 
 
 def _html_himoya(matn):
-    """Maqolada ** bilan berilgan bo'lim sarlavhalarini HTML'ga o'giradi."""
+    """Maqola belgilarini Telegram HTML'iga o'giradi (chatdagi ko'rinish uchun).
+
+    Kanalga chiqqanda matn markdown holicha ketadi va Telegram uni maqola
+    qilib chizadi. Chatda esa oldindan ko'rish uchun shu yerda o'giramiz."""
     matn = (matn.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+    qatorlar = []
+    for qator in matn.split("\n"):
+        sarlavha = re.match(r"^#{2,6}\s+(.+)$", qator)
+        iqtibos = re.match(r"^&gt;\s*(.+)$", qator)   # ">" yuqorida qochirilgan
+        if sarlavha:
+            qator = f"<b>{sarlavha.group(1)}</b>"
+        elif iqtibos:
+            qator = f"<i>« {iqtibos.group(1)} »</i>"
+        qatorlar.append(qator)
+    matn = "\n".join(qatorlar)
     return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", matn)
 
 
