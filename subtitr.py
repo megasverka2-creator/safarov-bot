@@ -6,10 +6,18 @@ Ishlash tartibi:
   1. Admin botga video tashlaydi
   2. ffmpeg videodan ovozni ajratadi (kichik mono mp3)
   3. Whisper (whisper-1) matnga o'giradi — VAQT BELGILARI bilan
-     (diqqat: gpt-4o transkripsiya modellari vaqt belgisi bermaydi)
-  4. AI segmentlarni o'zbekchaga o'giradi — bitta so'rovda, kontekst saqlanadi
-  5. .srt yasaladi va videoga kuyiladi
+     (diqqat: gpt-4o transkripsiya modellari vaqt belgisi bermaydi).
+     Uzun yozuv bo'laklarga bo'lib o'giriladi — video uzunligi cheklovsiz.
+  4. AI segmentlarni o'zbekchaga o'giradi — to'plamlab, kontekst saqlanadi
+  5. Matn "kartalar"ga bo'linadi (1-2 qator), .srt yasaladi va kuyiladi
   6. Admin oladi: subtitrli video + .srt fayl + to'liq tarjima matni
+
+KO'RINISH: standart uslub — "captions", ya'ni Captions/CapCut ilovalaridagi
+ko'rinish: Montserrat ExtraBold, yirik matn, bir kartada 7 tagacha so'z,
+ekranning pastki uchdan birida. /uslub buyrug'i bilan almashtiriladi.
+
+Qator eni endi qo'lda sozlanmaydi — matn eni SHRIFTNING O'ZIDAN o'lchanadi
+(Pillow), shuning uchun shrift almashsa ham qatorlar to'g'ri bo'linadi.
 
 MUHIM: og'ir ishlar (ffmpeg, API) asyncio.to_thread orqali ishlaydi —
 botning qolgan qismi muzlab qolmaydi.
@@ -37,10 +45,10 @@ from telegram.ext import (
     filters,
 )
 
-try:  # Pillow — mavjud subtitrni aniqlash uchun
-    from PIL import Image
+try:  # Pillow — mavjud subtitrni aniqlash va matn enini o'lchash uchun
+    from PIL import Image, ImageFont
 except Exception:
-    Image = None
+    Image = ImageFont = None
 
 log = logging.getLogger(__name__)
 
@@ -48,13 +56,22 @@ ADMIN_ID = int(os.environ.get("ADMIN_ID", "0") or "0")
 MODEL_SMART = os.environ.get("AI_MODEL_SMART", "gpt-5.6-terra")
 STT_MODEL = os.environ.get("AI_MODEL_STT", "whisper-1")   # vaqt belgisi beradi
 
-MAX_SECONDS = int(os.environ.get("SUBTITR_MAX_SEC", "300"))  # 5 daqiqa
+# Ovoz bo'lak-bo'lak o'girilgani uchun uzun video ham o'tadi.
+# Chegara faqat xavfsizlik uchun — tasodifan 1 soatlik fayl kelib qolmasin.
+MAX_SECONDS = int(os.environ.get("SUBTITR_MAX_SEC", "1800"))   # 30 daqiqa
+# Whisper 25 MB fayl qabul qiladi. 48 kbit/s mono'da 15 daqiqa ≈ 5.4 MB —
+# zaxira bilan sig'adi va bitta so'rov ham juda cho'zilib ketmaydi.
+STT_BOLAK_SEK = int(os.environ.get("SUBTITR_STT_BOLAK", "900"))
+# Tarjima ham to'plamlarga bo'linadi: bitta javobda 400 ta segment
+# so'ralsa, model matnni qirqib qo'yadi.
+TARJIMA_TOPLAM = int(os.environ.get("SUBTITR_TARJIMA_TOPLAM", "60"))
+
 # Bo'sh qoldirilsa — video formatiga qarab AVTOMATIK tanlanadi.
 # Qiymat berilsa — o'sha ustuvor (shrift almashganda qo'l bilan sozlash uchun).
 _LINE_ENV = os.environ.get("SUBTITR_LINE", "").strip()
 _FS_ENV = os.environ.get("SUBTITR_FONT_SIZE", "").strip()
-MAX_LINE = int(_LINE_ENV) if _LINE_ENV.isdigit() else 24
-FONT_SIZE = int(_FS_ENV) if _FS_ENV.isdigit() else 12
+MAX_LINE = int(_LINE_ENV) if _LINE_ENV.isdigit() else 0   # 0 = o'lchab topiladi
+FONT_SIZE = int(_FS_ENV) if _FS_ENV.isdigit() else 0      # 0 = uslub belgilaydi
 FONTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
 BRAND = os.environ.get("SUBTITR_BRAND", "@safaroov_blog")   # videodagi yozuv
 BRAND_OLCHAM = int(os.environ.get("SUBTITR_BRAND_OLCHAM", "28"))  # h/28 — kichikroq son = kattaroq yozuv
@@ -62,9 +79,14 @@ BRAND_ORQA = os.environ.get("SUBTITR_BRAND_ORQA", "0.92")         # matn shaffof
 BRAND_QUTI = os.environ.get("SUBTITR_BRAND_QUTI", "0.35")         # orqa quti (0 = quti yo'q)
 BRAND_JOY = os.environ.get("SUBTITR_BRAND_JOY", "tepa_chap")      # tepa_chap/tepa_ong/past_chap/past_ong
 KANAL = os.environ.get("CHANNEL_ID", "@safaroov_blog")      # qaysi kanalga
-FONT_NAME = os.environ.get("SUBTITR_FONT", "Liberation Sans")
+# Bo'sh bo'lsa — uslubning o'z shrifti ishlatiladi (pastdagi USLUBLAR).
+FONT_NAME = os.environ.get("SUBTITR_FONT", "").strip()
 
+# Brend yozuvi (video burchagidagi @kanal) uchun shrift.
+# Repodagi shrift birinchi: Railway'da tizim shriftlari kafolatlanmagan.
 _FONT_YOLLARI = [
+    os.path.join(FONTS_DIR, "TTDrugs-BoldItalic.ttf"),
+    os.path.join(FONTS_DIR, "Montserrat-ExtraBold.ttf"),
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
     "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
@@ -155,91 +177,262 @@ def _vaqt(sek):
     return f"{soat:02d}:{daq:02d}:{son:02d},{mil:03d}"
 
 
-def _satrlarga_bol(matn, eni=MAX_LINE):
-    """Uzun matnni ko'pi bilan 2 qatorga bo'ladi — subtitr o'qishli bo'lsin.
-    So'z o'rtasidan kesilmaydi: sig'masa, matn so'z chegarasida qisqartiriladi."""
-    matn = " ".join(matn.split())
-    if len(matn) <= eni:
-        return matn
-    # bo'shliqsiz juda uzun bo'lak (havola va h.k.) — majburan bo'lamiz
-    sozlar = []
-    for s in matn.split(" "):
-        while len(s) > eni:
-            sozlar.append(s[:eni - 1] + "-")
-            s = s[eni - 1:]
-        sozlar.append(s)
-    qator, natija = "", []
+# ======================================================================
+# USLUB TO'PLAMLARI
+# ======================================================================
+# libass SRT faylni ASS'ga o'girganda standart "sahna" o'lchovi 384x288
+# bo'ladi va tayyor tasvir video o'lchamiga masshtablanadi. Shuning uchun
+# barcha o'lchovlar (FontSize, MarginV, matn eni) SHU 384x288 tizimida.
+ASS_EN, ASS_BAL = 384.0, 288.0
+
+# Har uslub — tugallangan to'plam: shrift, ASS bo'lagi, o'lcham, joylashuv.
+#   shrift     — libass'ga beriladigan oila nomi (shriftning ichidagi nom)
+#   fayl       — fonts/ dagi fayl; matn enini O'LCHASH uchun kerak
+#   ass        — force_style bo'lagi
+#   olcham     — video nisbatiga qarab FontSize
+#   en_ulush   — matn maydoni kadr enining necha ulushini egallaydi
+#   maks_qator — bir kartada nechta qator
+#   maks_soz   — bir kartada nechta so'z (0 = cheklovsiz)
+#   margin     — pastdan masofa (288 birlik ichida)
+#   spacing    — ASS Spacing qiymati (o'lchashda hisobga olinadi)
+USLUBLAR = {
+    "captions": {
+        "izoh": "Captions ilovasidek — yirik qalin matn, qisqa bo'laklar",
+        "shrift": "Montserrat ExtraBold",
+        "fayl": "Montserrat-ExtraBold.ttf",
+        "ass": ("PrimaryColour=&HFFFFFF,OutlineColour=&H000000,"
+                "BorderStyle=1,Outline=2.6,Shadow=1.1,Bold=0,Spacing=0.4"),
+        "olcham": {"tik": 18, "4:5": 17, "kvadrat": 16, "keng": 15},
+        "en_ulush": {"tik": 0.86, "4:5": 0.84, "kvadrat": 0.78, "keng": 0.62},
+        "maks_qator": 2, "maks_soz": 7, "margin": 96, "spacing": 0.4,
+    },
+    "klassik": {
+        "izoh": "Oq qalin, ingichka kontur — universal",
+        "shrift": "Montserrat SemiBold",
+        "fayl": "Montserrat-SemiBold.ttf",
+        "ass": ("PrimaryColour=&HFFFFFF,OutlineColour=&H000000,"
+                "BorderStyle=1,Outline=0.9,Shadow=1.2,Bold=0,Spacing=0.2"),
+        "olcham": {"tik": 13, "4:5": 14, "kvadrat": 15, "keng": 16},
+        "en_ulush": {"tik": 0.88, "4:5": 0.86, "kvadrat": 0.82, "keng": 0.74},
+        "maks_qator": 2, "maks_soz": 0, "margin": 70, "spacing": 0.2,
+    },
+    "qutili": {
+        "izoh": "Yarim shaffof qora qutida — har qanday fonda o'qiladi",
+        "shrift": "Montserrat SemiBold",
+        "fayl": "Montserrat-SemiBold.ttf",
+        "ass": ("PrimaryColour=&HFFFFFF,BackColour=&HA0000000,"
+                "BorderStyle=3,Outline=0.8,Shadow=0,Bold=0,Spacing=0.2"),
+        "olcham": {"tik": 13, "4:5": 14, "kvadrat": 15, "keng": 16},
+        "en_ulush": {"tik": 0.86, "4:5": 0.84, "kvadrat": 0.80, "keng": 0.72},
+        "maks_qator": 2, "maks_soz": 0, "margin": 74, "spacing": 0.2,
+    },
+    "kontrast": {
+        "izoh": "Qalin qora kontur — sershovqin videolar uchun",
+        "shrift": "Montserrat ExtraBold",
+        "fayl": "Montserrat-ExtraBold.ttf",
+        "ass": ("PrimaryColour=&HFFFFFF,OutlineColour=&H000000,"
+                "BorderStyle=1,Outline=3.0,Shadow=0,Bold=0,Spacing=0.1"),
+        "olcham": {"tik": 15, "4:5": 15, "kvadrat": 15, "keng": 16},
+        "en_ulush": {"tik": 0.88, "4:5": 0.86, "kvadrat": 0.82, "keng": 0.70},
+        "maks_qator": 2, "maks_soz": 0, "margin": 78, "spacing": 0.1,
+    },
+    "oltin": {
+        "izoh": "Sariq-oltin urg'u — reels uslubi",
+        "shrift": "Montserrat ExtraBold",
+        "fayl": "Montserrat-ExtraBold.ttf",
+        "ass": ("PrimaryColour=&H4FD7FF,OutlineColour=&H000000,"
+                "BorderStyle=1,Outline=2.2,Shadow=1.0,Bold=0,Spacing=0.4"),
+        "olcham": {"tik": 18, "4:5": 17, "kvadrat": 16, "keng": 15},
+        "en_ulush": {"tik": 0.86, "4:5": 0.84, "kvadrat": 0.78, "keng": 0.62},
+        "maks_qator": 2, "maks_soz": 7, "margin": 96, "spacing": 0.4,
+    },
+    "yumshoq": {
+        "izoh": "Konturisiz, faqat soya — tinch videolar uchun",
+        "shrift": "Montserrat SemiBold",
+        "fayl": "Montserrat-SemiBold.ttf",
+        "ass": ("PrimaryColour=&HFFFFFF,OutlineColour=&H000000,"
+                "BorderStyle=1,Outline=0,Shadow=2.2,Bold=0,Spacing=0.3"),
+        "olcham": {"tik": 13, "4:5": 14, "kvadrat": 15, "keng": 16},
+        "en_ulush": {"tik": 0.86, "4:5": 0.84, "kvadrat": 0.80, "keng": 0.72},
+        "maks_qator": 2, "maks_soz": 0, "margin": 72, "spacing": 0.3,
+    },
+}
+USLUB = os.environ.get("SUBTITR_USLUB", "captions")
+# 0 = uslubning o'z qiymati ishlatiladi
+MARGIN_ODDIY = int(os.environ.get("SUBTITR_MARGIN", "0") or "0")
+MARGIN_YUQORI = int(os.environ.get("SUBTITR_MARGIN2", "150"))  # mavjud subtitr bo'lsa
+# Barcha matnni BOSH HARFDA ko'rsatish (reels uslubi)
+KATTA_HARF = os.environ.get("SUBTITR_KATTA_HARF", "0").strip() in ("1", "ha", "true")
+# Bir karta ekranda kamida shuncha turadi
+MIN_KARTA = float(os.environ.get("SUBTITR_MIN_KARTA", "0.7"))
+
+
+def uslub_ol(nomi=None):
+    return USLUBLAR.get(nomi or USLUB, USLUBLAR["captions"])
+
+
+# ======================================================================
+# MATN ENINI O'LCHASH
+# ======================================================================
+# Qatorga nechta belgi sig'ishini taxmin qilish o'rniga shriftning O'ZIDAN
+# o'lchaymiz. Shrift almashsa ham qator eni to'g'ri qoladi — ilgari bu
+# qiymat qo'lda sozlanardi va har shrift uchun qaytadan tuzatish kerak edi.
+_OLCHOV_MASSHTAB = 8          # aniqlik uchun kattaroq o'lchamda o'lchab, bo'lamiz
+_shrift_kesh = {}
+
+
+def _shrift_yoli(uslub):
+    yol = os.path.join(FONTS_DIR, uslub.get("fayl") or "")
+    return yol if uslub.get("fayl") and os.path.exists(yol) else None
+
+
+def _olchov_shrifti(yol, px):
+    kalit = (yol, px)
+    if kalit not in _shrift_kesh:
+        _shrift_kesh[kalit] = ImageFont.truetype(yol, px)
+    return _shrift_kesh[kalit]
+
+
+def matn_eni(matn, uslub, fs):
+    """Matn enini ASS birligida qaytaradi (FontSize = em balandligi)."""
+    spacing = uslub.get("spacing", 0.0) * len(matn)
+    yol = _shrift_yoli(uslub)
+    if ImageFont is None or not yol:
+        return len(matn) * fs * 0.58 + spacing      # taxminiy zaxira
+    try:
+        f = _olchov_shrifti(yol, max(int(fs * _OLCHOV_MASSHTAB), 8))
+        return f.getlength(matn) / _OLCHOV_MASSHTAB + spacing
+    except Exception as e:
+        log.warning("Shrift o'lchanmadi (%s): %s", yol, e)
+        return len(matn) * fs * 0.58 + spacing
+
+
+# ======================================================================
+# MATNNI KARTALARGA BO'LISH
+# ======================================================================
+_TINISH = ".,!?;:…"
+
+
+def _iboralarga(sozlar):
+    """So'zlarni tinish belgisi bo'yicha ibora-ibora guruhlaydi.
+    Shu tufayli qator jumla o'rtasidan emas, ma'no chegarasidan uziladi."""
+    ibora, natija = [], []
     for s in sozlar:
-        nomzod = (qator + " " + s).strip()
-        if len(nomzod) <= eni:
-            qator = nomzod
-        elif qator:              # joriy qator to'ldi — yangisiga o'tamiz
-            natija.append(qator)
-            qator = s
-        else:                    # qator bo'sh, lekin so'z baribir sig'maydi
-            natija.append(s)
-            qator = ""
-    if qator:
-        natija.append(qator)
-    if len(natija) <= 2:
-        return "\n".join(natija)
-    # 2 qatordan oshsa — ikkinchi qatorni so'z chegarasida to'xtatamiz
-    ikki = natija[1]
-    for s in natija[2:]:
-        if len(ikki) + len(s) + 1 <= eni - 1:
-            ikki += " " + s
-        else:
-            ikki += "…"
-            break
-    return natija[0] + "\n" + ikki
+        ibora.append(s)
+        if s and s[-1] in _TINISH:
+            natija.append(ibora)
+            ibora = []
+    if ibora:
+        natija.append(ibora)
+    return natija
 
 
-def _bolaklarga(matn, eni):
-    """Matnni qisqa bo'laklarga bo'ladi (so'z chegarasida)."""
-    matn = " ".join(matn.split())
+def _joylash(sozlar, maks_en, olcha, maks_qator, maks_belgi=0):
+    """So'zlarni eng kam sondagi qatorga MUVOZANATLI joylaydi.
+    Qaytaradi: qatorlar ro'yxati, sig'masa None.
+
+    Muvozanat muhim: 'juda uzun birinchi qator + bitta so'z' ko'rinishi
+    subtitrni xunuk qiladi. Shuning uchun qatorlar soni bir xil bo'lgan
+    variantlardan eng uzun qatori eng qisqasi tanlanadi."""
+    n = len(sozlar)
+    if not n:
+        return []
+    CHEK = float("inf")
+    en = [[CHEK] * (n + 1) for _ in range(n + 1)]
+    for i in range(n):
+        for j in range(i + 1, n + 1):
+            qator = " ".join(sozlar[i:j])
+            e = olcha(qator)
+            if (e > maks_en or (maks_belgi and len(qator) > maks_belgi)) \
+                    and j > i + 1:
+                break                      # uzunroq bo'lagi ham sig'maydi
+            en[i][j] = e
+    dp = [[None] * (n + 1) for _ in range(maks_qator + 1)]
+    dp[0][0] = (0.0, [])
+    for k in range(1, maks_qator + 1):
+        for j in range(1, n + 1):
+            eng = None
+            for i in range(j):
+                if dp[k - 1][i] is None or en[i][j] == CHEK:
+                    continue
+                qiymat = max(dp[k - 1][i][0], en[i][j])
+                if eng is None or qiymat < eng[0]:
+                    eng = (qiymat, dp[k - 1][i][1] + [" ".join(sozlar[i:j])])
+            dp[k][j] = eng
+        if dp[k][n] is not None:            # eng kam qator afzal
+            return dp[k][n][1]
+    return None
+
+
+def kartalarga(matn, uslub, fs, maks_en):
+    """Matnni ekranda ketma-ket ko'rinadigan "kartalar"ga bo'ladi.
+    Har karta — bir vaqtda ko'rinadigan 1-2 qator."""
+    matn = " ".join((matn or "").split())
     if not matn:
         return []
-    if len(matn) <= eni:
-        return [matn]
-    natija, joriy = [], ""
-    for s in matn.split(" "):
-        while len(s) > eni:                    # bo'shliqsiz uzun bo'lak
-            if joriy:
-                natija.append(joriy)
-                joriy = ""
-            natija.append(s[:eni - 1] + "-")
-            s = s[eni - 1:]
-        nomzod = (joriy + " " + s).strip()
-        if len(nomzod) <= eni:
-            joriy = nomzod
+    if KATTA_HARF:
+        matn = matn.upper()
+    maks_qator = uslub.get("maks_qator", 2)
+    maks_soz = uslub.get("maks_soz", 0)
+
+    def olcha(t):
+        return matn_eni(t, uslub, fs)
+
+    def joyla(sozlar):
+        if maks_soz and len(sozlar) > maks_soz:
+            return None
+        return _joylash(sozlar, maks_en, olcha, maks_qator, MAX_LINE)
+
+    kartalar, joriy = [], []
+    for ibora in _iboralarga(matn.split(" ")):
+        if joriy and joyla(joriy + ibora) is None:
+            kartalar.append(joriy)
+            joriy = []
+        if not joriy and joyla(ibora) is None:
+            # Ibora yolg'iz o'zi ham sig'maydi — so'zma-so'z to'ldiramiz
+            bolak = []
+            for s in ibora:
+                if bolak and joyla(bolak + [s]) is None:
+                    kartalar.append(bolak)
+                    bolak = []
+                bolak.append(s)
+            joriy = bolak
         else:
-            if joriy:
-                natija.append(joriy)
-            joriy = s
+            joriy = joriy + ibora
     if joriy:
-        natija.append(joriy)
-    return natija
+        kartalar.append(joriy)
+    return ["\n".join(joyla(k) or [" ".join(k)]) for k in kartalar]
 
 
-def vaqtga_taqsimla(segmentlar, tarjimalar, eni=None):
-    """Har segmentni qisqa bo'laklarga bo'lib, vaqtini proporsional taqsimlaydi.
-    Natija: professional subtitr kabi — ekranda bir vaqtda BITTA qisqa qator.
-    Uzun segment ekranni to'ldirib, videoni yopib qo'ymaydi."""
-    eni = eni or MAX_LINE
+def vaqtga_taqsimla(segmentlar, tarjimalar, uslub, fs, maks_en):
+    """Har segmentni kartalarga bo'lib, vaqtini uzunligiga qarab taqsimlaydi.
+    Natija: ekranda bir vaqtda faqat bitta qisqa karta turadi."""
     natija = []
     for (b, o, _), matn in zip(segmentlar, tarjimalar):
-        bolaklar = _bolaklarga(matn, eni)
-        if not bolaklar:
+        kartalar = kartalarga(matn, uslub, fs, maks_en)
+        if not kartalar:
             continue
         davom = max(float(o) - float(b), 0.8)
-        jami = sum(len(x) for x in bolaklar) or 1
+        jami = sum(len(x) for x in kartalar) or 1
         t = float(b)
-        for i, bo in enumerate(bolaklar):
-            ulush = davom * (len(bo) / jami)
-            oxiri = float(o) if i == len(bolaklar) - 1 else t + ulush
-            natija.append((t, oxiri, bo))
-            t += ulush
-    return natija
+        for i, karta in enumerate(kartalar):
+            ulush = davom * (len(karta) / jami)
+            oxiri = float(o) if i == len(kartalar) - 1 else t + ulush
+            if oxiri - t < MIN_KARTA:
+                oxiri = t + MIN_KARTA
+            natija.append((t, oxiri, karta))
+            t = oxiri
+
+    # Vaqtlarni tartibga solamiz: kartalar bir-birining ustiga chiqmasin va
+    # hech biri MIN_KARTA dan qisqa bo'lmasin. Whisper ba'zan bir xil
+    # boshlanish vaqtiga ega segment qaytaradi — shunda subtitr sakraydi.
+    tozalangan, oxirgi = [], 0.0
+    for b, o, m in natija:
+        b = max(b, oxirgi)
+        o = max(o, b + MIN_KARTA)
+        tozalangan.append((b, o, m))
+        oxirgi = o
+    return tozalangan
 
 
 def srt_yasa(segmentlar):
@@ -252,50 +445,28 @@ def srt_yasa(segmentlar):
     return "\n".join(qismlar)
 
 
-# ======================================================================
-# USLUB TO'PLAMLARI
-# ======================================================================
-# Har uslub: ASS force_style bo'lagi. FontSize va MarginV kod tomonidan
-# qo'shiladi (video formatiga va mavjud subtitrga qarab).
-USLUBLAR = {
-    "klassik": ("Oq qalin, ingichka kontur — universal",
-                "PrimaryColour=&HFFFFFF,OutlineColour=&H000000,"
-                "BorderStyle=1,Outline=0.8,Shadow=1.2,Bold=1,Spacing=0.2"),
-    "qutili": ("Yarim shaffof qora qutida — har qanday fonda o'qiladi",
-               "PrimaryColour=&HFFFFFF,BackColour=&HA0000000,"
-               "BorderStyle=3,Outline=0.6,Shadow=0,Bold=1,Spacing=0.2"),
-    "kontrast": ("Qalin qora kontur — sershovqin videolar uchun",
-                 "PrimaryColour=&HFFFFFF,OutlineColour=&H000000,"
-                 "BorderStyle=1,Outline=2.2,Shadow=0,Bold=1,Spacing=0.1"),
-    "oltin": ("Sariq-oltin urg'u — reels uslubi",
-              "PrimaryColour=&H4FD7FF,OutlineColour=&H000000,"
-              "BorderStyle=1,Outline=1.4,Shadow=0.8,Bold=1,Spacing=0.2"),
-    "yumshoq": ("Konturisiz, faqat soya — tinch videolar uchun",
-                "PrimaryColour=&HFFFFFF,OutlineColour=&H000000,"
-                "BorderStyle=1,Outline=0,Shadow=2,Bold=1,Spacing=0.3"),
-}
-USLUB = os.environ.get("SUBTITR_USLUB", "klassik")
-MARGIN_ODDIY = int(os.environ.get("SUBTITR_MARGIN", "70"))    # pastdan masofa
-MARGIN_YUQORI = int(os.environ.get("SUBTITR_MARGIN2", "150"))  # mavjud subtitr bo'lsa
-
-
-def format_sozlamasi(en, balandlik):
-    """Video nisbatiga qarab shrift o'lchami va qator enini tanlaydi.
-    O'lchovlar amaliy sinovdan olingan (matn eni 60-85% bo'lishi maqsad).
-    Env orqali qiymat berilgan bo'lsa — O'SHA ustuvor."""
-    if _FS_ENV.isdigit() and _LINE_ENV.isdigit():
-        return FONT_SIZE, MAX_LINE
+def _nisbat_kalit(en, balandlik):
     if balandlik <= 0:
-        return FONT_SIZE, MAX_LINE
+        return "tik"
     nisbat = en / balandlik
-    if nisbat < 0.70:            # 9:16 — Reels, TikTok, Shorts
-        return (FONT_SIZE if _FS_ENV.isdigit() else 12,
-                MAX_LINE if _LINE_ENV.isdigit() else 24)
-    if nisbat < 0.95:            # 4:5 — Instagram
-        return 13, 27
-    if nisbat < 1.30:            # 1:1 — kvadrat
-        return 14, 30
-    return 17, 36                # 16:9 — YouTube, gorizontal
+    if nisbat < 0.70:
+        return "tik"          # 9:16 — Reels, TikTok, Shorts
+    if nisbat < 0.95:
+        return "4:5"          # Instagram
+    if nisbat < 1.30:
+        return "kvadrat"      # 1:1
+    return "keng"             # 16:9 — YouTube
+
+
+def format_sozlamasi(en, balandlik, uslub_nomi=None):
+    """Video nisbatiga qarab (shrift o'lchami, matn maydoni eni, yon chekka).
+    Env orqali qiymat berilgan bo'lsa — O'SHA ustuvor."""
+    u = uslub_ol(uslub_nomi)
+    kalit = _nisbat_kalit(en, balandlik)
+    fs = FONT_SIZE or u["olcham"][kalit]
+    maks_en = ASS_EN * u["en_ulush"][kalit]
+    yon = int(round((ASS_EN - maks_en) / 2))
+    return fs, maks_en, yon
 
 
 def _video_olchami(video_yol):
@@ -361,12 +532,19 @@ def mavjud_subtitr_bormi(video_yol, davomiylik):
     return ((band / tekshirildi) if tekshirildi else 0.0), eng_yuqori
 
 
-def margin_hisobla(eng_yuqori):
+def margin_asosi(uslub_nomi=None):
+    """Uslubning odatdagi pastki chekkasi (env qiymati ustuvor)."""
+    return MARGIN_ODDIY or uslub_ol(uslub_nomi)["margin"]
+
+
+def margin_hisobla(eng_yuqori, uslub_nomi=None):
     """Mavjud subtitr tepasiga bizning matnni joylash uchun MarginV.
     ASS o'lchovi 288 birlik balandlikka nisbatan hisoblanadi."""
-    pastdan = (1.0 - eng_yuqori) * 288       # mavjud matn qayerdan boshlanadi
+    pastdan = (1.0 - eng_yuqori) * ASS_BAL   # mavjud matn qayerdan boshlanadi
     kerak = int(pastdan + 26)                # + o'z matnimiz balandligi va bo'shliq
-    return max(MARGIN_ODDIY, min(kerak, 100))
+    return max(margin_asosi(uslub_nomi), min(kerak, 150))
+
+
 # ======================================================================
 # BLOKLOVCHI ISHLAR (to_thread orqali chaqiriladi)
 # ======================================================================
@@ -391,8 +569,9 @@ def _davomiylik(video_yol):
         return 0.0
 
 
-def _transkripsiya(ovoz_yol):
-    """Whisper — segment darajasidagi vaqt belgilari bilan."""
+def _transkripsiya_bir(ovoz_yol, siljish=0.0):
+    """Bitta ovoz faylini o'giradi. `siljish` — vaqt belgilariga qo'shiladi
+    (uzun yozuv bo'laklarga bo'linganda kerak bo'ladi)."""
     with open(ovoz_yol, "rb") as f:
         r = ai().audio.transcriptions.create(
             model=STT_MODEL, file=f,
@@ -407,20 +586,62 @@ def _transkripsiya(ovoz_yol):
         if b is None and isinstance(s, dict):
             b, o, t = s.get("start"), s.get("end"), (s.get("text") or "").strip()
         if t:
-            natija.append((float(b or 0), float(o or 0), t))
+            natija.append((float(b or 0) + siljish, float(o or 0) + siljish, t))
     til = getattr(r, "language", "") or ""
     return natija, til
 
 
-def _tarjima(segmentlar):
-    """Hamma segmentni BITTA so'rovda o'giradi — arzon va kontekst saqlanadi."""
-    kirish = "\n".join(f"[{i}] {t}" for i, (_, _, t) in enumerate(segmentlar, 1))
+def _ovoz_bolagi(ovoz_yol, bosh, davom, chiqish_yol):
+    r = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-loglevel", "error",
+         "-ss", f"{bosh:.2f}", "-t", f"{davom:.2f}", "-i", ovoz_yol,
+         "-ac", "1", "-ar", "16000", "-b:a", "48k", "-y", chiqish_yol],
+        capture_output=True, text=True)
+    if r.returncode != 0 or not os.path.exists(chiqish_yol):
+        raise RuntimeError(f"Ovoz bo'lagi ajratilmadi: {r.stderr[-300:]}")
+
+
+def _transkripsiya(ovoz_yol, davomiylik=0.0):
+    """Whisper — segment darajasidagi vaqt belgilari bilan.
+
+    Whisper bitta so'rovda 25 MB gacha fayl oladi, shuning uchun uzun yozuv
+    STT_BOLAK_SEK bo'yicha kesiladi va vaqt belgilari qayta bir tizimga
+    keltiriladi. Video uzunligi cheklovi shu sababli olib tashlandi."""
+    davomiylik = davomiylik or _davomiylik(ovoz_yol)
+    if davomiylik <= STT_BOLAK_SEK + 30:
+        return _transkripsiya_bir(ovoz_yol)
+
+    papka = tempfile.mkdtemp(prefix="stt_")
+    hammasi, til, t, i = [], "", 0.0, 0
+    try:
+        while t < davomiylik:
+            bolak = os.path.join(papka, f"b{i}.mp3")
+            _ovoz_bolagi(ovoz_yol, t, STT_BOLAK_SEK, bolak)
+            segs, bolak_til = _transkripsiya_bir(bolak, t)
+            hammasi += segs
+            til = til or bolak_til
+            t += STT_BOLAK_SEK
+            i += 1
+    finally:
+        shutil.rmtree(papka, ignore_errors=True)
+    return hammasi, til
+
+
+def _tarjima_toplam(matnlar, kontekst=""):
+    """Bitta to'plamni o'giradi. Qaytadi: tartib bo'yicha tarjimalar."""
+    kirish = "\n".join(f"[{i}] {t}" for i, t in enumerate(matnlar, 1))
+    xabarlar = [{"role": "system", "content": TARJIMA_PROMPT}]
+    if kontekst:
+        xabarlar.append({
+            "role": "user",
+            "content": ("OLDINGI QISM (faqat kontekst uchun, tarjima QILINMAYDI "
+                        "va javobga KIRMAYDI):\n" + kontekst)})
+    xabarlar.append({"role": "user", "content": kirish})
     r = ai().chat.completions.create(
         model=MODEL_SMART,
         response_format={"type": "json_object"},
-        max_completion_tokens=120 * len(segmentlar) + 400,
-        messages=[{"role": "system", "content": TARJIMA_PROMPT},
-                  {"role": "user", "content": kirish}])
+        max_completion_tokens=120 * len(matnlar) + 400,
+        messages=xabarlar)
     data = json.loads(r.choices[0].message.content)
     xarita = {}
     for el in (data.get("lines") or []):
@@ -429,24 +650,54 @@ def _tarjima(segmentlar):
         except (TypeError, ValueError):
             continue
     # tushib qolgan segment bo'lsa — asl matn qoladi (bo'sh qolmasin)
-    return [xarita.get(i) or segmentlar[i - 1][2]
-            for i in range(1, len(segmentlar) + 1)]
+    return [xarita.get(i) or matnlar[i - 1] for i in range(1, len(matnlar) + 1)]
+
+
+def _tarjima(segmentlar, toplam_no=None):
+    """Segmentlarni o'giradi.
+
+    Uzun videoda segment yuzlab bo'ladi — hammasini bitta javobda so'rasak,
+    model matnni yarmida qirqib qo'yadi. Shuning uchun TARJIMA_TOPLAM tadan
+    bo'lib so'raymiz, har to'plamga oldingisining oxirgi qatorlari kontekst
+    qilib beriladi — shunda ohang va atamalar bir xil qoladi.
+
+    toplam_no — ixtiyoriy: (nechanchi, nechtadan) bilan chaqiriladigan
+    funksiya (jarayonni ko'rsatish uchun)."""
+    matnlar = [t for _, _, t in segmentlar]
+    if len(matnlar) <= TARJIMA_TOPLAM:
+        if toplam_no:
+            toplam_no(1, 1)
+        return _tarjima_toplam(matnlar)
+
+    natija, kontekst = [], ""
+    jami = (len(matnlar) + TARJIMA_TOPLAM - 1) // TARJIMA_TOPLAM
+    for k in range(jami):
+        bolak = matnlar[k * TARJIMA_TOPLAM:(k + 1) * TARJIMA_TOPLAM]
+        if toplam_no:
+            toplam_no(k + 1, jami)
+        uz = _tarjima_toplam(bolak, kontekst)
+        natija += uz
+        kontekst = " ".join(uz[-3:])
+    return natija
 
 
 def _kuydir(video_yol, srt_yol, chiqish_yol, fs=None, marginv=None,
-            uslub_nomi=None):
+            uslub_nomi=None, yon=None):
     """Subtitrni videoga kuydiradi.
     fs        — shrift o'lchami (video formatiga qarab tanlanadi)
     marginv   — pastdan masofa (mavjud subtitr bo'lsa oshiriladi)
     uslub_nomi— USLUBLAR dan biri
+    yon       — chap/o'ng chekka (matn maydoni enidan hisoblanadi)
 
-    DIQQAT: libass shriftni video o'lchamiga O'ZI masshtablaydi (384px etalon).
-    Shuning uchun fs video eniga qarab kattalashtirilmaydi."""
-    fs = fs or FONT_SIZE
-    marginv = marginv if marginv is not None else 70
-    _, uslub_qismi = USLUBLAR.get(uslub_nomi or USLUB, USLUBLAR["klassik"])
-    uslub = (f"FontName={FONT_NAME},FontSize={fs},{uslub_qismi},"
-             f"Alignment=2,MarginV={marginv},MarginL=20,MarginR=20")
+    DIQQAT: libass shriftni video o'lchamiga O'ZI masshtablaydi (384x288
+    etalon). Shuning uchun fs video eniga qarab kattalashtirilmaydi."""
+    u = uslub_ol(uslub_nomi)
+    fs = fs or FONT_SIZE or u["olcham"]["tik"]
+    marginv = marginv if marginv is not None else margin_asosi(uslub_nomi)
+    yon = yon if yon is not None else 20
+    shrift = FONT_NAME or u["shrift"]
+    uslub = (f"FontName={shrift},FontSize={fs},{u['ass']},"
+             f"Alignment=2,MarginV={marginv},MarginL={yon},MarginR={yon}")
 
     papka = os.path.dirname(srt_yol) or "."
     nom = os.path.basename(srt_yol)
@@ -562,8 +813,72 @@ async def cmd_shriftlar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     await update.message.reply_text(
         "Topilgan shriftlar:\n\n" + "\n\n".join(qatorlar) +
-        f"\n\nHozirgi SUBTITR_FONT: {FONT_NAME}\n"
-        "Railway Variables'da SUBTITR_FONT ga yuqoridagi nomlardan birini yozing.")
+        f"\n\nHozirgi uslub: {joriy_uslub()} — "
+        f"{uslub_ol(joriy_uslub())['shrift']}\n"
+        f"SUBTITR_FONT: {FONT_NAME or '(uslub belgilaydi)'}\n\n"
+        "Uslubni almashtirish: /uslub\n"
+        "Doimiy shrift: Railway Variables'da SUBTITR_FONT ga yuqoridagi "
+        "nomlardan birini yozing.")
+
+
+# ======================================================================
+# USLUBNI ALMASHTIRISH — /uslub
+# ======================================================================
+# Uslubni tekshirish uchun har safar qayta deploy qilish shart emas:
+# tanlov shu jarayon xotirasida saqlanadi. Qayta ishga tushganda
+# SUBTITR_USLUB qiymatiga qaytadi.
+_JORIY = {"uslub": USLUB if USLUB in USLUBLAR else "captions"}
+
+
+def joriy_uslub():
+    return _JORIY["uslub"]
+
+
+def _uslub_tugmalari():
+    qatorlar = []
+    for nomi in USLUBLAR:
+        belgi = "✅ " if nomi == joriy_uslub() else ""
+        qatorlar.append([InlineKeyboardButton(
+            f"{belgi}{nomi} — {USLUBLAR[nomi]['izoh']}"[:60],
+            callback_data=f"suslub:{nomi}")])
+    return InlineKeyboardMarkup(qatorlar)
+
+
+def _uslub_matni():
+    u = uslub_ol(joriy_uslub())
+    return (f"🎨 Subtitr uslubi: <b>{joriy_uslub()}</b>\n"
+            f"{u['izoh']}\n\n"
+            f"Shrift: {u['shrift']}\n"
+            f"Bir kartada: {u['maks_qator']} qator"
+            + (f", {u['maks_soz']} so'zgacha" if u.get("maks_soz") else "")
+            + f"\nPastdan masofa: {margin_asosi(joriy_uslub())}/288\n\n"
+            "Quyidan tanlang — keyingi videoga shu uslub qo'llanadi.")
+
+
+async def cmd_uslub(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/uslub — subtitr uslubini ko'rish va almashtirish."""
+    if update.effective_user is None or update.effective_user.id != ADMIN_ID:
+        return
+    await update.message.reply_text(_uslub_matni(), parse_mode="HTML",
+                                    reply_markup=_uslub_tugmalari())
+
+
+async def on_uslub_tugma(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    if q.from_user.id != ADMIN_ID:
+        await q.answer("Faqat admin uchun.", show_alert=True)
+        return
+    nomi = q.data.split(":", 1)[1]
+    if nomi not in USLUBLAR:
+        await q.answer("Bunday uslub yo'q.")
+        return
+    _JORIY["uslub"] = nomi
+    await q.answer(f"Uslub: {nomi}")
+    try:
+        await q.edit_message_text(_uslub_matni(), parse_mode="HTML",
+                                  reply_markup=_uslub_tugmalari())
+    except Exception:
+        pass
 
 
 # ======================================================================
@@ -850,50 +1165,69 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         video_yol = os.path.join(ish, "kirish.mp4")
         await fayl.download_to_drive(video_yol)
 
+        async def holat_yoz(matn):
+            try:
+                await holat.edit_text(matn)
+            except Exception:
+                pass
+
         uzunlik = await asyncio.to_thread(_davomiylik, video_yol)
         if uzunlik > MAX_SECONDS:
             await holat.edit_text(
-                f"Video juda uzun: {int(uzunlik)} soniya "
-                f"(chegara {MAX_SECONDS}).")
+                f"Video juda uzun: {int(uzunlik // 60)} daqiqa "
+                f"(chegara {MAX_SECONDS // 60} daqiqa).")
             return
 
-        await holat.edit_text("🎧 Ovoz ajratilmoqda...")
+        await holat_yoz("🎧 Ovoz ajratilmoqda...")
         ovoz_yol = os.path.join(ish, "ovoz.mp3")
         await asyncio.to_thread(_ovoz_ajrat, video_yol, ovoz_yol)
 
-        await holat.edit_text("📝 Nutq matnga o'girilmoqda...")
-        segmentlar, til = await asyncio.to_thread(_transkripsiya, ovoz_yol)
+        if uzunlik > STT_BOLAK_SEK:
+            await holat_yoz(
+                f"📝 Nutq matnga o'girilmoqda "
+                f"({int(uzunlik // 60)} daqiqa — biroz vaqt oladi)...")
+        else:
+            await holat_yoz("📝 Nutq matnga o'girilmoqda...")
+        segmentlar, til = await asyncio.to_thread(
+            _transkripsiya, ovoz_yol, uzunlik)
         if not segmentlar:
             await holat.edit_text("Nutq topilmadi — videoda ovoz bormi?")
             return
 
-        await holat.edit_text(
+        await holat_yoz(
             f"🌐 Tarjima qilinmoqda ({len(segmentlar)} segment, manba: {til})...")
-        uz = await asyncio.to_thread(_tarjima, segmentlar)
+        loop = asyncio.get_running_loop()
+
+        def tarjima_belgisi(k, jami):
+            if jami > 1:
+                asyncio.run_coroutine_threadsafe(
+                    holat_yoz(f"🌐 Tarjima qilinmoqda... {k}/{jami}"), loop)
+
+        uz = await asyncio.to_thread(_tarjima, segmentlar, tarjima_belgisi)
 
         en0, bal0 = await asyncio.to_thread(_video_olchami, video_yol)
-        _, qator_eni = format_sozlamasi(en0, bal0)
-        bolaklar = vaqtga_taqsimla(segmentlar, uz, qator_eni)
+        uslub_nomi = joriy_uslub()
+        fs, maks_en, yon = format_sozlamasi(en0, bal0, uslub_nomi)
+        bolaklar = vaqtga_taqsimla(segmentlar, uz, uslub_ol(uslub_nomi),
+                                   fs, maks_en)
         srt = srt_yasa(bolaklar)
         srt_yol = os.path.join(ish, "subtitr.srt")
         with open(srt_yol, "w", encoding="utf-8") as f:
             f.write(srt)
 
-        await holat.edit_text("🎞 Subtitr videoga kuydirilmoqda...")
+        await holat_yoz("🎞 Subtitr videoga kuydirilmoqda...")
         chiqish = os.path.join(ish, "natija.mp4")
 
         # Format va joylashuvni videoning o'ziga moslashtirmiz
-        en, bal = await asyncio.to_thread(_video_olchami, video_yol)
-        fs, _ = format_sozlamasi(en, bal)
         band, eng_yuqori = await asyncio.to_thread(
             mavjud_subtitr_bormi, video_yol, uzunlik)
-        marginv = MARGIN_ODDIY
+        marginv = margin_asosi(uslub_nomi)
         izoh = ""
         if band >= 0.5:      # videoda allaqachon subtitr bor — tepasiga chiqamiz
-            marginv = margin_hisobla(eng_yuqori)
+            marginv = margin_hisobla(eng_yuqori, uslub_nomi)
             izoh = "\n\n⚠️ Videoda allaqachon subtitr bor — matn tepasiga qo'yildi."
         await asyncio.to_thread(_kuydir, video_yol, srt_yol, chiqish,
-                                fs, marginv, USLUB)
+                                fs, marginv, uslub_nomi, yon)
 
         await holat.edit_text("📤 Yuborilmoqda...")
         with open(chiqish, "rb") as f:
@@ -904,7 +1238,7 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                      caption="Montaj uchun subtitr fayli")
 
         toliq = " ".join(uz)
-        await holat.edit_text("📰 Kanal posti tayyorlanmoqda...")
+        await holat_yoz("📰 Kanal posti tayyorlanmoqda...")
         try:
             maqola = await asyncio.to_thread(_maqola_yoz, toliq)
         except Exception as e:
@@ -947,6 +1281,8 @@ def register(app: Application):
         on_video))
     app.add_handler(CallbackQueryHandler(
         on_video_tugma, pattern=r"^(vpub|vfikr|vtah|vno|vovoz):"))
+    app.add_handler(CallbackQueryHandler(on_uslub_tugma, pattern=r"^suslub:"))
+    app.add_handler(CommandHandler("uslub", cmd_uslub))
     app.add_handler(CommandHandler("bekor", cmd_bekor), group=-2)
     app.add_handler(CommandHandler("shriftlar", cmd_shriftlar))
     # group=-2 — agent.py dagi matn ishlovchisidan (group=-1) OLDIN ishlaydi.

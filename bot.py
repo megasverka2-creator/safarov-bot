@@ -1400,6 +1400,7 @@ BUYRUQLAR_ADMIN = [
     ("zikr_elon",    "Kanalga zikr banneri"),
     ("zikr_sinov",   "Zikr eslatmasini sinash"),
     ("shriftlar",    "Subtitr shriftlari ro'yxati"),
+    ("uslub",        "Subtitr uslubi (captions, oltin...)"),
 ]
 
 
