@@ -36,6 +36,7 @@ import agent
 import zikr
 import iqtibos  # Iqtibos kartalari (/iqtibos, 3 uslub + AI rasm)
 import subtitr  # Video subtitr (faqat admin)
+import reels    # Stories/Reels generatori (faqat admin)
 import kurs   # Marketing kursi moduli (Stars to'lovi bilan)
 import ustoz  # AI Ustoz: topshiriq tekshirish va savol-javob
 import farosat  # Farosatdan kanali uchun kontent-agent
@@ -1400,6 +1401,8 @@ BUYRUQLAR_ADMIN = [
     ("zikr_elon",    "Kanalga zikr banneri"),
     ("zikr_sinov",   "Zikr eslatmasini sinash"),
     ("shriftlar",    "Subtitr shriftlari ro'yxati"),
+    ("uslub",        "Subtitr uslubi (captions, oltin...)"),
+    ("reels",        "Matndan tik video (Stories/Reels)"),
 ]
 
 
@@ -1476,6 +1479,7 @@ def main():
     zikr.register(app)
     iqtibos.register(app)  # Iqtibos kartalari (/iqtibos)
     subtitr.register(app)  # Video subtitr (admin video tashlaydi)
+    reels.register(app)    # Stories/Reels generatori (/reels)
     kurs.register(app)   # Marketing kursi (/kurs, 10 Stars)
     ustoz.register(app)  # AI Ustoz (/topshiriq, /savol)
     farosat.register(app)  # Farosat-agent (/farosat)

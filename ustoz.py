@@ -360,7 +360,11 @@ def register(app):
     app.add_handler(CommandHandler("savol", cmd_savol))
     app.add_handler(CallbackQueryHandler(on_pick_other, pattern=r"^ust_pick$"))
     app.add_handler(CallbackQueryHandler(on_callback, pattern=r"^ust_"))
-    # group=1: bot.py'dagi boshqa handlerlar bilan to'qnashmaslik uchun
+    # Har modulning matn ushlovchisi ALOHIDA guruhda bo'lishi shart:
+    # python-telegram-bot bir guruhdan faqat bitta mos ushlovchini
+    # chaqiradi. 1-guruhda iqtibos.on_tahrir turibdi va u har qanday
+    # matnga mos keladi — shu sababli bu ushlovchi 1-guruhda hech qachon
+    # ishga tushmasdi. 2-guruh — reels.
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text),
-                    group=1)
+                    group=3)
     log.info("AI Ustoz moduli ulandi.")
