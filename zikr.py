@@ -14,11 +14,12 @@ Ishlash tartibi:
   5. Kunning BARCHA eslatmalari to'liq aytib bo'linganda — yakuniy xabar
      (ketma-ketlik + kunlik natija). Unga vaqti-vaqti bilan "Yaqinlaringizni
      taklif qiling" tugmasi qo'shiladi (har kuni emas — ZIKR_TAKLIF_KUN
-     kunda bir). Tugma INLINE rejimda ishlaydi: do'stga havola emas,
-     ustida "Qo'shilish" tugmasi bor xabar boradi — bir bosishda qo'shiladi.
-     Buning uchun BotFather'da inline rejim yoqilgan bo'lishi shart
-     (/setinline). Yoqilmagan bo'lsa ZIKR_TAKLIF_INLINE=0 qo'ying —
-     eski ulashish havolasiga qaytadi.
+     kunda bir). Tugma bosilganda bot UZATISH uchun tayyor xabar
+     yuboradi: obunachi uni yaqinlariga forward qiladi, uzatilgan
+     xabarda esa "Qo'shilish" tugmasi saqlanib qoladi. Do'st havolani
+     ochib, keyin START qidirib o'tirmaydi — bir bosishda qo'shiladi.
+     Usulni ZIKR_TAKLIF_USUL bilan almashtirish mumkin: uzatish
+     (standart) / inline (BotFather'da /setinline shart) / havola.
   6. Kunlik hisob 00:00 da nolga qaytadi, oylik hisob yig'ilib boradi
   7. Oy oxirida obunachilarga umumiy natija yuboriladi
   8. /zikr_off -> "To'xtadi"
@@ -85,14 +86,20 @@ def son_soz(n):
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "@safaroov_blog")
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "safarovblog_bot")
 
-# Taklif qanday ketadi:
-#   1 (standart) — INLINE rejim. Do'stga havola emas, "Qo'shilish" TUGMASI
-#                  bor xabar boradi. Buning uchun BotFather'da inline rejim
-#                  yoqilgan bo'lishi SHART: /setinline -> botni tanlang.
-#   0            — eski usul: oddiy ulashish havolasi (inline yoqilmagan
-#                  bo'lsa shuni qo'ying, aks holda tugma ishlamaydi).
-TAKLIF_INLINE = os.environ.get("ZIKR_TAKLIF_INLINE", "1").strip() not in (
-    "0", "yo'q", "false")
+# Taklif qanday ketadi (ZIKR_TAKLIF_USUL):
+#   "uzatish" (standart) — bot sizga TAYYOR xabar yuboradi, siz uni
+#                 yaqinlaringizga uzatasiz. Uzatilgan xabarda "Qo'shilish"
+#                 tugmasi saqlanadi. Hech qanday qo'shimcha sozlama
+#                 talab qilmaydi — shuning uchun standart shu.
+#   "inline"    — tugma chat tanlash oynasini ochadi va xabarni o'zi
+#                 yuboradi (bir qadam kam). LEKIN BotFather'da inline
+#                 rejim yoqilgan bo'lishi SHART: /setinline -> botni
+#                 tanlang. Yoqilmasa do'stga faqat "@bot_nomi" degan
+#                 matn tushadi — foydasi yo'q.
+#   "havola"    — eski usul: t.me/share havolasi, tugmasiz oddiy matn.
+TAKLIF_USUL = os.environ.get("ZIKR_TAKLIF_USUL", "uzatish").strip().lower()
+if TAKLIF_USUL not in ("uzatish", "inline", "havola"):
+    TAKLIF_USUL = "uzatish"
 
 # ======================================================================
 # ZIKR RO'YXATI — qat'iy, AI tegmaydi
@@ -424,16 +431,12 @@ def _qoshilish_tugma():
 
 
 def _taklif_tugma():
-    """Obunachi bosadigan "taklif qilish" tugmasi.
-
-    INLINE rejimda: tugma chat tanlash oynasini ochadi va do'stga HAVOLA
-    emas, ustida "Qo'shilish" tugmasi bor xabar boradi. Havola yuborilsa
-    odam uni ochishi, keyin START bosishi kerak edi — tugma bilan bir
-    bosishda qo'shiladi.
-
-    Inline rejim BotFather'da yoqilmagan bo'lsa (ZIKR_TAKLIF_INLINE=0) —
-    eski ulashish havolasiga qaytadi."""
-    if TAKLIF_INLINE:
+    """Obunachi bosadigan "taklif qilish" tugmasi. Usul TAKLIF_USUL bilan
+    tanlanadi — yuqoridagi izohga qarang."""
+    if TAKLIF_USUL == "uzatish":
+        return InlineKeyboardMarkup([[InlineKeyboardButton(
+            "Yaqinlaringizni taklif qiling", callback_data="zikr_taklif")]])
+    if TAKLIF_USUL == "inline":
         # Bo'sh so'rov: chat tanlanishi bilan taklif kartasi darrov chiqadi
         return InlineKeyboardMarkup([[InlineKeyboardButton(
             "Yaqinlaringizni taklif qiling", switch_inline_query="")]])
@@ -442,6 +445,33 @@ def _taklif_tugma():
              f"&text={quote(ULASH_MATNI, safe='')}")
     return InlineKeyboardMarkup(
         [[InlineKeyboardButton("Yaqinlaringizni taklif qiling", url=ulash)]])
+
+
+UZATISH_KORSATMA = (
+    "Quyidagi xabarni yaqinlaringizga uzating (forward) 👇\n\n"
+    "Ular xabar ostidagi tugmani bosishi kifoya — havolani ochib, "
+    "keyin qidirib o'tirmaydi."
+)
+
+
+async def on_taklif(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """"Taklif qiling" bosilganda: uzatish uchun tayyor xabar yuboriladi.
+
+    Nega shunday: uzatilgan (forward) xabarda inline tugma saqlanadi.
+    Ya'ni do'st oddiy havolani emas, "Qo'shilish" tugmasini ko'radi va
+    bir bosishda botga tushadi. Bu usul hech qanday qo'shimcha sozlama
+    talab qilmaydi — inline rejimdan farqli."""
+    q = update.callback_query
+    await q.answer()
+    uid = q.from_user.id
+    try:
+        await context.bot.send_message(chat_id=uid, text=UZATISH_KORSATMA)
+        await context.bot.send_message(chat_id=uid, text=ULASH_MATNI,
+                                       reply_markup=_qoshilish_tugma())
+    except Forbidden:
+        pass
+    except Exception as e:
+        log.warning("Taklif xabari yuborilmadi (%s): %s", uid, e)
 
 
 async def on_inline(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -779,7 +809,8 @@ def register(app: Application):
     app.add_handler(CommandHandler("zikr_yakun", cmd_zikr_yakun))
     # eski "zikr_ok" ham, yangi "zikr_ok|kun|vaqt" ham shu handlerga tushadi
     app.add_handler(CallbackQueryHandler(on_aytdim, pattern=r"^zikr_ok"))
-    if TAKLIF_INLINE:
+    app.add_handler(CallbackQueryHandler(on_taklif, pattern=r"^zikr_taklif$"))
+    if TAKLIF_USUL == "inline":
         # Botdagi yagona inline funksiya — zikr taklifi.
         # BotFather: /setinline yoqilmagan bo'lsa tugma javob bermaydi.
         app.add_handler(InlineQueryHandler(on_inline))
@@ -793,4 +824,4 @@ def register(app: Application):
     jq.run_repeating(job_tekshir, interval=60, first=20, name="zikr_tekshir")
     log.info("Zikr moduli yoqildi (kuniga %d ta x %d takror, %02d:00-%02d:00, "
              "taklif: %s)", PER_DAY, TAKROR, HOUR_FROM, HOUR_TO,
-             "inline tugma" if TAKLIF_INLINE else "havola")
+             TAKLIF_USUL)
