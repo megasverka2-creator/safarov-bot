@@ -195,7 +195,35 @@ ASS_EN, ASS_BAL = 384.0, 288.0
 #   maks_soz   — bir kartada nechta so'z (0 = cheklovsiz)
 #   margin     — pastdan masofa (288 birlik ichida)
 #   spacing    — ASS Spacing qiymati (o'lchashda hisobga olinadi)
+# Ba'zi shriftlarda o'zbek tutuq belgisi (ʻ, U+02BB) yo'q — TT Drugs shunday.
+# Shrift topa olmagan belgini libass boshqa shriftdan oladi yoki bo'sh kvadrat
+# chizadi, ikkalasi ham xunuk. Shuning uchun uslub "almash" jadvalini bersa,
+# matn kuydirishdan oldin shu jadval bo'yicha tozalanadi.
+ALMASH_TTDRUGS = {
+    "\u02bb": "\u02bc",   # ʻ -> ʼ  (chap yarim halqa -> o'ng, ko'rinishi yaqin)
+    "\u2018": "\u2019",   # ' -> '
+}
+
+
 USLUBLAR = {
+    "brend": {
+        "izoh": "Kanal yozuvidek — TT Drugs, orqasida yarim shaffof quti",
+        "shrift": "TT Drugs",
+        "fayl": "TTDrugs-BoldItalic.ttf",
+        # BorderStyle=3 — matn orqasida to'ldirilgan quti (brend yozuvidagidek).
+        # Outline bu rejimda qutining ichki bo'shlig'ini belgilaydi.
+        # ASS rangi &HAABBGGRR: AA — SHAFFOFLIK (00 = to'liq to'q,
+        # FF = ko'rinmas). DIQQAT: BorderStyle=3 da qutini BackColour emas,
+        # OUTLINECOLOUR chizadi — BackColour faqat soya qutisi uchun.
+        # A6 ≈ 35% to'qlik: brend yozuvidagi black@0.35 bilan bir xil.
+        "ass": ("PrimaryColour=&HFFFFFF,OutlineColour=&HA6000000,"
+                "BackColour=&HA6000000,BorderStyle=3,Outline=1.2,Shadow=0,"
+                "Bold=0,Italic=0,Spacing=0.2"),
+        "olcham": {"tik": 13, "4:5": 14, "kvadrat": 15, "keng": 16},
+        "en_ulush": {"tik": 0.90, "4:5": 0.88, "kvadrat": 0.84, "keng": 0.70},
+        "maks_qator": 2, "maks_soz": 7, "margin": 62, "spacing": 0.2,
+        "almash": ALMASH_TTDRUGS,   # TT Drugs'da ʻ yo'q
+    },
     "captions": {
         "izoh": "Captions ilovasidek — yirik qalin matn, qisqa bo'laklar",
         "shrift": "Montserrat ExtraBold",
@@ -257,7 +285,7 @@ USLUBLAR = {
         "maks_qator": 2, "maks_soz": 0, "margin": 72, "spacing": 0.3,
     },
 }
-USLUB = os.environ.get("SUBTITR_USLUB", "captions")
+USLUB = os.environ.get("SUBTITR_USLUB", "brend")
 # 0 = uslubning o'z qiymati ishlatiladi
 MARGIN_ODDIY = int(os.environ.get("SUBTITR_MARGIN", "0") or "0")
 MARGIN_YUQORI = int(os.environ.get("SUBTITR_MARGIN2", "150"))  # mavjud subtitr bo'lsa
@@ -268,7 +296,7 @@ MIN_KARTA = float(os.environ.get("SUBTITR_MIN_KARTA", "0.7"))
 
 
 def uslub_ol(nomi=None):
-    return USLUBLAR.get(nomi or USLUB, USLUBLAR["captions"])
+    return USLUBLAR.get(nomi or USLUB, USLUBLAR["brend"])
 
 
 # ======================================================================
@@ -291,6 +319,15 @@ def _olchov_shrifti(yol, px):
     if kalit not in _shrift_kesh:
         _shrift_kesh[kalit] = ImageFont.truetype(yol, px)
     return _shrift_kesh[kalit]
+
+
+def harf_almashtir(matn, uslub):
+    jadval = uslub.get("almash")
+    if not jadval:
+        return matn
+    for eski, yangi in jadval.items():
+        matn = matn.replace(eski, yangi)
+    return matn
 
 
 def matn_eni(matn, uslub, fs):
@@ -370,6 +407,7 @@ def kartalarga(matn, uslub, fs, maks_en):
     matn = " ".join((matn or "").split())
     if not matn:
         return []
+    matn = harf_almashtir(matn, uslub)
     if KATTA_HARF:
         matn = matn.upper()
     maks_qator = uslub.get("maks_qator", 2)
@@ -856,7 +894,7 @@ async def cmd_shriftlar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Uslubni tekshirish uchun har safar qayta deploy qilish shart emas:
 # tanlov shu jarayon xotirasida saqlanadi. Qayta ishga tushganda
 # SUBTITR_USLUB qiymatiga qaytadi.
-_JORIY = {"uslub": USLUB if USLUB in USLUBLAR else "captions"}
+_JORIY = {"uslub": USLUB if USLUB in USLUBLAR else "brend"}
 
 
 def joriy_uslub():
