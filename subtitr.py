@@ -202,8 +202,8 @@ USLUBLAR = {
         "fayl": "Montserrat-ExtraBold.ttf",
         "ass": ("PrimaryColour=&HFFFFFF,OutlineColour=&H000000,"
                 "BorderStyle=1,Outline=2.6,Shadow=1.1,Bold=0,Spacing=0.4"),
-        "olcham": {"tik": 18, "4:5": 17, "kvadrat": 16, "keng": 15},
-        "en_ulush": {"tik": 0.86, "4:5": 0.84, "kvadrat": 0.78, "keng": 0.62},
+        "olcham": {"tik": 13, "4:5": 15, "kvadrat": 16, "keng": 17},
+        "en_ulush": {"tik": 0.92, "4:5": 0.90, "kvadrat": 0.86, "keng": 0.70},
         "maks_qator": 2, "maks_soz": 7, "margin": 96, "spacing": 0.4,
     },
     "klassik": {
@@ -212,8 +212,8 @@ USLUBLAR = {
         "fayl": "Montserrat-SemiBold.ttf",
         "ass": ("PrimaryColour=&HFFFFFF,OutlineColour=&H000000,"
                 "BorderStyle=1,Outline=0.9,Shadow=1.2,Bold=0,Spacing=0.2"),
-        "olcham": {"tik": 13, "4:5": 14, "kvadrat": 15, "keng": 16},
-        "en_ulush": {"tik": 0.88, "4:5": 0.86, "kvadrat": 0.82, "keng": 0.74},
+        "olcham": {"tik": 12, "4:5": 13, "kvadrat": 14, "keng": 16},
+        "en_ulush": {"tik": 0.92, "4:5": 0.90, "kvadrat": 0.88, "keng": 0.78},
         "maks_qator": 2, "maks_soz": 0, "margin": 70, "spacing": 0.2,
     },
     "qutili": {
@@ -222,8 +222,8 @@ USLUBLAR = {
         "fayl": "Montserrat-SemiBold.ttf",
         "ass": ("PrimaryColour=&HFFFFFF,BackColour=&HA0000000,"
                 "BorderStyle=3,Outline=0.8,Shadow=0,Bold=0,Spacing=0.2"),
-        "olcham": {"tik": 13, "4:5": 14, "kvadrat": 15, "keng": 16},
-        "en_ulush": {"tik": 0.86, "4:5": 0.84, "kvadrat": 0.80, "keng": 0.72},
+        "olcham": {"tik": 12, "4:5": 13, "kvadrat": 14, "keng": 16},
+        "en_ulush": {"tik": 0.90, "4:5": 0.88, "kvadrat": 0.86, "keng": 0.76},
         "maks_qator": 2, "maks_soz": 0, "margin": 74, "spacing": 0.2,
     },
     "kontrast": {
@@ -232,8 +232,8 @@ USLUBLAR = {
         "fayl": "Montserrat-ExtraBold.ttf",
         "ass": ("PrimaryColour=&HFFFFFF,OutlineColour=&H000000,"
                 "BorderStyle=1,Outline=3.0,Shadow=0,Bold=0,Spacing=0.1"),
-        "olcham": {"tik": 15, "4:5": 15, "kvadrat": 15, "keng": 16},
-        "en_ulush": {"tik": 0.88, "4:5": 0.86, "kvadrat": 0.82, "keng": 0.70},
+        "olcham": {"tik": 13, "4:5": 14, "kvadrat": 15, "keng": 16},
+        "en_ulush": {"tik": 0.92, "4:5": 0.90, "kvadrat": 0.88, "keng": 0.76},
         "maks_qator": 2, "maks_soz": 0, "margin": 78, "spacing": 0.1,
     },
     "oltin": {
@@ -242,8 +242,8 @@ USLUBLAR = {
         "fayl": "Montserrat-ExtraBold.ttf",
         "ass": ("PrimaryColour=&H4FD7FF,OutlineColour=&H000000,"
                 "BorderStyle=1,Outline=2.2,Shadow=1.0,Bold=0,Spacing=0.4"),
-        "olcham": {"tik": 18, "4:5": 17, "kvadrat": 16, "keng": 15},
-        "en_ulush": {"tik": 0.86, "4:5": 0.84, "kvadrat": 0.78, "keng": 0.62},
+        "olcham": {"tik": 13, "4:5": 15, "kvadrat": 16, "keng": 17},
+        "en_ulush": {"tik": 0.92, "4:5": 0.90, "kvadrat": 0.86, "keng": 0.70},
         "maks_qator": 2, "maks_soz": 7, "margin": 96, "spacing": 0.4,
     },
     "yumshoq": {
@@ -252,8 +252,8 @@ USLUBLAR = {
         "fayl": "Montserrat-SemiBold.ttf",
         "ass": ("PrimaryColour=&HFFFFFF,OutlineColour=&H000000,"
                 "BorderStyle=1,Outline=0,Shadow=2.2,Bold=0,Spacing=0.3"),
-        "olcham": {"tik": 13, "4:5": 14, "kvadrat": 15, "keng": 16},
-        "en_ulush": {"tik": 0.86, "4:5": 0.84, "kvadrat": 0.80, "keng": 0.72},
+        "olcham": {"tik": 12, "4:5": 13, "kvadrat": 14, "keng": 16},
+        "en_ulush": {"tik": 0.90, "4:5": 0.88, "kvadrat": 0.86, "keng": 0.76},
         "maks_qator": 2, "maks_soz": 0, "margin": 72, "spacing": 0.3,
     },
 }
@@ -458,14 +458,31 @@ def _nisbat_kalit(en, balandlik):
     return "keng"             # 16:9 — YouTube
 
 
+# libass matnni kadrga moslashda EN va BALANDLIKNI BIR XIL masshtablamaydi:
+#   shrift o'lchami  -> kadr_balandligi / PlayResY  bo'yicha
+#   chekka va enlik  -> kadr_eni / PlayResX         bo'yicha
+# 384x288 (4:3) etaloni tik videoga tushganda balandlik eniga nisbatan
+# ancha ko'p cho'ziladi, ya'ni matn biz o'lchagandan KENGROQ chiqadi va
+# libass uni o'zi qayta bo'lib tashlaydi (2 qator o'rniga 3-4 qator).
+# Shuning uchun qator enini shu nisbat bilan tuzatamiz.
+#
+# Sig'ish sharti (piksellarda):
+#   o'lchangan_en * (kadr_bal/288)  <=  bo'sh_en * (kadr_en/384)
+# bundan:
+#   o'lchangan_en <= bo'sh_en * (kadr_en/kadr_bal) * (288/384)
+_EN_XAVFSIZLIK = 0.96      # o'lchov taxminiy — libass qayta bo'lmasin
+
+
 def format_sozlamasi(en, balandlik, uslub_nomi=None):
     """Video nisbatiga qarab (shrift o'lchami, matn maydoni eni, yon chekka).
     Env orqali qiymat berilgan bo'lsa — O'SHA ustuvor."""
     u = uslub_ol(uslub_nomi)
     kalit = _nisbat_kalit(en, balandlik)
     fs = FONT_SIZE or u["olcham"][kalit]
-    maks_en = ASS_EN * u["en_ulush"][kalit]
-    yon = int(round((ASS_EN - maks_en) / 2))
+    bosh_en = ASS_EN * u["en_ulush"][kalit]
+    yon = int(round((ASS_EN - bosh_en) / 2))
+    nisbat = (en / balandlik) if balandlik else 0.5625
+    maks_en = bosh_en * nisbat * (ASS_BAL / ASS_EN) * _EN_XAVFSIZLIK
     return fs, maks_en, yon
 
 
@@ -537,12 +554,24 @@ def margin_asosi(uslub_nomi=None):
     return MARGIN_ODDIY or uslub_ol(uslub_nomi)["margin"]
 
 
-def margin_hisobla(eng_yuqori, uslub_nomi=None):
+# Mavjud subtitr ustiga chiqishda qanchagacha ko'tarilish mumkin.
+# Bundan yuqorisi xavfli: tik videolarda o'sha balandlikda odatda
+# videoning O'Z sarlavhasi yoki logotipi turadi va matn ustma-ust tushadi.
+MARGIN_CHEK = int(os.environ.get("SUBTITR_MARGIN_CHEK", "118"))
+
+
+def margin_hisobla(eng_yuqori, uslub_nomi=None, fs=None):
     """Mavjud subtitr tepasiga bizning matnni joylash uchun MarginV.
-    ASS o'lchovi 288 birlik balandlikka nisbatan hisoblanadi."""
+
+    ASS o'lchovi 288 birlik balandlikka nisbatan hisoblanadi. Bizning
+    matn balandligi shrift o'lchamidan hisoblanadi — ilgari bu 26 birlik
+    deb qat'iy yozilgan edi va shrift o'zgarganda mos kelmasdi."""
+    u = uslub_ol(uslub_nomi)
+    fs = fs or FONT_SIZE or u["olcham"]["tik"]
+    biz = fs * 1.2 * u.get("maks_qator", 2)  # o'z matnimiz egallaydigan joy
     pastdan = (1.0 - eng_yuqori) * ASS_BAL   # mavjud matn qayerdan boshlanadi
-    kerak = int(pastdan + 26)                # + o'z matnimiz balandligi va bo'shliq
-    return max(margin_asosi(uslub_nomi), min(kerak, 150))
+    kerak = int(pastdan + biz + fs * 0.6)    # + oraliq bo'shliq
+    return max(margin_asosi(uslub_nomi), min(kerak, MARGIN_CHEK))
 
 
 # ======================================================================
@@ -1224,7 +1253,7 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         marginv = margin_asosi(uslub_nomi)
         izoh = ""
         if band >= 0.5:      # videoda allaqachon subtitr bor — tepasiga chiqamiz
-            marginv = margin_hisobla(eng_yuqori, uslub_nomi)
+            marginv = margin_hisobla(eng_yuqori, uslub_nomi, fs)
             izoh = "\n\n⚠️ Videoda allaqachon subtitr bor — matn tepasiga qo'yildi."
         await asyncio.to_thread(_kuydir, video_yol, srt_yol, chiqish,
                                 fs, marginv, uslub_nomi, yon)
