@@ -66,7 +66,11 @@ aclient = AsyncAnthropic(api_key=ANTHROPIC_KEY) if (ANTHROPIC_KEY and AsyncAnthr
 # shuning uchun Railway domenini shu yerga qo'yish kifoya — o'shanda
 # index.html ham, /api ham bitta joydan beriladi.
 WEBAPP_URL = os.environ.get(
-    "WEBAPP_URL", "https://starlit-arithmetic-7b0c9e.netlify.app/")
+    "WEBAPP_URL", "https://starlit-arithmetic-7b0c9e.netlify.app/").strip()
+# Oxiridagi "/" ni kafolatlaymiz: pastda WEBAPP_URL + "#quiz" kabi
+# ulanishlar bor, domen "/" siz berilsa manzil noto'g'ri yig'iladi.
+if WEBAPP_URL and not WEBAPP_URL.endswith("/"):
+    WEBAPP_URL += "/"
 BOT_USERNAME = "safarovblog_bot"   # post_init da avtomatik yangilanadi
 
 # ----- MINI KONKURS sozlamalari -----
