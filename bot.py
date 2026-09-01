@@ -38,6 +38,7 @@ import iqtibos  # Iqtibos kartalari (/iqtibos, 3 uslub + AI rasm)
 import subtitr  # Video subtitr (faqat admin)
 import reels    # Stories/Reels generatori (faqat admin)
 import maqola   # Ovozdan maqola: tahlil + muharrir (faqat admin)
+import miniapp  # Mini App serveri (index.html + /api)
 import kurs   # Marketing kursi moduli (Stars to'lovi bilan)
 import ustoz  # AI Ustoz: topshiriq tekshirish va savol-javob
 import farosat  # Farosatdan kanali uchun kontent-agent
@@ -61,7 +62,11 @@ APPS_FILE = os.path.join(DATA_DIR, "applications.json")
 STATS_FILE = os.path.join(DATA_DIR, "stats.json")   # kunlik funksiya statistikasi
 
 aclient = AsyncAnthropic(api_key=ANTHROPIC_KEY) if (ANTHROPIC_KEY and AsyncAnthropic) else None
-WEBAPP_URL = "https://starlit-arithmetic-7b0c9e.netlify.app/"
+# Mini App manzili. Server endi botning o'zida ko'tariladi (miniapp.py),
+# shuning uchun Railway domenini shu yerga qo'yish kifoya — o'shanda
+# index.html ham, /api ham bitta joydan beriladi.
+WEBAPP_URL = os.environ.get(
+    "WEBAPP_URL", "https://starlit-arithmetic-7b0c9e.netlify.app/")
 BOT_USERNAME = "safarovblog_bot"   # post_init da avtomatik yangilanadi
 
 # ----- MINI KONKURS sozlamalari -----
@@ -1439,6 +1444,12 @@ async def post_init(app):
     except Exception:
         pass
     await _buyruqlar_panelini_qoy(app)
+    try:
+        await miniapp.ishga_tushir(app)
+    except Exception as e:
+        # Server ko'tarilmasa ham bot ishlayversin — Mini App shunchaki
+        # eski (Netlify) manzilda qoladi.
+        print(f"[MINIAPP] Server ko'tarilmadi: {e}")
     # 2-Mini Konkurs: belgilangan vaqtda avtomatik g'olib tanlash taymeri
     try:
         jq = app.job_queue
@@ -1456,7 +1467,8 @@ async def post_init(app):
 
 
 def main():
-    app = Application.builder().token(TOKEN).post_init(post_init).build()
+    app = (Application.builder().token(TOKEN)
+           .post_init(post_init).post_shutdown(miniapp.toxtat).build())
     app.add_handler(CommandHandler(["start", "menu"], start))
     app.add_handler(CommandHandler("konkurs", konkurs))
     app.add_handler(CommandHandler("kanallar", kanallar))

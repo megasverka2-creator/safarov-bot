@@ -176,6 +176,12 @@ textarea{min-height:98px;resize:vertical}
     <button class="btn btn-fill" type="button">Zikr halqasiga qo'shilish</button>
   </div>
 
+  <div class="card press" data-go="kabinet" style="margin-top:12px">
+    <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3v9l5.5 3.2"/><circle cx="12" cy="12" r="9"/></svg></div>
+    <div class="tx"><b>Zikr kabinetim</b><span>Bugungi holat va ketma-ketlik</span></div>
+    <svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+  </div>
+
   <div class="section-label">O'zingizni tekshiring</div>
 
   <div class="card press" data-go="wheel">
@@ -246,6 +252,39 @@ textarea{min-height:98px;resize:vertical}
 
   <button class="btn btn-fill press" id="zikrOn" type="button" style="margin-bottom:9px">Yoqish</button>
   <button class="btn btn-ghost press" id="zikrOff" type="button">To'xtatish</button>
+</section>
+
+<!-- ==================== ZIKR KABINETI ==================== -->
+<section class="screen" id="kabinet">
+  <button class="back" data-back type="button"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>Orqaga</button>
+  <h2>Zikr kabinetim</h2>
+  <p class="sub" id="kabSub">Yuklanmoqda...</p>
+
+  <div id="kabIchi" style="display:none">
+    <div class="glass" style="padding:18px;margin-bottom:12px">
+      <div class="step">Bugun</div>
+      <div class="bar"><i id="kabBar" style="width:0%"></i></div>
+      <p style="margin:0;font-size:15px" id="kabBugun"></p>
+    </div>
+
+    <div class="grid2" style="margin-bottom:12px">
+      <div class="glass" style="padding:16px">
+        <div class="step">Ketma-ket</div>
+        <p style="margin:0;font-size:26px;font-weight:700" id="kabStreak">0</p>
+      </div>
+      <div class="glass" style="padding:16px">
+        <div class="step">Shu oyda hammamiz</div>
+        <p style="margin:0;font-size:26px;font-weight:700" id="kabOy">0</p>
+      </div>
+    </div>
+
+    <div class="section-label">Bugungi reja</div>
+    <div class="chips" id="kabReja"></div>
+    <p class="sub" style="margin-top:14px;font-size:13px">
+      Vaqtlar har kuni tasodifiy tanlanadi — shuning uchun eslatma
+      kutilmaganda keladi.
+    </p>
+  </div>
 </section>
 
 <!-- ==================== G'ILDIRAK ==================== -->
@@ -339,6 +378,7 @@ function show(id){
   t.classList.add('on');
   document.querySelector('.scroll').scrollTop=0;
   if(tg){ try{ id==='home' ? tg.BackButton.hide() : tg.BackButton.show(); }catch(e){} }
+  if(id==='kabinet'){ kabYukla(); }
 }
 if(tg){ try{ tg.BackButton.onClick(function(){ show('home'); }); }catch(e){} }
 document.querySelectorAll('[data-back]').forEach(function(b){
@@ -360,6 +400,51 @@ document.getElementById('zikrOn').addEventListener('click', function(){
 document.getElementById('zikrOff').addEventListener('click', function(){
   haptic('light'); send({action:'zikr_off'});
 });
+
+/* ---------- zikr kabineti ----------
+   Ma'lumot bot serveridan olinadi (miniapp.py). initData — Telegram
+   bergan imzolangan qator; server uni bot tokeni bilan tekshiradi,
+   shuning uchun boshqa odamning ma'lumotini so'rab bo'lmaydi. */
+var kabYuklandi=false;
+function kabYukla(){
+  var sub=document.getElementById('kabSub'), ichi=document.getElementById('kabIchi');
+  if(!tg || !tg.initData){
+    sub.textContent='Bu bo\u2019lim bot ichida ochilganda ishlaydi.';
+    return;
+  }
+  sub.textContent='Yuklanmoqda...';
+  fetch('/api/zikr', {headers:{'X-Init-Data': tg.initData}})
+    .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function(d){
+      kabYuklandi=true;
+      if(!d.yoqilgan){
+        sub.textContent='Zikr eslatmalari hali yoqilmagan. Bosh sahifadan yoqing.';
+        ichi.style.display='none';
+        return;
+      }
+      var b=d.bugun||{}, jami=b.jami||0, tugagan=b.tugagan||0;
+      sub.textContent=(d.ism? d.ism+', ':'')+'kuningiz shunday ketyapti.';
+      document.getElementById('kabBar').style.width=(jami? Math.round(tugagan/jami*100):0)+'%';
+      document.getElementById('kabBugun').textContent=
+        tugagan+' / '+jami+' eslatma to\u2019liq aytildi';
+      document.getElementById('kabStreak').textContent=(d.streak||0)+' kun';
+      document.getElementById('kabOy').textContent=
+        String(((d.hammasi||{}).oy)||0).replace(/\B(?=(\d{3})+(?!\d))/g,' ');
+      var reja=document.getElementById('kabReja'); reja.innerHTML='';
+      (b.reja||[]).forEach(function(r){
+        var el=document.createElement('div');
+        el.className='chip'+(r.holat==='aytildi'?' sel':'');
+        el.textContent=r.vaqt+(r.holat==='aytildi'?' \u2713':
+                               r.holat==='keldi'?' \u2022':'');
+        reja.appendChild(el);
+      });
+      ichi.style.display='';
+    })
+    .catch(function(){
+      sub.textContent='Ma\u2019lumot olinmadi. Birozdan keyin urinib ko\u2019ring.';
+      ichi.style.display='none';
+    });
+}
 
 /* ---------- kanallar ---------- */
 var CH=[

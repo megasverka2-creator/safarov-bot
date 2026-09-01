@@ -240,6 +240,52 @@ def raqam(n):
     return f"{n:,}".replace(",", " ")
 
 
+def holat(uid):
+    """Mini App uchun foydalanuvchining zikr holati.
+
+    Faqat O'QIYDI — hech narsani o'zgartirmaydi, shuning uchun web
+    so'rovidan chaqirish xavfsiz. Qaytadigan ma'lumot faqat shu
+    foydalanuvchiniki; umumiy hisoblar esa allaqachon ochiq (kunlik
+    yakun xabarida hammaga ko'rsatiladi)."""
+    conn = db()
+    try:
+        kun = _bugun()
+        qator = conn.execute(
+            "SELECT active, streak, oxirgi_kun FROM zikr_users WHERE uid=?",
+            (uid,)).fetchone()
+        yoqilgan = bool(qator[0]) if qator else False
+        streak = int(qator[1] or 0) if qator else 0
+
+        reja = []
+        tugagan = aytilgan = 0
+        for vaqt, yuborildi, bosildi in conn.execute(
+                "SELECT vaqt, yuborildi, COALESCE(bosildi,0) FROM zikr_plan "
+                "WHERE uid=? AND kun=? ORDER BY vaqt", (uid, kun)):
+            bosildi = int(bosildi)
+            aytilgan += min(bosildi, TAKROR)
+            if bosildi >= TAKROR:
+                holati = "aytildi"
+                tugagan += 1
+            elif int(yuborildi or 0):
+                holati = "keldi"
+            else:
+                holati = "kutilmoqda"
+            reja.append({"vaqt": vaqt, "holat": holati, "bosildi": bosildi})
+
+        return {
+            "yoqilgan": yoqilgan,
+            "streak": streak,
+            "takror": TAKROR,
+            "kuniga": PER_DAY,
+            "bugun": {"jami": len(reja), "tugagan": tugagan,
+                      "aytilgan": aytilgan, "reja": reja},
+            "hammasi": {"bugun": kunlik_hisob(conn), "oy": oylik_hisob(conn)},
+        }
+    finally:
+        conn.commit()
+        conn.close()
+
+
 # ======================================================================
 # BUYRUQLAR
 # ======================================================================
