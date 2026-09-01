@@ -144,6 +144,42 @@ textarea{min-height:98px;resize:vertical}
   border:1px solid var(--line);font-size:15.5px;cursor:pointer}
 .opt.sel{border-color:var(--lav);background:var(--glass-2)}
 
+/* --- statistika kataklari --- */
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:10px}
+.stat{padding:14px;border-radius:var(--r-sm);background:var(--glass);border:1px solid var(--line)}
+.stat b{display:block;font-family:var(--display);font-size:24px;font-weight:600;line-height:1.1}
+.stat span{display:block;font-size:12px;color:var(--lav-3);margin-top:3px}
+
+/* --- amal tugmalari (ikki ustun) --- */
+.acts{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:4px}
+.act{display:flex;align-items:center;gap:9px;padding:13px 14px;border-radius:var(--r-sm);
+  background:var(--glass);border:1px solid var(--line);color:var(--lav);
+  font-family:var(--ui);font-size:14.5px;font-weight:500;text-align:left;cursor:pointer}
+.act.wide{grid-column:1 / -1}
+.act em{font-style:normal;font-size:17px;flex:0 0 auto}
+
+/* --- ro'yxat qatorlari --- */
+.row{padding:15px;margin-bottom:9px;border-radius:var(--r-sm);background:var(--glass);
+  border:1px solid var(--line);cursor:pointer}
+.row b{display:block;font-size:15px;font-weight:600;line-height:1.32;margin-bottom:6px}
+.row p{margin:0;font-size:13px;color:var(--lav-3);line-height:1.45;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.row .meta{display:flex;align-items:center;gap:8px;margin-top:11px}
+.row .meta i{font-style:normal;font-size:11.5px;color:var(--lav-3);margin-left:auto}
+.badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11.5px;
+  background:var(--glass-2);border:1px solid var(--line);color:var(--lav-2)}
+
+/* --- reyting --- */
+.lb{display:flex;align-items:center;gap:11px;padding:12px 14px;margin-bottom:7px;
+  border-radius:var(--r-sm);background:var(--glass);border:1px solid var(--line)}
+.lb.me{border-color:rgba(210,195,246,.42);background:var(--glass-2)}
+.lb .n{width:30px;text-align:center;font-family:var(--display);font-size:16px;color:var(--lav-3)}
+.lb .nm{flex:1;min-width:0;font-size:14.5px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.lb .pt{font-size:14px;font-weight:600}
+.note{font-size:12.5px;color:var(--lav-3);margin:12px 2px 0;line-height:1.5}
+.hid{display:none!important}
+
 .toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 26px);
   transform:translateX(-50%) translateY(20px);background:rgba(54,37,92,.94);
   border:1px solid var(--line);color:var(--lav);padding:12px 20px;border-radius:999px;
@@ -172,13 +208,38 @@ textarea{min-height:98px;resize:vertical}
   <div class="zikr-hero press" data-go="zikr">
     <div class="halo"></div>
     <p class="ar">الحمد لله</p>
-    <p class="tr">Kun davomida uch marta qisqa zikr eslatmasi.</p>
+    <p class="tr" id="zikrHero">Kun davomida qisqa zikr eslatmasi keladi.</p>
     <button class="btn btn-fill" type="button">Zikr halqasiga qo'shilish</button>
   </div>
 
   <div class="card press" data-go="kabinet" style="margin-top:12px">
     <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3v9l5.5 3.2"/><circle cx="12" cy="12" r="9"/></svg></div>
-    <div class="tx"><b>Zikr kabinetim</b><span>Bugungi holat va ketma-ketlik</span></div>
+    <div class="tx"><b>Zikr kabinetim</b><span id="kabCardSub">Bugungi holat va ketma-ketlik</span></div>
+    <svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+  </div>
+
+  <div class="card press hid" id="adminCard" data-go="admin" style="margin-top:12px">
+    <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 20V9M9.3 20V4M14.7 20v-7M20 20v-11"/></svg></div>
+    <div class="tx"><b>Boshqaruv paneli</b><span>Agent, kontent va statistika</span></div>
+    <svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+  </div>
+
+  <div class="section-label">Ta'lim</div>
+
+  <div class="grid2">
+    <div class="card press" data-amal="kurs">
+      <div class="ic"><svg viewBox="0 0 24 24"><path d="M3 7.5L12 4l9 3.5-9 3.5z"/><path d="M6.5 10v5.2c0 1.5 2.5 2.8 5.5 2.8s5.5-1.3 5.5-2.8V10"/></svg></div>
+      <div class="tx"><b>Marketing kursi</b><span id="kursSub">6 haftalik dastur</span></div>
+    </div>
+    <div class="card press" data-amal="ustoz">
+      <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3a6.5 6.5 0 016.5 6.5c0 4-4 5.4-5.6 8.5h-1.8C9.5 14.9 5.5 13.5 5.5 9.5A6.5 6.5 0 0112 3z"/><path d="M10 21h4"/></svg></div>
+      <div class="tx"><b>AI Ustoz</b><span>Savol bering, tekshirtiring</span></div>
+    </div>
+  </div>
+
+  <div class="card press" id="konkursCard" data-go="konkurs">
+    <div class="ic"><svg viewBox="0 0 24 24"><path d="M7 4h10v5a5 5 0 01-10 0z"/><path d="M7 5.5H4.5v1.2A3.3 3.3 0 007.6 10M17 5.5h2.5v1.2A3.3 3.3 0 0116.4 10"/><path d="M9.5 20h5M12 14v6"/></svg></div>
+    <div class="tx"><b>Konkurs</b><span id="konkursSub">Do'st taklif qiling — sovrin yuting</span></div>
     <svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
   </div>
 
@@ -235,7 +296,7 @@ textarea{min-height:98px;resize:vertical}
 <section class="screen" id="zikr">
   <button class="back" data-back type="button"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>Orqaga</button>
   <h2>Zikr halqasi</h2>
-  <p class="sub">Kun davomida uch marta qisqa eslatma keladi. Vaqti tasodifiy.</p>
+  <p class="sub" id="zikrIzoh">Kun davomida qisqa eslatma keladi. Vaqti tasodifiy.</p>
 
   <div class="zikr-hero" style="margin-bottom:18px">
     <div class="halo"></div>
@@ -341,6 +402,100 @@ textarea{min-height:98px;resize:vertical}
   <button class="btn btn-fill press" id="jSend" type="button" style="margin-top:18px">Arizani yuborish</button>
 </section>
 
+
+<!-- ==================== KONKURS ==================== -->
+<section class="screen" id="konkurs">
+  <button class="back" data-back type="button"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>Orqaga</button>
+  <h2 id="konNom">Konkurs</h2>
+  <p class="sub" id="konSub">Yuklanmoqda...</p>
+
+  <div id="konIchi" style="display:none">
+    <div class="stats">
+      <div class="stat"><b id="konOchko">0</b><span>Ochkolaringiz</span></div>
+      <div class="stat"><b id="konOrin">—</b><span>O'rningiz</span></div>
+    </div>
+    <button class="btn btn-fill press" id="konShare" type="button">Do'stlarni taklif qilish</button>
+    <p class="note" id="konQoida"></p>
+
+    <div class="section-label">Reyting — TOP 10</div>
+    <div id="konTop"></div>
+  </div>
+</section>
+
+<!-- ==================== ADMIN PANELI ==================== -->
+<section class="screen" id="admin">
+  <button class="back" data-back type="button"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>Orqaga</button>
+  <h2>Boshqaruv paneli</h2>
+  <p class="sub" id="admSub">Yuklanmoqda...</p>
+
+  <div class="stats">
+    <div class="stat"><b id="mUsers">—</b><span>Foydalanuvchi</span></div>
+    <div class="stat"><b id="mActive">—</b><span>Haftada faol</span></div>
+    <div class="stat"><b id="mDrafts">—</b><span>Kutayotgan post</span></div>
+    <div class="stat"><b id="mPub">—</b><span>Bugun chiqdi</span></div>
+    <div class="stat"><b id="mApi">—</b><span>Bugungi API</span></div>
+    <div class="stat"><b id="mKurs">—</b><span>Kurs xaridori</span></div>
+  </div>
+
+  <div class="section-label">Yangiliklar agenti</div>
+  <div class="acts">
+    <button class="act press wide" data-go="drafts" type="button"><em>📥</em>Kutayotgan postlar</button>
+    <button class="act press" data-cmd="agent_run" type="button"><em>🔍</em>Manbalarni tekshirish</button>
+    <button class="act press" data-cmd="agent_status" type="button"><em>📊</em>Agent holati</button>
+    <button class="act press" data-cmd="agent_sources" type="button"><em>🗂</em>Manbalar</button>
+    <button class="act press" id="pauzaBtn" type="button"><em>⏸</em><span>Pauza</span></button>
+  </div>
+
+  <div class="section-label">Kanal agentlari</div>
+  <div class="acts">
+    <button class="act press" data-cmd="farosat" type="button"><em>🎯</em>Farosatdan</button>
+    <button class="act press" data-cmd="sutuur" type="button"><em>📖</em>Sutuur</button>
+  </div>
+
+  <div class="section-label">Kontent studiyasi</div>
+  <div class="acts">
+    <button class="act press" data-cmd="iqtibos" type="button"><em>✍️</em>Iqtibos</button>
+    <button class="act press" data-cmd="iqtibos_rasm" type="button"><em>🖼</em>Iqtibos (rasm)</button>
+    <button class="act press" data-cmd="reels" type="button"><em>🎬</em>Reels</button>
+    <button class="act press" data-cmd="maqola" type="button"><em>🎙</em>Ovozdan maqola</button>
+    <button class="act press" data-cmd="uslub" type="button"><em>🔤</em>Subtitr uslubi</button>
+    <button class="act press" data-cmd="shriftlar" type="button"><em>🅰️</em>Shriftlar</button>
+    <button class="act press" data-cmd="rich_test" type="button"><em>🧪</em>Rich sinov</button>
+    <button class="act press" data-cmd="rich_oxirgi" type="button"><em>📰</em>Oxirgi rich</button>
+  </div>
+
+  <div class="section-label">Zikr halqasi</div>
+  <div class="acts">
+    <button class="act press" data-cmd="zikr_sinov" type="button"><em>🔔</em>Sinov eslatma</button>
+    <button class="act press" data-cmd="zikr_yakun" type="button"><em>🌙</em>Kun yakuni</button>
+  </div>
+
+  <div class="section-label">Statistika</div>
+  <div class="acts">
+    <button class="act press" data-cmd="panel" type="button"><em>🏛</em>To'liq panel</button>
+    <button class="act press" data-cmd="stats" type="button"><em>📈</em>Bot statistikasi</button>
+    <button class="act press" data-cmd="tekshir" type="button"><em>🚫</em>Bloklaganlar</button>
+    <button class="act press" data-cmd="kurs_stats" type="button"><em>🎓</em>Kurs sotuvlari</button>
+  </div>
+
+  <p class="note">
+    Natijalar chatga tushadi — tasdiqlash va nashr tugmalari o'sha yerda,
+    ya'ni kanalga hech narsa so'roqsiz ketmaydi.<br><br>
+    Bu yerga ataylab chiqarilmagan: <b>/xabar</b> (ommaviy tarqatma),
+    <b>/reset1</b>, <b>/reset2</b>, <b>/golib2</b> (konkursni yopadi) va
+    <b>/zikr_elon</b> (kanalga post joylaydi). Telefonda bitta noto'g'ri
+    bosish bu amallarni qaytarib bo'lmaydi — ular chatda qoladi.
+  </p>
+</section>
+
+<!-- ==================== KUTAYOTGAN POSTLAR ==================== -->
+<section class="screen" id="drafts">
+  <button class="back" data-back="admin" type="button"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>Panelga</button>
+  <h2>Kutayotgan postlar</h2>
+  <p class="sub" id="drSub">Yuklanmoqda...</p>
+  <div id="drList"></div>
+</section>
+
 </div></div>
 <div class="toast" id="toast"></div>
 
@@ -365,24 +520,98 @@ function toast(msg){
   toastEl.textContent=msg; toastEl.classList.add('on');
   clearTimeout(toastT); toastT=setTimeout(function(){toastEl.classList.remove('on');},2100);
 }
-function send(payload){
+
+/* ---------- server bilan aloqa ----------
+   Har so'rovga tg.initData qo'shiladi — server uni bot tokeni bilan
+   tekshiradi (miniapp.py). Shusiz hech qanday ma'lumot berilmaydi. */
+function api(yol, tana){
+  var o = {headers: {'X-Init-Data': (tg && tg.initData) || ''}};
+  if(tana !== undefined){
+    o.method = 'POST';
+    o.headers['Content-Type'] = 'application/json';
+    o.body = JSON.stringify(tana);
+  }
+  return fetch(yol, o).then(function(r){
+    if(r.ok) return r.json();
+    return r.json().catch(function(){ return {}; }).then(function(j){
+      throw new Error(j.xato || ('Server javobi: ' + r.status));
+    });
+  });
+}
+function yopish(){ try{ if(tg && tg.close) tg.close(); }catch(e){} }
+
+/* sendData — eski yo'l. U FAQAT ilova reply-klaviatura tugmasidan
+   ochilganda ishlaydi, shuning uchun endi zaxira sifatida qoldi. */
+function sendData(payload){
   if(tg){ try{ tg.sendData(JSON.stringify(payload)); return true; }catch(e){} }
   toast('Bot ichida ochilsa ishlaydi');
   return false;
 }
 
+/* Foydalanuvchi amali. Natija chatga tushadi — shuning uchun
+   muvaffaqiyatdan keyin ilova yopiladi (opt.yop===false bo'lmasa). */
+function send(payload, opt){
+  opt = opt || {};
+  if(tg && tg.initData){
+    api('/api/amal', payload)
+      .then(function(){
+        toast(opt.matn || 'Chatga yubordim \u2705');
+        if(opt.yop !== false) setTimeout(yopish, 900);
+      })
+      .catch(function(e){
+        if(!sendData(payload)) toast(e.message || 'Bajarilmadi');
+      });
+    return true;
+  }
+  return sendData(payload);
+}
+
+/* Admin buyrug'i — mavjud /buyruq funksiyasini ishga tushiradi. */
+function buyruq(nom, opt){
+  opt = opt || {};
+  if(!(tg && tg.initData)){ toast('Bot ichida ochilsa ishlaydi'); return; }
+  api('/api/buyruq', {buyruq: nom})
+    .then(function(){
+      toast(opt.matn || 'Bajarilyapti \u2014 natija chatda \u2705');
+      if(opt.yop !== false) setTimeout(yopish, 900);
+      if(opt.keyin) opt.keyin();
+    })
+    .catch(function(e){ toast(e.message || 'Bajarilmadi'); });
+}
+
 /* ---------- navigatsiya ---------- */
+/* Ichma-ich ekranlar uchun: qaysi ekrandan qayerga qaytiladi. */
+var ORQA = {drafts: 'admin'};
+var joriy = 'home';
 function show(id){
   var t=document.getElementById(id); if(!t) return;
   document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('on'); });
   t.classList.add('on');
+  joriy = id;
   document.querySelector('.scroll').scrollTop=0;
   if(tg){ try{ id==='home' ? tg.BackButton.hide() : tg.BackButton.show(); }catch(e){} }
   if(id==='kabinet'){ kabYukla(); }
+  if(id==='konkurs'){ konYukla(); }
+  if(id==='admin'){ admYukla(); }
+  if(id==='drafts'){ drYukla(); }
 }
-if(tg){ try{ tg.BackButton.onClick(function(){ show('home'); }); }catch(e){} }
+function orqaga(){ show(ORQA[joriy] || 'home'); }
+if(tg){ try{ tg.BackButton.onClick(orqaga); }catch(e){} }
 document.querySelectorAll('[data-back]').forEach(function(b){
-  b.addEventListener('click', function(){ haptic('light'); show('home'); });
+  b.addEventListener('click', function(){
+    haptic('light');
+    show(b.getAttribute('data-back') || 'home');
+  });
+});
+document.querySelectorAll('[data-amal]').forEach(function(el){
+  el.addEventListener('click', function(){
+    haptic('ok'); send({action: el.getAttribute('data-amal')});
+  });
+});
+document.querySelectorAll('[data-cmd]').forEach(function(el){
+  el.addEventListener('click', function(){
+    haptic('ok'); buyruq(el.getAttribute('data-cmd'));
+  });
 });
 document.querySelectorAll('[data-go]').forEach(function(el){
   el.addEventListener('click', function(){ haptic('light'); show(el.getAttribute('data-go')); });
@@ -444,6 +673,186 @@ function kabYukla(){
       sub.textContent='Ma\u2019lumot olinmadi. Birozdan keyin urinib ko\u2019ring.';
       ichi.style.display='none';
     });
+}
+
+/* ---------- men kimman ----------
+   Ilova ochilishi bilan bitta so'rov: admin bo'lsa panel kartasi
+   ochiladi, kartalar ostidagi izohlar esa jonli holatga almashadi. */
+var MEN = null;
+function menYukla(){
+  if(!(tg && tg.initData)) return;
+  api('/api/men').then(function(d){
+    MEN = d;
+    if(d.ism){
+      var e = document.querySelector('#home .eyebrow');
+      if(e) e.textContent = 'Assalomu alaykum, ' + d.ism;
+    }
+    if(d.admin) document.getElementById('adminCard').classList.remove('hid');
+
+    var z = d.zikr, kc = document.getElementById('kabCardSub');
+    if(z && kc){
+      kc.textContent = z.yoqilgan
+        ? ('Bugun ' + (z.tugagan || 0) + '/' + (z.jami || 0)
+           + ' · ' + (z.streak || 0) + ' kun ketma-ket')
+        : 'Hali yoqilmagan';
+    }
+    /* Eslatma soni sozlamadan olinadi — matnda qotib qolmasin. */
+    if(z && z.kuniga){
+      var h = document.getElementById('zikrHero'),
+          i = document.getElementById('zikrIzoh');
+      if(h) h.textContent = 'Kun davomida ' + z.kuniga
+        + ' marta qisqa zikr eslatmasi.';
+      if(i) i.textContent = 'Kun davomida ' + z.kuniga
+        + ' marta qisqa eslatma keladi'
+        + (z.takror ? ', har birini ' + z.takror + ' marta aytasiz' : '')
+        + '. Vaqti tasodifiy.';
+    }
+    var k = d.kurs, ks = document.getElementById('kursSub');
+    if(k && ks){
+      ks.textContent = k.ochiq
+        ? ('Ochiq · ' + (k.foiz || 0) + '% tugadi')
+        : ((k.darslar || 0) + ' ta dars · 1-dars bepul');
+    }
+    var c = d.konkurs, cs = document.getElementById('konkursSub');
+    if(c && cs){
+      cs.textContent = c.faol
+        ? ((c.ochko || 0) + ' ochko · ' + (c.qoldi || ''))
+        : 'Hozircha yopiq';
+    }
+  }).catch(function(){});
+}
+menYukla();
+
+/* ---------- konkurs ---------- */
+function konYukla(){
+  var sub = document.getElementById('konSub'),
+      ichi = document.getElementById('konIchi');
+  if(!(tg && tg.initData)){
+    sub.textContent = 'Bu bo’lim bot ichida ochilganda ishlaydi.';
+    return;
+  }
+  sub.textContent = 'Yuklanmoqda...';
+  api('/api/konkurs').then(function(d){
+    document.getElementById('konNom').textContent = d.nom || 'Konkurs';
+    if(!d.faol){
+      sub.textContent = 'Konkurs hozircha yopiq.';
+      ichi.style.display = 'none';
+      return;
+    }
+    sub.textContent = '🎁 ' + (d.sovrin || '') + ' · ⏳ ' + (d.qoldi || '');
+    document.getElementById('konOchko').textContent = d.ochko || 0;
+    document.getElementById('konOrin').textContent = d.orin || '—';
+    document.getElementById('konQoida').textContent =
+      '@' + d.kanal + ' ga obuna bo’ling va havolangizni ulashing. '
+      + 'Obuna bo’lgan har bir do’st = +' + d.har_taklif + ' ochko.';
+
+    var top = document.getElementById('konTop'); top.innerHTML = '';
+    var medal = ['🥇','🥈','🥉'];
+    (d.top || []).forEach(function(t, i){
+      var el = document.createElement('div');
+      el.className = 'lb' + (t.men ? ' me' : '');
+      var n = document.createElement('span'); n.className = 'n';
+      n.textContent = i < 3 ? medal[i] : (i + 1) + '.';
+      var nm = document.createElement('span'); nm.className = 'nm';
+      nm.textContent = t.ism;
+      var pt = document.createElement('span'); pt.className = 'pt';
+      pt.textContent = t.ochko;
+      el.appendChild(n); el.appendChild(nm); el.appendChild(pt);
+      top.appendChild(el);
+    });
+    if(!(d.top || []).length){
+      top.innerHTML = '<p class="note">Hozircha ishtirokchi yo’q. '
+        + 'Birinchi bo’ling — do’st taklif qiling!</p>';
+    }
+    document.getElementById('konShare').onclick = function(){
+      haptic('ok');
+      var u = 'https://t.me/share/url?url=' + encodeURIComponent(d.havola)
+        + '&text=' + encodeURIComponent(
+            'Mini konkursda qatnashib, ' + (d.sovrin || 'sovrin') + ' yutib oling! 🎁');
+      if(tg && tg.openTelegramLink){ tg.openTelegramLink(u); }
+      else { window.open(u, '_blank'); }
+    };
+    ichi.style.display = '';
+  }).catch(function(e){
+    sub.textContent = e.message || 'Ma’lumot olinmadi.';
+    ichi.style.display = 'none';
+  });
+}
+
+/* ---------- admin: jonli holat ---------- */
+function qoy(id, qiymat){
+  var el = document.getElementById(id);
+  if(el) el.textContent = (qiymat === undefined || qiymat === null) ? '—' : qiymat;
+}
+function admYukla(){
+  var sub = document.getElementById('admSub');
+  if(!(tg && tg.initData)){
+    sub.textContent = 'Bu bo’lim bot ichida ochilganda ishlaydi.';
+    return;
+  }
+  api('/api/admin/holat').then(function(d){
+    sub.textContent = (d.pauza ? '⏸ Agent pauzada' : '▶️ Agent ishlamoqda')
+      + (d.vaqt ? ' · ' + d.vaqt : '');
+    qoy('mUsers', d.users); qoy('mActive', d.active7);
+    qoy('mDrafts', d.drafts); qoy('mPub', d.pub_today);
+    qoy('mApi', d.api_today); qoy('mKurs', d.kurs_buyers);
+    var b = document.getElementById('pauzaBtn');
+    b.querySelector('em').textContent = d.pauza ? '▶️' : '⏸';
+    b.querySelector('span').textContent = d.pauza ? 'Davom ettirish' : 'Pauza';
+    b.setAttribute('data-next', d.pauza ? 'agent_resume' : 'agent_pause');
+  }).catch(function(e){
+    sub.textContent = e.message || 'Ma’lumot olinmadi.';
+  });
+}
+document.getElementById('pauzaBtn').addEventListener('click', function(){
+  var nom = this.getAttribute('data-next') || 'agent_pause';
+  haptic('ok');
+  buyruq(nom, {yop: false,
+               matn: nom === 'agent_pause' ? 'Agent pauzaga qo’yildi ⏸'
+                                           : 'Agent yana ishga tushdi ▶️',
+               keyin: function(){ setTimeout(admYukla, 1200); }});
+});
+
+/* ---------- admin: kutayotgan postlar ----------
+   Post shu yerda NASHR QILINMAYDI. Tanlangan qoralama chatga
+   «Kanalga / Fikr / Ovozli» tugmalari bilan tushadi — nashr oqimi
+   allaqachon sinalgan joyida qoladi. */
+function drYukla(){
+  var sub = document.getElementById('drSub'),
+      list = document.getElementById('drList');
+  if(!(tg && tg.initData)){
+    sub.textContent = 'Bu bo’lim bot ichida ochilganda ishlaydi.';
+    return;
+  }
+  sub.textContent = 'Yuklanmoqda...';
+  list.innerHTML = '';
+  api('/api/admin/postlar').then(function(d){
+    sub.textContent = d.jami
+      ? (d.jami + ' ta post kutyapti — birini tanlang, chatga tugmalari bilan tushadi.')
+      : 'Kutayotgan post yo’q — hammasi ko’rilgan ✅';
+    (d.postlar || []).forEach(function(pt){
+      var el = document.createElement('div');
+      el.className = 'row press';
+      el.innerHTML = '<b></b><p></p>'
+        + '<div class="meta"><span class="badge"></span><i></i></div>';
+      el.querySelector('b').textContent = pt.emoji + ' ' + pt.sarlavha;
+      el.querySelector('p').textContent = pt.parcha || '';
+      el.querySelector('.badge').textContent = pt.rubrika;
+      el.querySelector('.meta i').textContent = pt.sana;
+      el.addEventListener('click', function(){
+        haptic('ok');
+        api('/api/admin/post', {id: pt.id})
+          .then(function(){
+            toast('Chatga yubordim ✅');
+            setTimeout(yopish, 900);
+          })
+          .catch(function(e){ toast(e.message || 'Yuborilmadi'); });
+      });
+      list.appendChild(el);
+    });
+  }).catch(function(e){
+    sub.textContent = e.message || 'Ma’lumot olinmadi.';
+  });
 }
 
 /* ---------- kanallar ---------- */
