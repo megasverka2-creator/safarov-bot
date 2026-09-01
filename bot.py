@@ -25,6 +25,7 @@ from bs4 import BeautifulSoup
 from telegram import (
     Update, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo,
     InlineKeyboardButton, InlineKeyboardMarkup, MenuButtonDefault,
+    MenuButtonWebApp,
     BotCommand, BotCommandScopeDefault, BotCommandScopeChat,
 )
 from telegram.ext import (
@@ -774,13 +775,24 @@ def build_advice(data):
     return ("\n".join(lines), InlineKeyboardMarkup(buttons) if buttons else None)
 
 async def on_webapp_data(update, context):
-    user = update.effective_user
-    track_user(user)
+    """Mini App'dan `tg.sendData()` bilan kelgan ma'lumot.
+
+    DIQQAT: sendData faqat ilova REPLY-KLAVIATURA tugmasidan ochilganda
+    ishlaydi. Menyu tugmasi yoki havoladan ochilganda miniapp.py dagi
+    `POST /api/amal` yo'li ishlatiladi — ikkala yo'l ham bir xil
+    `webapp_amal` funksiyasiga tushadi."""
     try:
         data = json.loads(update.effective_message.web_app_data.data)
     except Exception:
         await update.message.reply_text("Ma'lumotni o'qib bo'lmadi.")
         return
+    await webapp_amal(data, update, context)
+
+
+async def webapp_amal(data, update, context):
+    """Mini App amalini bajaradi (sendData va HTTP uchun umumiy)."""
+    user = update.effective_user
+    track_user(user)
     action = data.get("action")
     if "areas" in data:
         track_event("gildirak")
@@ -820,6 +832,12 @@ async def on_webapp_data(update, context):
 
     elif action == "k2":
         await k2_join(update, context)
+
+    elif action == "kurs":
+        await kurs.cmd_kurs(update, context)
+
+    elif action == "ustoz":
+        await ustoz.cmd_ustoz(update, context)
 
     elif action == "ptest":
         await ptest_start(update, context)
@@ -1443,10 +1461,27 @@ async def post_init(app):
             BOT_USERNAME = me.username
     except Exception:
         pass
+    # Endi index.html botning O'ZIDAN beriladi (miniapp.py). Agar
+    # WEBAPP_URL hali eski statik nusxaga (Netlify) qarab tursa,
+    # ilova ochiladi-yu /api yo'llari bo'lmaydi — zikr kabineti,
+    # konkurs va admin paneli bo'sh qoladi.
+    if "netlify" in WEBAPP_URL.lower():
+        print("[MINIAPP] OGOHLANTIRISH: WEBAPP_URL hali Netlify'da. "
+              "Uni botning o'z manziliga (Railway) o'zgartiring, "
+              "aks holda /api bo'limlari ishlamaydi.")
+
+    # Kirish tugmasi ("≡") to'g'ridan-to'g'ri Mini App'ni ochadi:
+    # butun bot (zikr, kurs, konkurs, admin paneli) o'sha yerda.
+    # MENU_WEBAPP=0 qilinsa eski buyruqlar ro'yxatiga qaytadi.
     try:
-        await app.bot.set_chat_menu_button(menu_button=MenuButtonDefault())
-    except Exception:
-        pass
+        if WEBAPP_URL and os.environ.get("MENU_WEBAPP", "1") != "0":
+            await app.bot.set_chat_menu_button(
+                menu_button=MenuButtonWebApp(
+                    text="SAFAROV", web_app=WebAppInfo(WEBAPP_URL)))
+        else:
+            await app.bot.set_chat_menu_button(menu_button=MenuButtonDefault())
+    except Exception as e:
+        print(f"[MENU] Menyu tugmasi o'rnatilmadi: {e}")
     await _buyruqlar_panelini_qoy(app)
     try:
         await miniapp.ishga_tushir(app)
