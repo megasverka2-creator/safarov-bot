@@ -144,6 +144,25 @@ textarea{min-height:98px;resize:vertical}
   border:1px solid var(--line);font-size:15.5px;cursor:pointer}
 .opt.sel{border-color:var(--lav);background:var(--glass-2)}
 
+/* --- salovat sanoqchisi --- */
+.slv-hero{position:relative;border-radius:var(--r-lg);padding:26px 22px;overflow:hidden;
+  margin-bottom:14px;text-align:center;
+  background:linear-gradient(155deg,rgba(75,51,132,.55),rgba(54,37,92,.35));
+  border:1px solid rgba(210,195,246,.2);
+  backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px)}
+.slv-hero .ar{font-size:25px;line-height:1.75;direction:rtl;color:var(--lav);margin:0 0 14px}
+.slv-hero .tr{font-size:15px;line-height:1.55;color:var(--lav);margin:0}
+.slv-hero .mn{font-size:13.5px;line-height:1.5;color:var(--lav-3);margin:7px 0 0}
+.slv-son{font-family:var(--display);font-size:56px;font-weight:600;line-height:1;
+  margin:18px 0 2px;letter-spacing:-.02em}
+.slv-son small{font-size:20px;color:var(--lav-3);font-weight:400}
+.slv-tap{display:grid;grid-template-columns:1fr auto;gap:9px;margin-bottom:12px}
+.slv-tap .btn{padding:19px}
+.slv-tap .btn-ghost{padding-left:22px;padding-right:22px}
+.hadis{padding:16px 17px;border-radius:var(--r-md);background:var(--glass);
+  border:1px solid var(--line);font-size:14px;line-height:1.6;color:var(--lav-2);
+  white-space:pre-wrap;margin-bottom:10px}
+
 /* --- statistika kataklari --- */
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:10px}
 .stat{padding:14px;border-radius:var(--r-sm);background:var(--glass);border:1px solid var(--line)}
@@ -221,6 +240,12 @@ textarea{min-height:98px;resize:vertical}
   <div class="card press hid" id="adminCard" data-go="admin" style="margin-top:12px">
     <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 20V9M9.3 20V4M14.7 20v-7M20 20v-11"/></svg></div>
     <div class="tx"><b>Boshqaruv paneli</b><span>Agent, kontent va statistika</span></div>
+    <svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+  </div>
+
+  <div class="card press" id="salovatCard" data-go="salovat" style="margin-top:12px">
+    <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 20.5s-7.3-4.3-7.3-9.6A4.2 4.2 0 0112 8.6a4.2 4.2 0 017.3 2.3c0 5.3-7.3 9.6-7.3 9.6z"/></svg></div>
+    <div class="tx"><b>Juma salovati</b><span id="salovatSub">Hadisda aytilgan 100 marta</span></div>
     <svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
   </div>
 
@@ -402,6 +427,31 @@ textarea{min-height:98px;resize:vertical}
   <button class="btn btn-fill press" id="jSend" type="button" style="margin-top:18px">Arizani yuborish</button>
 </section>
 
+
+<!-- ==================== JUMA SALOVATI ==================== -->
+<section class="screen" id="salovat">
+  <button class="back" data-back type="button"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>Orqaga</button>
+  <h2>Juma salovati</h2>
+  <p class="sub" id="slvSub">Yuklanmoqda...</p>
+
+  <div id="slvIchi" style="display:none">
+    <div class="slv-hero">
+      <p class="ar" id="slvArab"></p>
+      <p class="tr" id="slvMatn"></p>
+      <p class="mn" id="slvMano"></p>
+      <p class="slv-son"><span id="slvSon">0</span><small id="slvJami">/100</small></p>
+      <div class="bar" style="margin:14px 0 0"><i id="slvBar" style="width:0%"></i></div>
+    </div>
+
+    <div class="slv-tap">
+      <button class="btn btn-fill press" id="slvBir" type="button">Aytdim</button>
+      <button class="btn btn-ghost press" id="slvOn" type="button">+10</button>
+    </div>
+
+    <div class="hadis" id="slvHadis"></div>
+    <p class="note" id="slvHammasi"></p>
+  </div>
+</section>
 
 <!-- ==================== KONKURS ==================== -->
 <section class="screen" id="konkurs">
@@ -591,6 +641,7 @@ function show(id){
   document.querySelector('.scroll').scrollTop=0;
   if(tg){ try{ id==='home' ? tg.BackButton.hide() : tg.BackButton.show(); }catch(e){} }
   if(id==='kabinet'){ kabYukla(); }
+  if(id==='salovat'){ slvYukla(); }
   if(id==='konkurs'){ konYukla(); }
   if(id==='admin'){ admYukla(); }
   if(id==='drafts'){ drYukla(); }
@@ -713,6 +764,13 @@ function menYukla(){
         ? ('Ochiq · ' + (k.foiz || 0) + '% tugadi')
         : ((k.darslar || 0) + ' ta dars · 1-dars bepul');
     }
+    var sl = d.salovat, ss = document.getElementById('salovatSub');
+    if(sl && ss){
+      ss.textContent = !sl.bor ? 'Tez orada'
+        : (sl.soni >= sl.jami ? 'Bugun to\u2019ldi \u2014 ' + sl.jami + ' marta'
+           : (sl.juma ? 'Bugun juma \u2014 ' : '')
+             + sl.soni + '/' + sl.jami + ' marta');
+    }
     var c = d.konkurs, cs = document.getElementById('konkursSub');
     if(c && cs){
       cs.textContent = c.faol
@@ -722,6 +780,93 @@ function menYukla(){
   }).catch(function(){});
 }
 menYukla();
+
+/* ---------- juma salovati ----------
+   Sanoq serverda yuritiladi (zikr.db), shuning uchun telefonda ham,
+   chatdagi tugmada ham bitta hisob. Har bosish darhol ko'rinadi:
+   avval ekran yangilanadi, so'ng server javobi bilan aniqlanadi. */
+var SLV = null;
+function slvChiz(){
+  if(!SLV) return;
+  var son = SLV.soni || 0, jami = SLV.jami || 100;
+  document.getElementById('slvSon').textContent = son;
+  document.getElementById('slvJami').textContent = '/' + jami;
+  document.getElementById('slvBar').style.width =
+    Math.min(100, Math.round(son / jami * 100)) + '%';
+  var tugadi = son >= jami;
+  document.getElementById('slvBir').disabled = tugadi;
+  document.getElementById('slvOn').disabled = tugadi;
+  document.getElementById('slvOn').style.display =
+    (jami - son >= 10) ? '' : 'none';
+  document.getElementById('slvSub').textContent = tugadi
+    ? ('Bugungi salovat to’ldi — ' + jami + ' marta.')
+    : (SLV.juma ? 'Bugun juma. Hadisda aytilgan ' + jami + ' marta.'
+                : 'Istalgan kuni aytsa bo’ladi. Juma kuni ' + jami + ' marta.');
+  if(SLV.hammasi){
+    document.getElementById('slvHammasi').textContent =
+      'Hammamiz bugun: ' + String(SLV.hammasi).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+      + ' marta.';
+  }
+}
+function slvYukla(){
+  var sub = document.getElementById('slvSub'),
+      ichi = document.getElementById('slvIchi');
+  if(!(tg && tg.initData)){
+    sub.textContent = 'Bu bo’lim bot ichida ochilganda ishlaydi.';
+    return;
+  }
+  sub.textContent = 'Yuklanmoqda...';
+  api('/api/salovat').then(function(d){
+    if(!d.bor){
+      sub.textContent = 'Salovat matni hozircha tayyorlanmoqda.';
+      ichi.style.display = 'none';
+      return;
+    }
+    SLV = d;
+    document.getElementById('slvArab').textContent = d.arab || '';
+    document.getElementById('slvArab').style.display = d.arab ? '' : 'none';
+    /* Ma'no alohida qatorda — u uzun va o'zining qavsi bor. */
+    document.getElementById('slvMatn').textContent =
+      '«' + d.lotin + '», deb ayting.';
+    var mn = document.getElementById('slvMano');
+    mn.textContent = d.mano || '';
+    mn.style.display = d.mano ? '' : 'none';
+    document.getElementById('slvHadis').textContent = d.hadis || '';
+    ichi.style.display = '';
+    slvChiz();
+  }).catch(function(e){
+    sub.textContent = e.message || 'Ma’lumot olinmadi.';
+    ichi.style.display = 'none';
+  });
+}
+function slvBos(qadam){
+  if(!SLV) return;
+  if((SLV.soni || 0) >= SLV.jami) return;
+  haptic('light');
+  /* Sanoq DARHOL ko'rinadi — 100 marta bosishda javobni kutib
+     turish bosishlarni yo'qotardi. So'rovlar parallel ketaveradi;
+     javob kelganda kattarog'i olinadi, shuning uchun javoblar
+     tartibsiz kelsa ham son orqaga ketmaydi. */
+  SLV.soni = Math.min(SLV.jami, (SLV.soni || 0) + qadam);
+  slvChiz();
+  api('/api/salovat', {qadam: qadam}).then(function(d){
+    SLV.jami = d.jami;
+    SLV.soni = Math.max(SLV.soni || 0, d.soni);
+    SLV.hammasi = Math.max(SLV.hammasi || 0, d.hammasi);
+    slvChiz();
+    if(SLV.soni >= SLV.jami && !SLV.aytildi){
+      SLV.aytildi = true;
+      haptic('ok');
+      toast('Salovat to’ldi — ' + SLV.jami + ' marta');
+    }
+  }).catch(function(e){
+    toast(e.message || 'Yozilmadi');
+    slvYukla();
+  });
+}
+
+document.getElementById('slvBir').addEventListener('click', function(){ slvBos(1); });
+document.getElementById('slvOn').addEventListener('click', function(){ slvBos(10); });
 
 /* ---------- konkurs ---------- */
 function konYukla(){

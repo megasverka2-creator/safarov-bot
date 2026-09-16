@@ -303,6 +303,14 @@ async def _api_men(request):
         javob["zikr"] = None
 
     try:
+        sl = zikr.salovat_holat(uid)
+        javob["salovat"] = {"bor": sl["bor"], "juma": sl["juma"],
+                            "soni": sl["soni"], "jami": sl["jami"]}
+    except Exception:
+        log.exception("Mini App: salovat holati o'qilmadi")
+        javob["salovat"] = None
+
+    try:
         kurs = _modul("kurs")
         d = kurs._load()
         u = kurs._user(d, uid)
@@ -339,6 +347,43 @@ async def _api_zikr(request):
         return _xato(f"Ma'lumot o'qilmadi: {e}", 500)
     malumot["ism"] = user.get("first_name") or ""
     return web.json_response(malumot)
+
+
+async def _api_salovat(request):
+    """Juma salovati kartasi (faqat o'qish)."""
+    user = _kim(request)
+    if not user:
+        return _xato("Imzo tekshiruvidan o'tmadi")
+    try:
+        return web.json_response(zikr.salovat_holat(int(user["id"])))
+    except Exception as e:
+        log.exception("Salovat holati o'qilmadi")
+        return _xato(f"Ma'lumot o'qilmadi: {e}", 500)
+
+
+async def _api_salovat_qadam(request):
+    """«Aytdim» — sanoqni oshiradi va yangi holatni qaytaradi.
+
+    Bu yerda zikr'dagidek xabar tahriri yo'q, shuning uchun har bosish
+    to'g'ridan-to'g'ri yozilaveradi; qadam ham 1 yoki 10 bilan cheklangan,
+    ya'ni so'rov bilan sanoqni «bir zarbda» to'ldirib bo'lmaydi."""
+    user = _kim(request)
+    if not user:
+        return _xato("Imzo tekshiruvidan o'tmadi")
+    data = await _tana(request)
+    try:
+        qadam = int(data.get("qadam", 1))
+    except Exception:
+        qadam = 1
+    qadam = 10 if qadam >= 10 else 1
+    try:
+        natija = zikr.salovat_qadam(int(user["id"]), qadam)
+    except Exception as e:
+        log.exception("Salovat sanog'i yozilmadi")
+        return _xato(f"Yozib bo'lmadi: {e}", 500)
+    if natija is None:
+        return _xato("Salovat matni hali qo'yilmagan", 409)
+    return web.json_response(natija)
 
 
 async def _api_konkurs(request):
@@ -532,6 +577,8 @@ def server_yasa():
     server.router.add_get("/api/men", _api_men)
     server.router.add_get("/api/zikr", _api_zikr)
     server.router.add_get("/api/konkurs", _api_konkurs)
+    server.router.add_get("/api/salovat", _api_salovat)
+    server.router.add_post("/api/salovat", _api_salovat_qadam)
     server.router.add_post("/api/amal", _api_amal)
     server.router.add_post("/api/buyruq", _api_buyruq)
     server.router.add_get("/api/admin/holat", _api_admin_holat)
