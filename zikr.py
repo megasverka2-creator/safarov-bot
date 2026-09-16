@@ -889,9 +889,10 @@ HADIS_MATNI = (
 # Salovat — ZIKRLAR bilan AYNAN BIR XIL formatda:
 #     (arabcha, lotincha o'qilishi, ma'nosi)
 #
-# Lotincha o'qilishini kanal egasi (Muslim Safarov) yozib berdi va u
-# HARFMA-HARF shunday qoladi — apostroflarga ham tegilmaydi (ayn belgisi
-# shu). Arabcha yozuv o'sha o'qilishning so'zma-so'z qarshiligi:
+# Lotincha o'qilishini ham, ma'nosini ham kanal egasi (Muslim Safarov)
+# yozib berdi. Ikkalasi HARFMA-HARF shunday qoladi — apostroflarga ham,
+# ichkaridagi qavsga ham tegilmaydi. Arabcha yozuv esa o'sha o'qilishning
+# so'zma-so'z qarshiligi:
 #     اللهم (Allohumma)  صل (solli)  على ('ala)  محمد (Muhammadin)
 #     وعلى (va 'ala)  آل (ali)  محمد (Muhammad)
 # ZIKRLAR kabi harakatsiz (harakat qo'yilmagan) yozuvda.
@@ -901,7 +902,8 @@ HADIS_MATNI = (
 SALOVAT = (
     "اللهم صل على محمد وعلى آل محمد",
     "Allohumma solli 'ala Muhammadin va 'ala ali Muhammad",
-    "Ey Alloh, Muhammadga va Muhammad oilasiga rahmat yo'lla!",
+    "Allohim, sayyidimiz Muhammadga va sayyidimiz Muhammadning "
+    "oilasiga O'z rahmatingni (barakangni) yog'dir",
 )
 SALOVAT_ARAB, SALOVAT_LOTIN, SALOVAT_MANO = SALOVAT
 
