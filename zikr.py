@@ -867,10 +867,10 @@ async def cmd_zikr_elon(update: Update, context: ContextTypes.DEFAULT_TYPE):
 #            Manba: «Juma haqidagi oyat va hadis» kitobi, Bayhaqiy
 #            rivoyati, Hazrati Aliy roziyallohu anhudan.
 #
-#   Salovat matni — islom.uz portalidan ADMIN QO'LI BILAN qo'yiladi:
-#            /salovat_matn. Qo'yilmaguncha juma xabari YUBORILMAYDI,
-#            buning o'rniga admin ogohlantiriladi. Ya'ni obunachilarga
-#            hech qachon tasdiqlanmagan matn ketmaydi.
+#   Salovat — kanal egasi yozib bergan matn (SALOVAT_LOTIN). Uni
+#            /salovat_matn bilan almashtirish yoki arabcha yozuv va
+#            ma'nosini qo'shish mumkin; bot avval "obunachilar shunday
+#            ko'radi" deb ko'rsatadi va faqat tasdiqdan keyin saqlaydi.
 SALOVAT_KUN = int(os.environ.get("SALOVAT_KUN", "4"))     # 4 = juma
 SALOVAT_SONI = int(os.environ.get("SALOVAT_SONI", "100"))
 SALOVAT_SOAT = int(os.environ.get("SALOVAT_SOAT", "8"))
@@ -886,14 +886,27 @@ HADIS_MATNI = (
 )
 
 
+# Salovat matni — kanal egasi (Muslim Safarov) aynan shunday yozib berdi.
+# HARFMA-HARF SHUNDAY QOLADI: AI uni yozmaydi, tuzatmaydi, "chiroyliroq"
+# qilmaydi. Apostroflar ham o'zgartirilmaydi — ayn belgisi shu.
+SALOVAT_LOTIN = "Allohumma solli 'ala Muhammadin va 'ala ali Muhammad"
+# Arabcha yozuv va ma'nosi hali berilmagan. Ular ixtiyoriy: bo'sh bo'lsa
+# kartada shunchaki ko'rsatilmaydi. Qo'shish uchun — /salovat_matn.
+SALOVAT_ARAB = ""
+SALOVAT_MANO = ""
+
+
 def salovat_matn_ol(conn):
-    """Saqlangan salovat matni yoki None (hali qo'yilmagan)."""
-    lotin = meta_get(conn, "salovat_lotin")
+    """Salovat matni. Avval admin qo'ygani, bo'lmasa koddagi asl matn.
+
+    None faqat matn ataylab bo'shatilgan bo'lsa qaytadi — o'shanda juma
+    xabari yuborilmaydi."""
+    lotin = meta_get(conn, "salovat_lotin") or SALOVAT_LOTIN
     if not lotin:
         return None
-    return {"arab": meta_get(conn, "salovat_arab", "") or "",
+    return {"arab": meta_get(conn, "salovat_arab") or SALOVAT_ARAB,
             "lotin": lotin,
-            "mano": meta_get(conn, "salovat_mano", "") or "",
+            "mano": meta_get(conn, "salovat_mano") or SALOVAT_MANO,
             "hadis": meta_get(conn, "salovat_hadis") or HADIS_MATNI}
 
 

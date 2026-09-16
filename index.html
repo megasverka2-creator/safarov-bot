@@ -826,7 +826,9 @@ function slvYukla(){
     document.getElementById('slvArab').textContent = d.arab || '';
     document.getElementById('slvArab').style.display = d.arab ? '' : 'none';
     document.getElementById('slvLotin').textContent = '«' + d.lotin + '»';
-    document.getElementById('slvMano').textContent = d.mano || '';
+    var mn = document.getElementById('slvMano');
+    mn.textContent = d.mano || '';
+    mn.style.display = d.mano ? '' : 'none';
     document.getElementById('slvHadis').textContent = d.hadis || '';
     ichi.style.display = '';
     slvChiz();
