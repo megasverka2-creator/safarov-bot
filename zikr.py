@@ -8,7 +8,7 @@ Ishlash tartibi:
      vaqt tanlaydi (standart 5) va har vaqtga TAKRORSIZ zikr biriktiradi —
      ya'ni beshala zikr ham kun davomida aynan bir martadan keladi
   3. Vaqt kelganda rejadagi zikr yuboriladi + "Aytdim" tugmasi
-  4. Tugma TASBEHDEK ZIKR_TAKROR marta bosiladi (standart 3).
+  4. Tugma TASBEHDEK ZIKR_TAKROR marta bosiladi (standart 10).
      Har bosishda tasbeh chizig'i to'ladi: ○○○ -> ●○○ -> ●●○ -> ●●●
      Oxirgi bosishda xabar o'rnida "Hammamiz bugun: N" qoladi.
   5. Kunning BARCHA eslatmalari to'liq aytib bo'linganda — yakuniy xabar
@@ -24,6 +24,11 @@ Ishlash tartibi:
   7. Oy oxirida obunachilarga umumiy natija yuboriladi
   8. /zikr_off -> "To'xtadi"
 
+JUMA SALOVATI (alohida bo'lim, pastda):
+  Juma kuni SALOVAT_SOAT da obunachilarga salovat kartasi keladi —
+  hadisda aytilgan 100 marta uchun sanoqchi bilan. Sanoq har kun
+  alohida yuritiladi, /salovat bilan istalgan kuni ochsa bo'ladi.
+
 MUHIM: bu yerda AI ISHLATILMAYDI. Zikr matnlari qat'iy ro'yxatdan olinadi,
 shuning uchun noto'g'ri matn yozilishi mumkin emas va xarajat = $0.
 Taklif matni ham qo'lda yozilgan — hech qanday diniy hukm yoki savob va'dasi
@@ -33,6 +38,7 @@ yo'q, faqat samimiy chaqiruv.
 import logging
 import os
 import random
+import re
 import sqlite3
 from io import BytesIO
 from urllib.parse import quote
@@ -57,6 +63,8 @@ try:  # Pillow — kanal banneri uchun. Bo'lmasa modul banner'siz ishlayveradi.
 except Exception:
     Image = None
 
+import kirill          # kirill -> lotin: qat'iy jadval, AI emas
+
 log = logging.getLogger(__name__)
 TZ = ZoneInfo("Asia/Tashkent")
 
@@ -66,7 +74,8 @@ ADMIN_ID = int(os.environ.get("ADMIN_ID", "0") or "0")
 # Kuniga nechta eslatma
 PER_DAY = int(os.environ.get("ZIKR_PER_DAY", "5"))
 # Bitta eslatma nechta marta aytiladi (tasbeh). 1 qilinsa — eski tartib.
-TAKROR = max(1, int(os.environ.get("ZIKR_TAKROR", "3")))
+# 3 dan 10 ga oshirildi (kanal egasining talabi).
+TAKROR = max(1, int(os.environ.get("ZIKR_TAKROR", "10")))
 # Taklif tugmasi necha kunda bir ko'rsatilsin (0 = umuman ko'rsatilmasin)
 TAKLIF_HAR = int(os.environ.get("ZIKR_TAKLIF_KUN", "7"))
 # Tasodifiy vaqt shu oraliqdan tanlanadi (tunda bezovta qilmaslik uchun).
@@ -172,6 +181,10 @@ def init_db():
     # kunlik yakun bir martadan ortiq yuborilmasligi uchun
     conn.execute("""CREATE TABLE IF NOT EXISTS zikr_yakun (
         uid INTEGER, kun TEXT, PRIMARY KEY (uid, kun))""")
+    # juma salovati — har kun uchun alohida sanoq
+    conn.execute("""CREATE TABLE IF NOT EXISTS zikr_salovat (
+        uid INTEGER, kun TEXT, soni INTEGER DEFAULT 0,
+        PRIMARY KEY (uid, kun))""")
 
     # --- migratsiya: yangi ustunlar ---
     _ustun(conn, "zikr_plan", "bosildi", "INTEGER DEFAULT 0")
@@ -843,6 +856,346 @@ async def cmd_zikr_elon(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ======================================================================
+# JUMA SALOVATI — 100 marta
+# ======================================================================
+# DIQQAT: bu bo'limdagi DINIY MATNLAR AI tomonidan YOZILMAYDI va
+# O'ZGARTIRILMAYDI — zikr ro'yxatida bo'lgani kabi.
+#
+#   Hadis  — kanal egasi yuborgan rasmdan olindi. Lotinga repodagi
+#            kirill.py JADVALI bilan o'girildi (AI emas: har safar bir
+#            xil natija, tekshirib bo'ladi).
+#            Manba: «Juma haqidagi oyat va hadis» kitobi, Bayhaqiy
+#            rivoyati, Hazrati Aliy roziyallohu anhudan.
+#
+#   Salovat matni — islom.uz portalidan ADMIN QO'LI BILAN qo'yiladi:
+#            /salovat_matn. Qo'yilmaguncha juma xabari YUBORILMAYDI,
+#            buning o'rniga admin ogohlantiriladi. Ya'ni obunachilarga
+#            hech qachon tasdiqlanmagan matn ketmaydi.
+SALOVAT_KUN = int(os.environ.get("SALOVAT_KUN", "4"))     # 4 = juma
+SALOVAT_SONI = int(os.environ.get("SALOVAT_SONI", "100"))
+SALOVAT_SOAT = int(os.environ.get("SALOVAT_SOAT", "8"))
+SALOVAT_DAQIQA = int(os.environ.get("SALOVAT_DAQIQA", "0"))
+
+HADIS_MATNI = (
+    "Hazrati Aliy ibn Abu Tolib roziyallohu anhudan rivoyat qilinadi:\n\n"
+    "«Kim juma kuni Nabiy sollallohu alayhi vasallamga yuz marta salavot "
+    "aytsa, qiyomat kuni u yuzida bir nur bilan keladi. Odamlar: «Bu nima "
+    "qilar edi?» – deyishadi».\n\n"
+    "Bayhaqiy rivoyat qilgan.\n"
+    "«Juma haqidagi oyat va hadis» kitobidan"
+)
+
+
+def salovat_matn_ol(conn):
+    """Saqlangan salovat matni yoki None (hali qo'yilmagan)."""
+    lotin = meta_get(conn, "salovat_lotin")
+    if not lotin:
+        return None
+    return {"arab": meta_get(conn, "salovat_arab", "") or "",
+            "lotin": lotin,
+            "mano": meta_get(conn, "salovat_mano", "") or "",
+            "hadis": meta_get(conn, "salovat_hadis") or HADIS_MATNI}
+
+
+def salovat_soni(conn, uid, kun):
+    qator = conn.execute(
+        "SELECT soni FROM zikr_salovat WHERE uid=? AND kun=?",
+        (uid, kun)).fetchone()
+    return int(qator[0] or 0) if qator else 0
+
+
+def salovat_hammasi(conn, qoshildi=0):
+    """Bugun hammamiz aytgan salovat. Kun almashsa nolga qaytadi."""
+    if meta_get(conn, "salovat_sana") != _bugun():
+        meta_set(conn, "salovat_sana", _bugun())
+        meta_set(conn, "salovat_hisob", "0")
+    jami = int(meta_get(conn, "salovat_hisob", "0")) + qoshildi
+    if qoshildi:
+        meta_set(conn, "salovat_hisob", jami)
+    return jami
+
+
+def salovat_oshir(conn, uid, kun, qadam=1):
+    """Sanoqni oshiradi. Chegaradan oshmaydi.
+    Qaytadi: (yangi_son, haqiqatda_qo'shilgan)."""
+    hozir = salovat_soni(conn, uid, kun)
+    if hozir >= SALOVAT_SONI:
+        return hozir, 0
+    yangi = min(SALOVAT_SONI, hozir + max(1, int(qadam)))
+    conn.execute(
+        "INSERT OR REPLACE INTO zikr_salovat (uid, kun, soni) VALUES (?, ?, ?)",
+        (uid, kun, yangi))
+    return yangi, yangi - hozir
+
+
+def salovat_chiziq(soni):
+    """0 -> '▱▱▱▱▱▱▱▱▱▱'   32 -> '▰▰▰▱▱▱▱▱▱▱'"""
+    belgi = 10
+    toldi = min(belgi, int(soni * belgi / SALOVAT_SONI)) if SALOVAT_SONI else 0
+    return "▰" * toldi + "▱" * (belgi - toldi)
+
+
+def salovat_matni(matn, soni):
+    qatorlar = []
+    if matn["arab"]:
+        qatorlar.append(matn["arab"])
+    qatorlar.append(f"«{matn['lotin']}»")
+    if matn["mano"]:
+        qatorlar.append(f"({matn['mano']})")
+    qatorlar.append(f"{salovat_chiziq(soni)}   {soni}/{SALOVAT_SONI}")
+    qatorlar.append(matn["hadis"])
+    return "\n\n".join(qatorlar)
+
+
+def salovat_tugma(kun, soni):
+    if soni >= SALOVAT_SONI:
+        return None
+    qator = [InlineKeyboardButton("Aytdim", callback_data=f"slv|{kun}|1")]
+    if SALOVAT_SONI - soni >= 10:
+        qator.append(InlineKeyboardButton("+10", callback_data=f"slv|{kun}|10"))
+    return InlineKeyboardMarkup([qator])
+
+
+async def on_salovat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """«Aytdim» bosilishi.
+
+    100 marta bosish = 100 ta xabar tahriri bo'lardi; Telegram buni
+    cheklaydi va tez bosganda xatolik beradi. Shuning uchun sanoq
+    DARHOL javob oynachasida (toast) ko'rsatiladi, xabar esa faqat
+    chiziq o'zgarganda — ya'ni har 10 tada — yangilanadi."""
+    query = update.callback_query
+    uid = query.from_user.id
+    bolak = (query.data or "").split("|")
+    kun = bolak[1] if len(bolak) > 1 and bolak[1] else _bugun()
+    try:
+        qadam = int(bolak[2])
+    except (IndexError, ValueError):
+        qadam = 1
+
+    conn = db()
+    matn = salovat_matn_ol(conn)
+    if matn is None:
+        conn.close()
+        await query.answer("Salovat matni hali qo'yilmagan.", show_alert=True)
+        return
+    avval = salovat_soni(conn, uid, kun)
+    soni, qoshildi = salovat_oshir(conn, uid, kun, qadam)
+    jami = salovat_hammasi(conn, qoshildi)
+    conn.commit()
+    conn.close()
+
+    if not qoshildi:
+        await query.answer(f"{soni}/{SALOVAT_SONI} — to'ldi")
+        return
+    await query.answer(f"{soni}/{SALOVAT_SONI}")
+
+    if soni >= SALOVAT_SONI:
+        try:
+            await query.edit_message_text(
+                f"Juma salovati to'ldi: {SALOVAT_SONI} marta.\n"
+                f"Hammamiz bugun: {raqam(jami)} marta.")
+        except BadRequest as e:
+            log.warning("Salovat yakunini yozib bo'lmadi: %s", e)
+        return
+
+    if salovat_chiziq(avval) != salovat_chiziq(soni):
+        try:
+            await query.edit_message_text(
+                salovat_matni(matn, soni),
+                reply_markup=salovat_tugma(kun, soni))
+        except BadRequest as e:
+            log.warning("Salovat sanog'ini yangilab bo'lmadi: %s", e)
+
+
+async def cmd_salovat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/salovat — salovat kartasini ochadi (istalgan kuni)."""
+    uid = update.effective_user.id
+    conn = db()
+    matn = salovat_matn_ol(conn)
+    if matn is None:
+        conn.close()
+        if uid == ADMIN_ID:
+            await update.message.reply_text(
+                "Salovat matni hali qo'yilmagan.\n\n" + SALOVAT_KORSATMA)
+        else:
+            await update.message.reply_text(
+                "Juma salovati hozircha tayyorlanmoqda.")
+        return
+    kun = _bugun()
+    soni = salovat_soni(conn, uid, kun)
+    conn.close()
+    await update.message.reply_text(salovat_matni(matn, soni),
+                                    reply_markup=salovat_tugma(kun, soni))
+
+
+# --- Matnni qo'yish (faqat admin) --------------------------------------
+SALOVAT_KORSATMA = (
+    "Salovat matnini qo'yish — islom.uz'dan nusxa oling.\n\n"
+    "Bitta xabarda yuboring, bo'laklarni --- bilan ajrating:\n\n"
+    "/salovat_matn\n"
+    "<arabcha>\n"
+    "---\n"
+    "<lotincha o'qilishi>\n"
+    "---\n"
+    "<ma'nosi>\n"
+    "---\n"
+    "<hadis>\n\n"
+    "Kamida 2 bo'lak kerak (arabcha + lotincha). Ma'no va hadis "
+    "ixtiyoriy — hadis yozilmasa, kitobdagi rivoyat ishlatiladi.\n"
+    "Kirill alifbosida yuborsangiz, lotinga jadval bilan o'giriladi."
+)
+
+# Tasdiqlashni kutayotgan matn: {admin_id: {...}}
+_salovat_kutilmoqda = {}
+
+
+def _lotinga(matn):
+    """Kirill bo'lsa lotinga o'giradi. Qator tuzilishi saqlanadi —
+    kirill.py bo'sh joylarni siqib yuboradi, shuning uchun satrma-satr."""
+    if not matn or not kirill.kirill_bormi(matn):
+        return matn
+    return "\n".join(kirill.kirill_lotin(q) for q in matn.split("\n"))
+
+
+async def cmd_salovat_matn(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/salovat_matn — salovat matnini qo'yadi (faqat admin)."""
+    if update.effective_user is None or update.effective_user.id != ADMIN_ID:
+        return
+    xom = (update.message.text or "")
+    # buyruqning o'zini kesib tashlaymiz
+    xom = xom.split(None, 1)[1] if len(xom.split(None, 1)) > 1 else ""
+    bolaklar = [b.strip() for b in re.split(r"^\s*-{3,}\s*$", xom,
+                                            flags=re.M)]
+    bolaklar = [b for b in bolaklar if b]
+    if len(bolaklar) < 2:
+        conn = db()
+        joriy = salovat_matn_ol(conn)
+        conn.close()
+        holat = ("Hozirgi matn:\n\n" + salovat_matni(joriy, 0)
+                 if joriy else "Hozir matn qo'yilmagan.")
+        await update.message.reply_text(holat + "\n\n" + SALOVAT_KORSATMA)
+        return
+
+    yangi = {"arab": bolaklar[0],
+             "lotin": _lotinga(bolaklar[1]),
+             "mano": _lotinga(bolaklar[2]) if len(bolaklar) > 2 else "",
+             "hadis": _lotinga(bolaklar[3]) if len(bolaklar) > 3
+                      else HADIS_MATNI}
+    _salovat_kutilmoqda[update.effective_user.id] = yangi
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("Saqlash", callback_data="slvmatn|saqla"),
+        InlineKeyboardButton("Bekor", callback_data="slvmatn|bekor")]])
+    await update.message.reply_text(
+        "Obunachilar shunday ko'radi:\n\n" + salovat_matni(yangi, 0)
+        + "\n\nTo'g'rimi?", reply_markup=kb)
+
+
+async def on_salovat_matn(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if query.from_user.id != ADMIN_ID:
+        await query.answer("Bu tugma faqat admin uchun.", show_alert=True)
+        return
+    amal = (query.data or "").split("|")[-1]
+    yangi = _salovat_kutilmoqda.pop(query.from_user.id, None)
+    if amal != "saqla" or not yangi:
+        await query.answer("Bekor qilindi")
+        await query.edit_message_text("Matn saqlanmadi.")
+        return
+    conn = db()
+    meta_set(conn, "salovat_arab", yangi["arab"])
+    meta_set(conn, "salovat_lotin", yangi["lotin"])
+    meta_set(conn, "salovat_mano", yangi["mano"])
+    meta_set(conn, "salovat_hadis", yangi["hadis"])
+    conn.commit()
+    conn.close()
+    await query.answer("Saqlandi")
+    await query.edit_message_text(
+        "Salovat matni saqlandi. Juma kuni "
+        f"{SALOVAT_SOAT:02d}:{SALOVAT_DAQIQA:02d} da yuboriladi.\n"
+        "Sinash: /salovat")
+
+
+async def job_salovat(context: ContextTypes.DEFAULT_TYPE):
+    """Har kuni belgilangan soatda ishlaydi, ammo faqat JUMA kuni
+    xabar yuboradi. Kun tekshiruvi shu yerda: PTB ning hafta kuni
+    raqamlash tartibi versiyalarda farq qilgan, ichkarida tekshirish
+    esa har doim bir xil ishlaydi."""
+    if datetime.now(TZ).weekday() != SALOVAT_KUN:
+        return
+    conn = db()
+    matn = salovat_matn_ol(conn)
+    if matn is None:
+        conn.close()
+        if ADMIN_ID:
+            try:
+                await context.bot.send_message(
+                    ADMIN_ID,
+                    "Bugun juma, lekin salovat matni qo'yilmagan — "
+                    "obunachilarga hech narsa yuborilmadi.\n\n"
+                    + SALOVAT_KORSATMA)
+            except Exception:
+                pass
+        log.warning("Salovat matni yo'q — juma xabari yuborilmadi.")
+        return
+
+    kun = _bugun()
+    users = conn.execute(
+        "SELECT uid FROM zikr_users WHERE active=1").fetchall()
+    yuborildi = 0
+    for (uid,) in users:
+        soni = salovat_soni(conn, uid, kun)
+        try:
+            await context.bot.send_message(
+                chat_id=uid, text=salovat_matni(matn, soni),
+                reply_markup=salovat_tugma(kun, soni))
+            yuborildi += 1
+        except Forbidden:
+            conn.execute("UPDATE zikr_users SET active=0 WHERE uid=?", (uid,))
+        except Exception as e:
+            log.warning("Salovat yuborishda xato (%s): %s", uid, e)
+    conn.commit()
+    conn.close()
+    log.info("Juma salovati %d kishiga yuborildi", yuborildi)
+
+
+def salovat_holat(uid):
+    """Mini App uchun — faqat o'qiydi."""
+    conn = db()
+    try:
+        matn = salovat_matn_ol(conn)
+        kun = _bugun()
+        return {
+            "bor": matn is not None,
+            "juma": datetime.now(TZ).weekday() == SALOVAT_KUN,
+            "arab": (matn or {}).get("arab", ""),
+            "lotin": (matn or {}).get("lotin", ""),
+            "mano": (matn or {}).get("mano", ""),
+            "hadis": (matn or {}).get("hadis", HADIS_MATNI),
+            "soni": salovat_soni(conn, uid, kun),
+            "jami": SALOVAT_SONI,
+            "hammasi": salovat_hammasi(conn),
+        }
+    finally:
+        conn.commit()
+        conn.close()
+
+
+def salovat_qadam(uid, qadam=1):
+    """Mini App'dan sanoqni oshirish. Qaytadi: holat dict."""
+    conn = db()
+    try:
+        if salovat_matn_ol(conn) is None:
+            return None
+        kun = _bugun()
+        soni, qoshildi = salovat_oshir(conn, uid, kun, qadam)
+        hammasi = salovat_hammasi(conn, qoshildi)
+        return {"soni": soni, "jami": SALOVAT_SONI, "hammasi": hammasi}
+    finally:
+        conn.commit()
+        conn.close()
+
+
+# ======================================================================
 # RO'YXATGA OLISH
 # ======================================================================
 def register(app: Application):
@@ -853,9 +1206,14 @@ def register(app: Application):
     app.add_handler(CommandHandler("zikr_elon", cmd_zikr_elon))
     app.add_handler(CommandHandler("zikr_sinov", cmd_zikr_sinov))
     app.add_handler(CommandHandler("zikr_yakun", cmd_zikr_yakun))
+    app.add_handler(CommandHandler("salovat", cmd_salovat))
+    app.add_handler(CommandHandler("salovat_matn", cmd_salovat_matn))
     # eski "zikr_ok" ham, yangi "zikr_ok|kun|vaqt" ham shu handlerga tushadi
     app.add_handler(CallbackQueryHandler(on_aytdim, pattern=r"^zikr_ok"))
     app.add_handler(CallbackQueryHandler(on_taklif, pattern=r"^zikr_taklif$"))
+    app.add_handler(CallbackQueryHandler(on_salovat, pattern=r"^slv\|"))
+    app.add_handler(CallbackQueryHandler(on_salovat_matn,
+                                         pattern=r"^slvmatn\|"))
     if TAKLIF_USUL == "inline":
         # Botdagi yagona inline funksiya — zikr taklifi.
         # BotFather: /setinline yoqilmagan bo'lsa tugma javob bermaydi.
@@ -868,6 +1226,10 @@ def register(app: Application):
     jq.run_daily(job_kunlik_reja, time=dtime(0, 5, tzinfo=TZ),
                  name="zikr_reja")
     jq.run_repeating(job_tekshir, interval=60, first=20, name="zikr_tekshir")
+    jq.run_daily(job_salovat,
+                 time=dtime(SALOVAT_SOAT, SALOVAT_DAQIQA, tzinfo=TZ),
+                 name="zikr_salovat")
     log.info("Zikr moduli yoqildi (kuniga %d ta x %d takror, %02d:00-%02d:00, "
-             "taklif: %s)", PER_DAY, TAKROR, HOUR_FROM, HOUR_TO,
-             TAKLIF_USUL)
+             "taklif: %s, juma salovati: %d ta %02d:%02d da)",
+             PER_DAY, TAKROR, HOUR_FROM, HOUR_TO, TAKLIF_USUL,
+             SALOVAT_SONI, SALOVAT_SOAT, SALOVAT_DAQIQA)
