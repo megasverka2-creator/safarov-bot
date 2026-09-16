@@ -886,14 +886,24 @@ HADIS_MATNI = (
 )
 
 
-# Salovat matni — kanal egasi (Muslim Safarov) aynan shunday yozib berdi.
-# HARFMA-HARF SHUNDAY QOLADI: AI uni yozmaydi, tuzatmaydi, "chiroyliroq"
-# qilmaydi. Apostroflar ham o'zgartirilmaydi — ayn belgisi shu.
-SALOVAT_LOTIN = "Allohumma solli 'ala Muhammadin va 'ala ali Muhammad"
-# Arabcha yozuv va ma'nosi hali berilmagan. Ular ixtiyoriy: bo'sh bo'lsa
-# kartada shunchaki ko'rsatilmaydi. Qo'shish uchun — /salovat_matn.
-SALOVAT_ARAB = ""
-SALOVAT_MANO = ""
+# Salovat — ZIKRLAR bilan AYNAN BIR XIL formatda:
+#     (arabcha, lotincha o'qilishi, ma'nosi)
+#
+# Lotincha o'qilishini kanal egasi (Muslim Safarov) yozib berdi va u
+# HARFMA-HARF shunday qoladi — apostroflarga ham tegilmaydi (ayn belgisi
+# shu). Arabcha yozuv o'sha o'qilishning so'zma-so'z qarshiligi:
+#     اللهم (Allohumma)  صل (solli)  على ('ala)  محمد (Muhammadin)
+#     وعلى (va 'ala)  آل (ali)  محمد (Muhammad)
+# ZIKRLAR kabi harakatsiz (harakat qo'yilmagan) yozuvda.
+#
+# Bu matn kodda qotib turadi. Tahrir kerak bo'lsa — /salovat_matn
+# orqali, egasining qo'li bilan.
+SALOVAT = (
+    "اللهم صل على محمد وعلى آل محمد",
+    "Allohumma solli 'ala Muhammadin va 'ala ali Muhammad",
+    "Ey Alloh, Muhammadga va Muhammad oilasiga rahmat yo'lla!",
+)
+SALOVAT_ARAB, SALOVAT_LOTIN, SALOVAT_MANO = SALOVAT
 
 
 def salovat_matn_ol(conn):
@@ -949,12 +959,15 @@ def salovat_chiziq(soni):
 
 
 def salovat_matni(matn, soni):
+    """Ko'rinish zikr xabari bilan bir xil: arabcha yozuv, so'ng
+    «lotincha (ma'nosi)», deb ayting — qarang: zikr_matni()."""
     qatorlar = []
     if matn["arab"]:
         qatorlar.append(matn["arab"])
-    qatorlar.append(f"«{matn['lotin']}»")
+    ich = matn["lotin"]
     if matn["mano"]:
-        qatorlar.append(f"({matn['mano']})")
+        ich += f" ({matn['mano']})"
+    qatorlar.append(f"«{ich}», deb ayting.")
     qatorlar.append(f"{salovat_chiziq(soni)}   {soni}/{SALOVAT_SONI}")
     qatorlar.append(matn["hadis"])
     return "\n\n".join(qatorlar)

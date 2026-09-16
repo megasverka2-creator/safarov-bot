@@ -151,8 +151,7 @@ textarea{min-height:98px;resize:vertical}
   border:1px solid rgba(210,195,246,.2);
   backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px)}
 .slv-hero .ar{font-size:25px;line-height:1.75;direction:rtl;color:var(--lav);margin:0 0 14px}
-.slv-hero .lt{font-size:16px;font-weight:600;margin:0 0 4px}
-.slv-hero .mn{font-size:13.5px;color:var(--lav-2);margin:0}
+.slv-hero .tr{font-size:15px;line-height:1.55;color:var(--lav-2);margin:0}
 .slv-son{font-family:var(--display);font-size:56px;font-weight:600;line-height:1;
   margin:18px 0 2px;letter-spacing:-.02em}
 .slv-son small{font-size:20px;color:var(--lav-3);font-weight:400}
@@ -437,8 +436,7 @@ textarea{min-height:98px;resize:vertical}
   <div id="slvIchi" style="display:none">
     <div class="slv-hero">
       <p class="ar" id="slvArab"></p>
-      <p class="lt" id="slvLotin"></p>
-      <p class="mn" id="slvMano"></p>
+      <p class="tr" id="slvMatn"></p>
       <p class="slv-son"><span id="slvSon">0</span><small id="slvJami">/100</small></p>
       <div class="bar" style="margin:14px 0 0"><i id="slvBar" style="width:0%"></i></div>
     </div>
@@ -825,10 +823,10 @@ function slvYukla(){
     SLV = d;
     document.getElementById('slvArab').textContent = d.arab || '';
     document.getElementById('slvArab').style.display = d.arab ? '' : 'none';
-    document.getElementById('slvLotin').textContent = '«' + d.lotin + '»';
-    var mn = document.getElementById('slvMano');
-    mn.textContent = d.mano || '';
-    mn.style.display = d.mano ? '' : 'none';
+    /* Ko'rinish zikr kartasi bilan bir xil: «lotincha (ma'nosi)», deb ayting. */
+    document.getElementById('slvMatn').textContent =
+      '«' + d.lotin + (d.mano ? ' (' + d.mano + ')' : '')
+      + '», deb ayting.';
     document.getElementById('slvHadis').textContent = d.hadis || '';
     ichi.style.display = '';
     slvChiz();
