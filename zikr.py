@@ -961,15 +961,17 @@ def salovat_chiziq(soni):
 
 
 def salovat_matni(matn, soni):
-    """Ko'rinish zikr xabari bilan bir xil: arabcha yozuv, so'ng
-    «lotincha (ma'nosi)», deb ayting — qarang: zikr_matni()."""
+    """Ko'rinish zikr xabariga yaqin (qarang: zikr_matni), bitta farq
+    bilan: ma'no ALOHIDA QATORDA turadi. Zikrlarda ma'no qisqa, shuning
+    uchun qavs ichida sig'adi; salovatniki uzun va o'zining qavsi ham
+    bor — qavs ichida qavs chiqib, jumla o'qilmay qolardi."""
     qatorlar = []
     if matn["arab"]:
         qatorlar.append(matn["arab"])
-    ich = matn["lotin"]
+    bosh = f"«{matn['lotin']}», deb ayting."
     if matn["mano"]:
-        ich += f" ({matn['mano']})"
-    qatorlar.append(f"«{ich}», deb ayting.")
+        bosh += "\n" + matn["mano"]
+    qatorlar.append(bosh)
     qatorlar.append(f"{salovat_chiziq(soni)}   {soni}/{SALOVAT_SONI}")
     qatorlar.append(matn["hadis"])
     return "\n\n".join(qatorlar)
