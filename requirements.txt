@@ -1,8 +1,12 @@
+# Yuqori chegaralar ataylab qo'yilgan: kutubxonaning yangi KATTA
+# versiyasi (major) odatda buzuvchi o'zgarish olib keladi va deploy
+# jimgina ishdan chiqishi mumkin. Chegara bilan Railway doim sinalgan
+# oraliqdan o'rnatadi; yangilash kerak bo'lsa — shu yerda, ataylab.
 python-telegram-bot[job-queue]>=21,<22
-anthropic
-beautifulsoup4
-openai
-feedparser
-trafilatura
-pillow>=10.1
-aiohttp
+anthropic>=0.40,<1
+openai>=1.40,<4
+beautifulsoup4>=4.12,<5
+feedparser>=6,<7
+trafilatura>=1.6,<3
+pillow>=10.1,<14
+aiohttp>=3.9,<4

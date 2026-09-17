@@ -138,6 +138,44 @@ def _xato(matn, kod=401):
     return web.json_response({"xato": matn}, status=kod)
 
 
+# ======================================================================
+# SO'ROV CHEGARASI
+# ======================================================================
+# NEGA KERAK: initData bir sutka amal qiladi. Ilovani bir marta ochgan
+# odam o'sha qatorni nusxalab, /api/amal ga minglab so'rov yuborishi
+# mumkin edi. Har so'rov = bitta fon vazifasi + bitta Telegram xabari.
+# AI xarajati bundan oshmaydi (u modullarda allaqachon cheklangan),
+# lekin Telegram bot'ni flood uchun vaqtincha cheklab qo'yishi mumkin —
+# ya'ni zikr eslatmalari ham to'xtab qolardi.
+AMAL_CHEGARA = int(os.environ.get("MINIAPP_AMAL_CHEGARA", "20"))     # daqiqasiga
+OQISH_CHEGARA = int(os.environ.get("MINIAPP_OQISH_CHEGARA", "240"))  # daqiqasiga
+
+_chelak = {}      # (uid, nom) -> (oyna_boshi, soni)
+
+
+def _chegara_ok(uid, nom, chegara, oyna=60):
+    """Oddiy oyna: `oyna` soniya ichida `chegara` tadan ko'p bo'lsa False.
+
+    Xotirada saqlanadi — qayta ishga tushganda nolga qaytadi. Bu yerda
+    shunisi yetarli: maqsad suiiste'molni to'xtatish, hisob yuritish
+    emas."""
+    hozir = time.time()
+    kalit = (uid, nom)
+    boshi, soni = _chelak.get(kalit, (0.0, 0))
+    if hozir - boshi >= oyna:
+        boshi, soni = hozir, 0
+    soni += 1
+    _chelak[kalit] = (boshi, soni)
+    if len(_chelak) > 5000:                     # xotira cheksiz o'smasin
+        for k in [k for k, v in _chelak.items() if hozir - v[0] > oyna * 5]:
+            _chelak.pop(k, None)
+    return soni <= chegara
+
+
+def _kop_sorov():
+    return _xato("Juda tez-tez so'rayapsiz. Bir daqiqa kuting.", 429)
+
+
 async def _tana(request):
     try:
         return await request.json()
@@ -342,9 +380,11 @@ async def _api_zikr(request):
         return _xato("Imzo tekshiruvidan o'tmadi")
     try:
         malumot = zikr.holat(int(user["id"]))
-    except Exception as e:
+    except Exception:
+        # Tafsilot jurnalga yoziladi; foydalanuvchiga ichki xabar
+        # (fayl yo'li, SQL matni) ko'rsatilmaydi.
         log.exception("Zikr holati o'qilmadi")
-        return _xato(f"Ma'lumot o'qilmadi: {e}", 500)
+        return _xato("Ma'lumot o'qilmadi", 500)
     malumot["ism"] = user.get("first_name") or ""
     return web.json_response(malumot)
 
@@ -356,9 +396,9 @@ async def _api_salovat(request):
         return _xato("Imzo tekshiruvidan o'tmadi")
     try:
         return web.json_response(zikr.salovat_holat(int(user["id"])))
-    except Exception as e:
+    except Exception:
         log.exception("Salovat holati o'qilmadi")
-        return _xato(f"Ma'lumot o'qilmadi: {e}", 500)
+        return _xato("Ma'lumot o'qilmadi", 500)
 
 
 async def _api_salovat_qadam(request):
@@ -370,6 +410,10 @@ async def _api_salovat_qadam(request):
     user = _kim(request)
     if not user:
         return _xato("Imzo tekshiruvidan o'tmadi")
+    # Sanoq kuniga 100 tada to'xtaydi, ya'ni zarari cheklangan — shuning
+    # uchun chegara keng: tez bosish bo'g'ilib qolmasin.
+    if not _chegara_ok(int(user["id"]), "salovat", OQISH_CHEGARA):
+        return _kop_sorov()
     data = await _tana(request)
     try:
         qadam = int(data.get("qadam", 1))
@@ -378,9 +422,9 @@ async def _api_salovat_qadam(request):
     qadam = 10 if qadam >= 10 else 1
     try:
         natija = zikr.salovat_qadam(int(user["id"]), qadam)
-    except Exception as e:
+    except Exception:
         log.exception("Salovat sanog'i yozilmadi")
-        return _xato(f"Yozib bo'lmadi: {e}", 500)
+        return _xato("Yozib bo'lmadi", 500)
     if natija is None:
         return _xato("Salovat matni hali qo'yilmagan", 409)
     return web.json_response(natija)
@@ -413,9 +457,9 @@ async def _api_konkurs(request):
             "havola": f"https://t.me/{botmod.BOT_USERNAME}?start=ref_{uid}",
             "top": top,
         })
-    except Exception as e:
+    except Exception:
         log.exception("Konkurs ma'lumoti o'qilmadi")
-        return _xato(f"Ma'lumot o'qilmadi: {e}", 500)
+        return _xato("Ma'lumot o'qilmadi", 500)
 
 
 async def _api_amal(request):
@@ -426,6 +470,8 @@ async def _api_amal(request):
     user = _kim(request)
     if not user:
         return _xato("Imzo tekshiruvidan o'tmadi")
+    if not _chegara_ok(int(user["id"]), "amal", AMAL_CHEGARA):
+        return _kop_sorov()
     data = await _tana(request)
     if not isinstance(data, dict) or not data:
         return _xato("Bo'sh so'rov", 400)
@@ -450,6 +496,8 @@ async def _api_buyruq(request):
         return _xato("Imzo tekshiruvidan o'tmadi")
     if not _admin_mi(user):
         return _xato("Bu bo'lim faqat admin uchun", 403)
+    if not _chegara_ok(int(user["id"]), "buyruq", AMAL_CHEGARA):
+        return _kop_sorov()
     if _app is None:
         return _xato("Bot hali tayyor emas", 503)
     data = await _tana(request)
@@ -513,9 +561,9 @@ async def _api_admin_postlar(request):
         jami = conn.execute(
             "SELECT COUNT(*) FROM agent_posts WHERE status='draft'").fetchone()[0]
         conn.close()
-    except Exception as e:
+    except Exception:
         log.exception("Mini App: qoralamalar o'qilmadi")
-        return _xato(f"Ma'lumot o'qilmadi: {e}", 500)
+        return _xato("Ma'lumot o'qilmadi", 500)
     postlar = []
     for pid, matn, rub, sana in qatorlar:
         satrlar = (matn or "").splitlines()
@@ -542,6 +590,8 @@ async def _api_admin_post(request):
         return _xato("Imzo tekshiruvidan o'tmadi")
     if not _admin_mi(user):
         return _xato("Bu bo'lim faqat admin uchun", 403)
+    if not _chegara_ok(int(user["id"]), "post", AMAL_CHEGARA):
+        return _kop_sorov()
     data = await _tana(request)
     try:
         pid = int(data.get("id"))
@@ -555,8 +605,9 @@ async def _api_admin_post(request):
         qator = conn.execute(
             "SELECT text, status FROM agent_posts WHERE id=?", (pid,)).fetchone()
         conn.close()
-    except Exception as e:
-        return _xato(f"Ma'lumot o'qilmadi: {e}", 500)
+    except Exception:
+        log.exception("Mini App: qoralama o'qilmadi")
+        return _xato("Ma'lumot o'qilmadi", 500)
     if not qator:
         return _xato("Post topilmadi", 404)
     if qator[1] != "draft":
@@ -569,8 +620,47 @@ async def _api_admin_post(request):
 # ======================================================================
 # ISHGA TUSHIRISH
 # ======================================================================
+CSP = (
+    "default-src 'self'; "
+    # Telegram'ning o'z skripti (telegram-web-app.js) va sahifa ichidagi
+    # skript. Boshqa manbadan skript yuklab bo'lmaydi.
+    "script-src 'self' https://telegram.org 'unsafe-inline'; "
+    "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; "
+    "font-src https://fonts.gstatic.com; "
+    "img-src 'self' data:; "
+    # So'rovlar faqat shu manzilga — ma'lumot tashqariga ketolmaydi.
+    "connect-src 'self'; "
+    "base-uri 'none'; form-action 'none'; "
+    "frame-ancestors https://web.telegram.org https://*.telegram.org"
+)
+
+
+@web.middleware
+async def _himoya(request, handler):
+    """Har javobga himoya sarlavhalarini qo'yadi va /api/ ga umumiy
+    so'rov chegarasini o'rnatadi.
+
+    Chegara shu yerda ham bor, yo'llarning o'zida ham: bu yerdagisi
+    BARCHA /api/ so'rovlarini (o'qish ham) qamrab oladi, yo'llardagisi
+    esa qimmatroq amallarni qattiqroq cheklaydi."""
+    if request.path.startswith("/api/"):
+        kim = _kim(request)
+        if kim and not _chegara_ok(int(kim["id"]), "http", OQISH_CHEGARA):
+            javob = _kop_sorov()
+            javob.headers["Cache-Control"] = "no-store"
+            return javob
+    javob = await handler(request)
+    javob.headers.setdefault("X-Content-Type-Options", "nosniff")
+    javob.headers.setdefault("Referrer-Policy", "no-referrer")
+    if request.path.startswith("/api/"):
+        javob.headers["Cache-Control"] = "no-store"
+    else:
+        javob.headers.setdefault("Content-Security-Policy", CSP)
+    return javob
+
+
 def server_yasa():
-    server = web.Application()
+    server = web.Application(middlewares=[_himoya])
     server.router.add_get("/", _index)
     server.router.add_get("/index.html", _index)
     server.router.add_get("/sog", _sog)

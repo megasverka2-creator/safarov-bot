@@ -132,11 +132,26 @@ MODEL_SMART = os.environ.get("AI_MODEL_SMART", "gpt-5.6-luna")
 MODEL = MODEL_FAST  # eski nom bilan moslik
 MIN_SCORE = 6                  # nomzodlik chegarasi (siz baribir qo'lda tanlaysiz)
 MAX_POSTS_PER_DAY = int(os.environ.get("MAX_POSTS_PER_DAY", "12"))
-# Vaqtincha o'chirilgan rubrikalar (Railway: RUBRIKA_OFF=dunyo,uzb,sport,smm).
-# O'chirilgan rubrika: RSS ham o'qilmaydi, saralanmaydi, post ham yozilmaydi —
-# ya'ni API xarajati to'liq to'xtaydi. Kanal va manbalar joyida qoladi.
-RUBRIKA_OFF = {r.strip().lower() for r in
-               os.environ.get("RUBRIKA_OFF", "").split(",") if r.strip()}
+# --- Qaysi rubrikalar ishlaydi ---------------------------------------
+# RUBRIKA_ON — OQ RO'YXAT, standarti "ai". Ya'ni agent faqat AI
+# yangiliklari bilan ishlaydi; qolgan rubrikalarning RSS'i o'qilmaydi,
+# saralanmaydi, post ham yozilmaydi — API xarajati to'liq to'xtaydi.
+# Kanal, manba va rubrika sozlamalari joyida qoladi, ya'ni orqaga
+# qaytarish bitta o'zgaruvchi:
+#     RUBRIKA_ON=ai,smm            -> ikkalasi ishlaydi
+#     RUBRIKA_ON=hammasi           -> eski holat (barchasi)
+# Nega qora ro'yxat emas: ertaga yangi rubrika qo'shilsa, qora ro'yxatda
+# u O'ZIDAN-O'ZI yoqilib ketardi. Oq ro'yxatda esa yozilmagani ishlamaydi.
+# Bo'sh qiymat ham "ai" ga tushadi: Railway'da o'zgaruvchini bo'shatib
+# qo'yish tasodifan HAMMA rubrikani yoqib yubormasin.
+_on_xom = os.environ.get("RUBRIKA_ON", "ai").strip() or "ai"
+RUBRIKA_ON = {r.strip().lower() for r in _on_xom.split(",") if r.strip()}
+if "hammasi" in RUBRIKA_ON or "*" in RUBRIKA_ON:
+    RUBRIKA_ON = set()            # bo'sh = cheklov yo'q
+# RUBRIKA_OFF — eski qora ro'yxat. Qo'shimcha cheklov sifatida saqlanadi:
+# oq ro'yxatdan o'tgan rubrikani ham nuqta bilan o'chirib qo'yish uchun.
+_RUBRIKA_OFF_XOM = {r.strip().lower() for r in
+                    os.environ.get("RUBRIKA_OFF", "").split(",") if r.strip()}
 MAX_PER_RUBRIKA = int(os.environ.get("MAX_PER_RUBRIKA", "2"))
 # 1 qilinsa — har rubrikadan kuniga bittadan nomzod (xarajat ~2 barobar kam)
 MAX_API_CALLS_PER_DAY = int(os.environ.get("MAX_API_CALLS_PER_DAY", "150"))
@@ -199,6 +214,12 @@ RUBRIKA_NOMI = {"ai": "AI va marketing", "rivojlanish": "Shaxsiy rivojlanish",
                 "uzb": "O'zbekiston", "sport": "Sport", "texno": "Texno olami",
                 "islom": "Islom olami",
                 "smm": "SMM va marketing"}
+
+# Yakuniy o'chirilganlar ro'yxati — shu yerda, chunki RUBRIKA_NOMI
+# (barcha rubrikalar ro'yxati) yuqorida kerak edi.
+RUBRIKA_OFF = set(_RUBRIKA_OFF_XOM)
+if RUBRIKA_ON:
+    RUBRIKA_OFF |= {r for r in RUBRIKA_NOMI if r not in RUBRIKA_ON}
 
 log = logging.getLogger("agent")
 
@@ -2348,6 +2369,7 @@ async def cmd_status(update, context):
     paused = meta_get(conn, "paused") == "1"
     conn.close()
     ochiq = [r for r in RUBRIKA_NOMI if r not in RUBRIKA_OFF]
+    ochiq_nom = ", ".join(RUBRIKA_NOMI[r] for r in ochiq) or "yo'q"
     ochirilgan = ", ".join(sorted(RUBRIKA_OFF)) if RUBRIKA_OFF else "yo'q"
     await update.message.reply_text(
         f"📊 Agent holati\n"
@@ -2358,7 +2380,7 @@ async def cmd_status(update, context):
         f"Bugungi API chaqiruvlar: {calls}/{MAX_API_CALLS_PER_DAY}\n"
         f"Bugungi postlar: {bugun_post}/{MAX_POSTS_PER_DAY}\n"
         f"Taxminiy bugungi xarajat: ~${calls * 0.008:.3f}\n\n"
-        f"Faol rubrikalar: {len(ochiq)} ta\n"
+        f"Faol rubrikalar: {len(ochiq)} ta — {ochiq_nom}\n"
         f"⏹ O'chirilgan: {ochirilgan}\n"
         f"Har rubrikadan kuniga: {MAX_PER_RUBRIKA} ta")
 
