@@ -26,6 +26,9 @@ Railway → Variables ga qo'shiladi:
     OPENAI_API_KEY = sk-...
     ADMIN_ID       = sizning Telegram ID raqamingiz
     CHANNEL_ID     = @safaroov_blog        (ixtiyoriy, default shu)
+    CHANNEL_MAP    = "ai=@yangi_kanal"     (rubrikani boshqa kanalga burish)
+    CHANNEL_BRAND  = "ai=Marketing | AI"   (kartadagi nom)
+    RUBRIKA_ON     = ai                    (qaysi rubrikalar ishlaydi)
     DB_PATH        = /data/agent.db        (volume ulangan bo'lsa — pastga qarang)
 
 Nima qiladi:
@@ -109,16 +112,32 @@ if CHANNEL2_ID:
     for _r in ("dunyo", "uzb", "sport"):
         RUBRIKA_CHANNELS.setdefault(_r, CHANNEL2_ID)
 
+# Kartaning tepasidagi brend nomi.
+#   CHANNEL_BRAND = "ai=Marketing | AI"
+# Berilmasa nom kanal manzilidan yasaladi (@ai_bysafarov -> "AI BYSAFAROV").
+# Bu har doim ham chiroyli chiqmaydi — kanalning haqiqiy nomi bo'lsa,
+# shu yerda beriladi. Ajratgich: vergul, ya'ni nom ichida vergul
+# ishlatilmaydi.
+CHANNEL_BRAND = {}
+for _pair in os.environ.get("CHANNEL_BRAND", "").split(","):
+    if "=" in _pair:
+        _r, _b = _pair.split("=", 1)
+        _r, _b = _r.strip(), _b.strip()
+        if _r and _b:
+            CHANNEL_BRAND[_r] = _b
+
 def _channel_for(rubrika):
     return RUBRIKA_CHANNELS.get(rubrika, CHANNEL_ID)
 
 def _brand_for(rubrika):
-    """Karta pastidagi brend: rubrika qaysi kanalga chiqsa, o'sha nom."""
+    """Karta tepasidagi brend: rubrika qaysi kanalga chiqsa, o'sha nom."""
     chan = RUBRIKA_CHANNELS.get(rubrika)
     if chan:
         h = chan.lstrip("@")
-        return (h.replace("_", " ").upper(), f"t.me/{h}")
-    return ("SAFAROV BLOG", "t.me/safaroov_blog")
+        nom = CHANNEL_BRAND.get(rubrika) or h.replace("_", " ").upper()
+        return (nom, f"t.me/{h}")
+    return (CHANNEL_BRAND.get(rubrika) or "SAFAROV BLOG",
+            f"t.me/{CHANNEL_ID.lstrip('@')}")
 # Baza botdagi boshqa fayllar (users.json) bilan bir joyda — Railway volume'da saqlanadi:
 DB_PATH = os.environ.get("DB_PATH",
                          os.path.join(os.environ.get("DATA_DIR", "."), "agent.db"))
