@@ -186,10 +186,22 @@ USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) AppleWebKit/537.36"
 # Rubrikalar: ai · rivojlanish · podcast · dunyo (jahon yangiliklari) · mutolaa (kitob)
 SOURCES = [
     # --- 🗞 AI va marketing ---
+    # Birlamchi manbalar: yangi model e'lonlari AVVAL shu yerda chiqadi,
+    # nashrlar esa keyin yozadi. Shuning uchun ular ro'yxat boshida.
     ("OpenAI",        "https://openai.com/news/rss.xml",                               "ai"),
     ("Anthropic",     "scrape:anthropic",                                              "ai"),
     ("Google AI",     "https://blog.google/technology/ai/rss/",                        "ai"),
+    ("DeepMind",      "https://deepmind.google/blog/rss.xml",                          "ai"),
+    ("Meta AI",       "https://ai.meta.com/blog/rss/",                                 "ai"),
+    ("Microsoft AI",  "https://blogs.microsoft.com/ai/feed/",                          "ai"),
+    ("Hugging Face",  "https://huggingface.co/blog/feed.xml",                          "ai"),
+    # Tez nashrlar: rasmiy e'londan keyin kontekst va tahlil beradi
     ("TechCrunch AI", "https://techcrunch.com/category/artificial-intelligence/feed/", "ai"),
+    ("The Decoder",   "https://the-decoder.com/feed/",                                 "ai"),
+    ("VentureBeat AI","https://venturebeat.com/category/ai/feed/",                     "ai"),
+    ("Ars Technica AI","https://arstechnica.com/ai/feed/",                             "ai"),
+    # Yangi model chiqishi bilan sinab ko'rib yozadigan mustaqil manba
+    ("Simon Willison","https://simonwillison.net/atom/everything/",                    "ai"),
     # --- 📈 SMM va marketing (@marketing_bysafarov) ---
     ("HubSpot",       "https://blog.hubspot.com/marketing/rss.xml",                    "smm"),
     ("Social Media Today", "https://www.socialmediatoday.com/feeds/news/",             "smm"),
@@ -1503,17 +1515,35 @@ def _rss_rasm(entry):
     return ""
 
 
+# Ba'zi saytlar oddiy so'rovni rad etadi. Brauzer yuboradigan
+# sarlavhalar bo'lsa, ehtimol ancha yuqori.
+_SAHIFA_SARLAVHA = {
+    "User-Agent": USER_AGENT,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+
 async def og_rasm(maqola_url):
-    """Maqola sahifasidan og:image (yoki twitter:image)."""
+    """Maqola sahifasidan og:image (yoki twitter:image).
+
+    Qaytaradi:
+        "url"  — topildi
+        ""     — sahifa O'QILDI, lekin rasm yo'q
+        None   — sahifani ocholmadik (403, timeout, tarmoq)
+
+    Bu farq muhim: "yo'q" ni bazaga belgilab qo'yish mumkin, "ocholmadim"
+    ni esa mumkin emas — vaqtinchalik xato tufayli maqola butun umrga
+    rasmsiz qolib ketardi."""
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True,
-                                     headers={"User-Agent": USER_AGENT}) as cl:
+                                     headers=_SAHIFA_SARLAVHA) as cl:
             r = await cl.get(maqola_url)
             r.raise_for_status()
             html = r.text[:200000]
     except Exception as e:
         log.warning("og:image olinmadi (%s): %s", maqola_url, e)
-        return ""
+        return None
     try:
         sup = BeautifulSoup(html, "html.parser")
         for atr, qiymat in (("property", "og:image"),
@@ -1553,6 +1583,10 @@ async def manba_rasmi(post_id):
             return ""
         if not rasm:
             rasm = await og_rasm(maqola_url)
+            if rasm is None:
+                # Sahifa ochilmadi — bazaga hech narsa yozmaymiz va
+                # keshlamaymiz, keyingi safar yana urinib ko'riladi.
+                return ""
             conn.execute("UPDATE agent_articles SET rasm_url=? WHERE url=?",
                          (rasm or "-", maqola_url))
             conn.commit()
@@ -1596,6 +1630,11 @@ VARIANT_NOMI = {0: "manba rasmi — brend uslubida",
 async def make_card_variant(post_id, text, rubrika, variant):
     """0-1: maqolaning O'Z surati · 2: AI chizadi · 3: Pexels · 4: gradient.
 
+    Qaytaradi: (baytlar, nom). NOM — haqiqatda nima chizilgani, so'ralgan
+    variant emas. Avval yorliq so'ralgan variantdan olinardi va manba
+    rasmi topilmay Pexels'ga tushganda ham "manba rasmi" deb yozilib
+    turardi — ya'ni yorliq yolg'on gapirardi.
+
     Har bosqich ishlamasa keyingisiga tushadi, ya'ni manbada rasm
     bo'lmasa ham post rasmsiz qolmaydi."""
     # --- 0-1: yangilikning o'z surati ---
@@ -1606,13 +1645,13 @@ async def make_card_variant(post_id, text, rubrika, variant):
                 xom = _rasmni_tayyorla(await _fetch_bytes(url))
                 if xom:
                     if variant == 1:
-                        return xom                      # asl holicha
+                        return xom, VARIANT_NOMI[1]     # asl holicha
                     karta = make_photo_card(
                         xom, text, rubrika,
                         cover=ai_cover_title(post_id, text, rubrika),
                         duotone=DUOTONE_MANBA)
                     if karta:
-                        return karta
+                        return karta, VARIANT_NOMI[0]
             except Exception as e:
                 log.warning("Manba rasmi ishlatilmadi (%s): %s", url, e)
         variant = 2   # rasm yo'q yoki ochilmadi — keyingisiga
@@ -1621,7 +1660,7 @@ async def make_card_variant(post_id, text, rubrika, variant):
     if variant == 2 and Image is not None:
         card = await make_genai_card(post_id, text, rubrika)
         if card:
-            return card
+            return card, VARIANT_NOMI[2]
         variant = 3   # AI ishlamasa — foto variantiga tushamiz
 
     # --- 3: Pexels stok foto ---
@@ -1636,12 +1675,12 @@ async def make_card_variant(post_id, text, rubrika, variant):
                 card = make_photo_card(photo, text, rubrika,
                                        cover=ai_cover_title(post_id, text, rubrika))
                 if card:
-                    return card
+                    return card, VARIANT_NOMI[3]
         except Exception as e:
             log.warning("Foto-karta xatosi (gradientga o'tildi): %s", e)
 
     # --- 4: gradient karta (doim ishlaydi) ---
-    return make_card(text, rubrika, variant)
+    return make_card(text, rubrika, variant), VARIANT_NOMI[4]
 
 
 # ======================================================================
@@ -1711,23 +1750,26 @@ async def rich_photo_url(post_id, text, variant=0):
     Rasm bloki faqat http(s) havola bilan ishlaydi, shuning uchun xom foto.
 
     Avval yangilikning O'Z surati sinaladi — u ham ochiq havola, ya'ni
-    to'g'ridan-to'g'ri yaraydi. Bo'lmasa Pexels."""
+    to'g'ridan-to'g'ri yaraydi. Bo'lmasa Pexels.
+
+    Qaytaradi: (url, nom) yoki (None, None). NOM — haqiqatda qaysi
+    manbadan olingani; yorliq shundan yoziladi."""
     if variant in (0, 1):
         url = await manba_rasmi(post_id)
         if url:
-            return url
+            return url, "manba rasmi"
     if not PEXELS_KEY:
-        return None
+        return None, None
     try:
         urls = _photo_cache.get(post_id)
         if urls is None:
             urls = await pexels_photos(ai_photo_query(text))
             _photo_cache[post_id] = urls
         if urls:
-            return urls[variant % len(urls)]
+            return urls[variant % len(urls)], "Pexels foto (manbada rasm yo'q)"
     except Exception as e:
         log.warning("Rich foto havolasi olinmadi: %s", e)
-    return None
+    return None, None
 
 
 async def _send_to_channel(context, text, image_bytes=None, rubrika=None,
@@ -2362,20 +2404,20 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # RICH rejim: maqola ichiga ochiq havolali foto ketadi —
         # shuning uchun ko'rsatiladigan rasm ham aynan o'sha bo'ladi.
         if RICH_POSTS:
-            url = await rich_photo_url(post_id, text, 0)
+            url, nom = await rich_photo_url(post_id, text, 0)
             if url:
                 try:
                     await context.bot.send_photo(
                         chat_id=ADMIN_ID, photo=url,
-                        caption=f"🖼 Rasm 1/{CARD_VARIANTS} · "
-                                f"{VARIANT_NOMI.get(0, '')} — maqola ichiga shu ketadi",
+                        caption=f"🖼 Rasm 1/{CARD_VARIANTS} · {nom} — "
+                                f"maqola ichiga shu ketadi",
                         reply_markup=preview_keyboard(post_id, 0))
                     await query.edit_message_text(f"🎨 RASM TANLANMOQDA (pastda)\n\n{text}")
                 except Exception as e:
                     await query.answer(f"Rasm xatosi: {e}", show_alert=True)
                 conn.close()
                 return
-        img = await make_card_variant(post_id, text, rubrika, 0)
+        img, nom = await make_card_variant(post_id, text, rubrika, 0)
         if not img:  # Pillow yo'q — eski usul: to'g'ridan-to'g'ri matn
             try:
                 await _send_to_channel(context, text, rubrika=rubrika)
@@ -2390,7 +2432,7 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             await context.bot.send_photo(
                 chat_id=ADMIN_ID, photo=img,
-                caption=f"🎨 Dizayn 1/{CARD_VARIANTS} · {VARIANT_NOMI.get(0, '')}",
+                caption=f"🎨 Dizayn 1/{CARD_VARIANTS} · {nom}",
                 reply_markup=preview_keyboard(post_id, 0))
             await query.edit_message_text(f"🎨 RASM TANLANMOQDA (pastda)\n\n{text}")
         except Exception as e:
@@ -2403,25 +2445,23 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         rubrika = _post_rubrika(conn, post_id)
         await query.answer("Tayyorlanmoqda... 🎨")
         if RICH_POSTS:
-            url = await rich_photo_url(post_id, text, variant)
+            url, nom = await rich_photo_url(post_id, text, variant)
             if url:
                 try:
                     await query.edit_message_media(
                         InputMediaPhoto(url,
                                         caption=f"🖼 Rasm {variant + 1}/{CARD_VARIANTS} · "
-                                                f"{VARIANT_NOMI.get(variant, '')} — "
-                                                f"maqola ichiga shu ketadi"),
+                                                f"{nom} — maqola ichiga shu ketadi"),
                         reply_markup=preview_keyboard(post_id, variant))
                 except Exception as e:
                     await query.answer(f"Xato: {e}", show_alert=True)
                 conn.close()
                 return
-        img = await make_card_variant(post_id, text, rubrika, variant)
+        img, nom = await make_card_variant(post_id, text, rubrika, variant)
         try:
             await query.edit_message_media(
                 InputMediaPhoto(img,
-                                caption=f"🎨 Dizayn {variant + 1}/{CARD_VARIANTS} · "
-                                        f"{VARIANT_NOMI.get(variant, '')}"),
+                                caption=f"🎨 Dizayn {variant + 1}/{CARD_VARIANTS} · {nom}"),
                 reply_markup=preview_keyboard(post_id, variant))
         except Exception as e:
             await query.answer(f"Xato: {e}", show_alert=True)
@@ -2433,10 +2473,10 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         rubrika = _post_rubrika(conn, post_id)
         try:
             if RICH_POSTS:
-                url = await rich_photo_url(post_id, text, variant)
+                url, _nom = await rich_photo_url(post_id, text, variant)
                 await _send_to_channel(context, text, None, rubrika, image_url=url)
             else:
-                img = await make_card_variant(post_id, text, rubrika, variant)
+                img, _nom = await make_card_variant(post_id, text, rubrika, variant)
                 await _send_to_channel(context, text, img, rubrika)
             conn.execute("UPDATE agent_posts SET status='published' WHERE id=?", (post_id,))
             conn.commit()
@@ -2800,7 +2840,7 @@ async def cmd_rich_media(update, context):
 
     await update.message.reply_text(f"🧪 #{post_id} — muqova tayyorlanmoqda...")
     try:
-        img = await make_card_variant(post_id, text, rubrika, 0)
+        img, _nom = await make_card_variant(post_id, text, rubrika, 0)
         if not img:
             await update.message.reply_text("❌ Muqova chiqmadi (Pillow yoki kunlik limit).")
             return
@@ -2896,6 +2936,110 @@ async def cmd_sources(update, context):
         + "\n\n«rasmli N» — oxirgi 10 yozuvdan nechtasida o'z surati bor.")
 
 
+@admin_only
+async def cmd_rasm(update, context):
+    """/agent_rasm [post_id] — manba rasmi nega topilmayotganini ko'rsatadi.
+
+    Nega kerak: "nega stok surat chiqdi?" degan savolga javob kodni
+    o'qimasdan olinsin. Sabab odatda uchtadan biri: RSS da rasm yo'q,
+    sahifa bizni ichiga qo'ymayapti (403), yoki sahifada og:image
+    umuman yo'q."""
+    conn = db()
+    try:
+        if context.args:
+            try:
+                pid = int(context.args[0])
+            except ValueError:
+                await update.message.reply_text(
+                    "Post raqamini yozing, masalan: /agent_rasm 42")
+                return
+        else:
+            oxirgi = conn.execute(
+                "SELECT id FROM agent_posts WHERE status='draft' "
+                "ORDER BY id DESC LIMIT 1").fetchone()
+            if not oxirgi:
+                await update.message.reply_text(
+                    "Kutayotgan post yo'q. /agent_run bosing.")
+                return
+            pid = oxirgi[0]
+        qator = conn.execute(
+            "SELECT p.article_url, COALESCE(a.rasm_url,''), COALESCE(a.source,'?') "
+            "FROM agent_posts p LEFT JOIN agent_articles a ON a.url=p.article_url "
+            "WHERE p.id=?", (pid,)).fetchone()
+    finally:
+        conn.close()
+
+    if not qator:
+        await update.message.reply_text(f"#{pid} topilmadi.")
+        return
+    maqola_url, bazadagi, manba = qator
+    if not maqola_url:
+        await update.message.reply_text(
+            f"#{pid} — maqola havolasi yo'q (qo'lda yozilgan post).")
+        return
+
+    holat = {"": "hali qaralmagan", "-": "qaralgan, topilmagan"}.get(
+        bazadagi, bazadagi)
+    qatorlar = [f"🔎 Post #{pid}", f"Manba: {manba}", f"Maqola: {maqola_url}",
+                f"Bazada: {holat}", ""]
+
+    xabar = await update.message.reply_text(
+        "\n".join(qatorlar) + "Sahifa tekshirilmoqda...")
+
+    # --- jonli tekshiruv: sahifa ochiladimi va og:image bormi ---
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True,
+                                     headers=_SAHIFA_SARLAVHA) as cl:
+            r = await cl.get(maqola_url)
+        qatorlar.append(f"HTTP javob: {r.status_code}")
+        if r.status_code >= 400:
+            qatorlar.append("⛔ Sayt so'rovni rad etdi — og:image o'qib "
+                            "bo'lmaydi. Bunday manbada stok surat ishlatiladi.")
+        else:
+            sup = BeautifulSoup(r.text[:200000], "html.parser")
+            topildi = []
+            for atr, qiymat in (("property", "og:image"),
+                                ("property", "og:image:url"),
+                                ("name", "twitter:image"),
+                                ("name", "twitter:image:src")):
+                tag = sup.find("meta", attrs={atr: qiymat})
+                if tag and (tag.get("content") or "").strip():
+                    topildi.append(f"{qiymat} = {tag['content'].strip()[:90]}")
+            if topildi:
+                qatorlar.append("✅ Sahifada rasm bor:")
+                qatorlar.extend("   " + t for t in topildi)
+                qatorlar.append("")
+                qatorlar.append("Agar postda stok surat chiqqan bo'lsa — "
+                                "bazada eski '-' turgan. /agent_rasm_tozala "
+                                "bilan tozalab, qaytadan urinib ko'ring.")
+            else:
+                qatorlar.append("⚠️ Sahifada og:image / twitter:image yo'q.")
+    except Exception as e:
+        qatorlar.append(f"❌ Sahifa ochilmadi: {str(e)[:120]}")
+
+    await xabar.edit_text("\n".join(qatorlar), disable_web_page_preview=True)
+
+
+@admin_only
+async def cmd_rasm_tozala(update, context):
+    """/agent_rasm_tozala — "topilmadi" belgilarini o'chiradi.
+
+    Manba rasmi bir marta topilmasa, baza "-" qo'yadi va qayta
+    urinmaydi. Sayt tuzalgan bo'lsa yoki kod yaxshilangan bo'lsa, shu
+    belgilarni tozalab qayta urinib ko'rish kerak."""
+    conn = db()
+    try:
+        n = conn.execute(
+            "UPDATE agent_articles SET rasm_url='' WHERE rasm_url='-'").rowcount
+        conn.commit()
+    finally:
+        conn.close()
+    _manba_rasm_kesh.clear()
+    await update.message.reply_text(
+        f"♻️ {n} ta maqolada 'topilmadi' belgisi tozalandi.\n"
+        f"Endi rasm qaytadan qidiriladi.")
+
+
 # ======================================================================
 # BUYRUQLAR MENYUSI (Telegram'da avtomatik ko'rinadi)
 # ======================================================================
@@ -2960,6 +3104,8 @@ def register(app: Application):
     app.add_handler(CommandHandler("agent_resume", cmd_resume))
     app.add_handler(CommandHandler("agent_requeue", cmd_requeue))
     app.add_handler(CommandHandler("agent_sources", cmd_sources))
+    app.add_handler(CommandHandler("agent_rasm", cmd_rasm))
+    app.add_handler(CommandHandler("agent_rasm_tozala", cmd_rasm_tozala))
     app.add_handler(CommandHandler("rich_test", cmd_rich_test))
     app.add_handler(CommandHandler("rich_oxirgi", cmd_rich_oxirgi))
     app.add_handler(CommandHandler("rich_rasm", cmd_rich_rasm))
