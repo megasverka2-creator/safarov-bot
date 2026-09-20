@@ -186,10 +186,22 @@ USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) AppleWebKit/537.36"
 # Rubrikalar: ai · rivojlanish · podcast · dunyo (jahon yangiliklari) · mutolaa (kitob)
 SOURCES = [
     # --- 🗞 AI va marketing ---
+    # Birlamchi manbalar: yangi model e'lonlari AVVAL shu yerda chiqadi,
+    # nashrlar esa keyin yozadi. Shuning uchun ular ro'yxat boshida.
     ("OpenAI",        "https://openai.com/news/rss.xml",                               "ai"),
     ("Anthropic",     "scrape:anthropic",                                              "ai"),
     ("Google AI",     "https://blog.google/technology/ai/rss/",                        "ai"),
+    ("DeepMind",      "https://deepmind.google/blog/rss.xml",                          "ai"),
+    ("Meta AI",       "https://ai.meta.com/blog/rss/",                                 "ai"),
+    ("Microsoft AI",  "https://blogs.microsoft.com/ai/feed/",                          "ai"),
+    ("Hugging Face",  "https://huggingface.co/blog/feed.xml",                          "ai"),
+    # Tez nashrlar: rasmiy e'londan keyin kontekst va tahlil beradi
     ("TechCrunch AI", "https://techcrunch.com/category/artificial-intelligence/feed/", "ai"),
+    ("The Decoder",   "https://the-decoder.com/feed/",                                 "ai"),
+    ("VentureBeat AI","https://venturebeat.com/category/ai/feed/",                     "ai"),
+    ("Ars Technica AI","https://arstechnica.com/ai/feed/",                             "ai"),
+    # Yangi model chiqishi bilan sinab ko'rib yozadigan mustaqil manba
+    ("Simon Willison","https://simonwillison.net/atom/everything/",                    "ai"),
     # --- 📈 SMM va marketing (@marketing_bysafarov) ---
     ("HubSpot",       "https://blog.hubspot.com/marketing/rss.xml",                    "smm"),
     ("Social Media Today", "https://www.socialmediatoday.com/feeds/news/",             "smm"),
