@@ -37,6 +37,7 @@ Nima qiladi:
 """
 
 import html
+import asyncio
 import json
 import logging
 import os
@@ -44,11 +45,13 @@ import re
 import sqlite3
 from io import BytesIO
 from datetime import datetime, time as dtime, date, timedelta
+from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
 
 import feedparser
 import httpx
 import trafilatura
+from bs4 import BeautifulSoup
 from openai import OpenAI
 
 try:  # Pillow — post uchun rasm-karta chizadi. Bo'lmasa agent rasmsiz ishlayveradi.
@@ -247,7 +250,8 @@ def db():
     conn.execute("""CREATE TABLE IF NOT EXISTS agent_meta(
         key TEXT PRIMARY KEY, value TEXT)""")
     # Migratsiya: eski bazaga yangi ustunlarni qo'shish
-    for col in ("summary TEXT", "rubrika TEXT DEFAULT 'ai'"):
+    for col in ("summary TEXT", "rubrika TEXT DEFAULT 'ai'",
+                "rasm_url TEXT"):
         try:
             conn.execute(f"ALTER TABLE agent_articles ADD COLUMN {col}")
         except sqlite3.OperationalError:
@@ -991,7 +995,7 @@ def matnga_fikr_qosh(matn, fikr):
 CARD_FORMAT = os.environ.get("AGENT_CARD_FORMAT", "4:5").strip()
 CARD_OLCHAMLAR = {"4:5": (1080, 1350), "1:1": (1080, 1080), "16:9": (1280, 720)}
 CARD_W, CARD_H = CARD_OLCHAMLAR.get(CARD_FORMAT, CARD_OLCHAMLAR["4:5"])
-CARD_VARIANTS = 4
+CARD_VARIANTS = 5
 
 # Har rubrika uchun 4 ta dizayn: (yuqori rang, pastki rang, aksent rang)
 CARD_PALETTES = {
@@ -1312,6 +1316,11 @@ def ai_cover_title(post_id, post_text, rubrika):
 # Duotone: har xil manbadan olingan suratlar kanal lentasida BITTA brend
 # tilida ko'rinadi. 0 = o'chirilgan, 1 = to'liq bo'yalgan.
 DUOTONE_KUCH = float(os.environ.get("AGENT_DUOTONE", "0.72"))
+# Manba surati uchun ANCHA yengil bo'yash. Sabab: stok surat begona,
+# uni kanal rangiga to'liq bo'yash mantiqan to'g'ri; yangilikning o'z
+# surati esa AXBOROTNING O'ZI — mahsulot ekrani, grafik, tadbir kadri.
+# Uni 0.72 bilan bo'yasak, ko'rsatish kerak bo'lgan narsa yo'qoladi.
+DUOTONE_MANBA = float(os.environ.get("AGENT_DUOTONE_MANBA", "0.26"))
 
 
 def _duotone(img, qorong_rang, yorug_rang, kuch):
@@ -1324,8 +1333,11 @@ def _duotone(img, qorong_rang, yorug_rang, kuch):
 
 
 def make_photo_card(photo_bytes, post_text, rubrika, cover=None,
-                    size=None):
-    """Suratni blog uslubiga keltiradi: duotone + muqova sarlavha + brend."""
+                    size=None, duotone=None):
+    """Suratni blog uslubiga keltiradi: duotone + muqova sarlavha + brend.
+
+    `duotone` — bo'yash kuchi. Berilmasa DUOTONE_KUCH (stok surat uchun);
+    manba surati uchun DUOTONE_MANBA beriladi."""
     if Image is None:
         return None
     W, H = size or (CARD_W, CARD_H)
@@ -1346,7 +1358,7 @@ def make_photo_card(photo_bytes, post_text, rubrika, cover=None,
     img = _duotone(img,
                    tuple(int(c * 0.30) for c in top),
                    tuple(min(255, int(c * 0.40 + 255 * 0.60)) for c in accent),
-                   DUOTONE_KUCH)
+                   DUOTONE_KUCH if duotone is None else duotone)
 
     d = ImageDraw.Draw(img, "RGBA")
     # Pastdan yuqoriga qorong'i gradient (matn o'qilishi uchun)
@@ -1411,27 +1423,205 @@ def make_photo_card(photo_bytes, post_text, rubrika, cover=None,
     img.save(buf, format="PNG")
     return buf.getvalue()
 
+# ======================================================================
+# MANBA RASMI — yangilikning O'Z surati
+# ======================================================================
+# NEGA KERAK: stok surat (Pexels) yoki AI chizgan rasm chiroyli, lekin
+# yangilikka aloqasi yo'q. Maqolaning o'z surati — mahsulot ekrani,
+# grafik, tadbir fotosi — o'quvchiga ko'proq narsa aytadi va postni
+# haqiqiyroq qiladi.
+#
+# Ikki yo'l bilan topiladi:
+#   1) RSS yozuvining ichidan (media:content, media:thumbnail,
+#      enclosure yoki tavsif ichidagi <img>) — tekin, qo'shimcha
+#      so'rovsiz, maqola bazaga tushayotganda o'sha zahoti;
+#   2) topilmasa — maqola sahifasidan og:image. Bu qo'shimcha so'rov,
+#      shuning uchun FAQAT post chiqarish paytida qilinadi: har
+#      ko'rilgan maqola uchun emas, faqat siz tanlaganlari uchun.
+#
+# Natija bazaga yoziladi, ya'ni ikkinchi marta qidirilmaydi. Topilmasa
+# "-" belgisi qo'yiladi — sahifaga qayta-qayta borilmasin.
+
+# Kuzatuv piksellari va nishonchalar kerak emas
+_RASM_QORA = ("doubleclick", "googlesyndication", "/pixel", "1x1",
+              "spacer.gif", "blank.gif", "feedburner", "gravatar")
+
+
+def _rasm_urlmi(u):
+    u = (u or "").strip()
+    if not u.startswith(("http://", "https://")):
+        return False
+    past = u.lower()
+    if any(q in past for q in _RASM_QORA):
+        return False
+    return True
+
+
+def _rss_rasm(entry):
+    """RSS yozuvi ichidan surat havolasi. Topilmasa bo'sh satr."""
+    try:
+        for kalit in ("media_content", "media_thumbnail"):
+            for m in (entry.get(kalit) or []):
+                u = (m or {}).get("url", "")
+                if _rasm_urlmi(u):
+                    return u
+        for e in (entry.get("enclosures") or []):
+            u = (e or {}).get("href") or (e or {}).get("url") or ""
+            if str((e or {}).get("type", "")).startswith("image/") and _rasm_urlmi(u):
+                return u
+        for l in (entry.get("links") or []):
+            if str(l.get("type", "")).startswith("image/") and _rasm_urlmi(l.get("href", "")):
+                return l["href"]
+        # tavsif yoki to'liq matn ichidagi birinchi <img>
+        xom = entry.get("summary", "") or ""
+        for c in (entry.get("content") or []):
+            xom += (c or {}).get("value", "") or ""
+        m = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', xom, re.I)
+        if m and _rasm_urlmi(m.group(1)):
+            return m.group(1)
+    except Exception as e:
+        log.warning("RSS rasmini o'qib bo'lmadi: %s", e)
+    return ""
+
+
+async def og_rasm(maqola_url):
+    """Maqola sahifasidan og:image (yoki twitter:image)."""
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True,
+                                     headers={"User-Agent": USER_AGENT}) as cl:
+            r = await cl.get(maqola_url)
+            r.raise_for_status()
+            html = r.text[:200000]
+    except Exception as e:
+        log.warning("og:image olinmadi (%s): %s", maqola_url, e)
+        return ""
+    try:
+        sup = BeautifulSoup(html, "html.parser")
+        for atr, qiymat in (("property", "og:image"),
+                            ("property", "og:image:url"),
+                            ("name", "twitter:image"),
+                            ("name", "twitter:image:src")):
+            tag = sup.find("meta", attrs={atr: qiymat})
+            u = (tag.get("content") or "").strip() if tag else ""
+            if u:
+                u = urljoin(maqola_url, u)   # nisbiy havola bo'lsa to'ldiriladi
+                if _rasm_urlmi(u):
+                    return u
+    except Exception as e:
+        log.warning("og:image tahlili xato (%s): %s", maqola_url, e)
+    return ""
+
+
+_manba_rasm_kesh = {}      # post_id -> url (qayta ishga tushgunicha)
+
+
+async def manba_rasmi(post_id):
+    """Shu post ortidagi maqolaning o'z surati. Topilmasa bo'sh satr."""
+    if post_id in _manba_rasm_kesh:
+        return _manba_rasm_kesh[post_id]
+    conn = db()
+    try:
+        qator = conn.execute(
+            "SELECT a.url, COALESCE(a.rasm_url,'') FROM agent_posts p "
+            "JOIN agent_articles a ON a.url = p.article_url WHERE p.id=?",
+            (post_id,)).fetchone()
+        if not qator:
+            _manba_rasm_kesh[post_id] = ""
+            return ""
+        maqola_url, rasm = qator
+        if rasm == "-":                    # avval qaralgan, topilmagan
+            _manba_rasm_kesh[post_id] = ""
+            return ""
+        if not rasm:
+            rasm = await og_rasm(maqola_url)
+            conn.execute("UPDATE agent_articles SET rasm_url=? WHERE url=?",
+                         (rasm or "-", maqola_url))
+            conn.commit()
+        _manba_rasm_kesh[post_id] = rasm
+        return rasm
+    finally:
+        conn.close()
+
+
+def _rasmni_tayyorla(xom, maks=1600):
+    """Manba suratini Telegram uchun xavfsiz holatga keltiradi.
+
+    Nega kerak: manbada WebP, AVIF yoki 6000px li surat bo'lishi mumkin —
+    Telegram ularning hammasini qabul qilavermaydi. Pillow orqali JPEG
+    ga o'tkazamiz va o'lchamni cheklaymiz."""
+    if Image is None:
+        return xom
+    try:
+        img = Image.open(BytesIO(xom))
+        img = ImageOps.exif_transpose(img)
+        if img.mode not in ("RGB",):
+            img = img.convert("RGB")
+        if max(img.size) > maks:
+            img.thumbnail((maks, maks), Image.LANCZOS)
+        buf = BytesIO()
+        img.save(buf, format="JPEG", quality=90)
+        return buf.getvalue()
+    except Exception as e:
+        log.warning("Manba rasmini tayyorlab bo'lmadi: %s", e)
+        return None
+
+
+# Variantlar tartibi: avval yangilikning o'z surati, keyin sun'iylari.
+VARIANT_NOMI = {0: "manba rasmi — brend uslubida",
+                1: "manba rasmi — asl holicha",
+                2: "AI chizgan",
+                3: "Pexels foto",
+                4: "gradient karta"}
+
+
 async def make_card_variant(post_id, text, rubrika, variant):
-    """Variant 0: GPT Image (4:5, AI chizadi) · 1-2: Pexels foto · 3: gradient."""
-    if variant == 0 and Image is not None:
+    """0-1: maqolaning O'Z surati · 2: AI chizadi · 3: Pexels · 4: gradient.
+
+    Har bosqich ishlamasa keyingisiga tushadi, ya'ni manbada rasm
+    bo'lmasa ham post rasmsiz qolmaydi."""
+    # --- 0-1: yangilikning o'z surati ---
+    if variant in (0, 1) and Image is not None:
+        url = await manba_rasmi(post_id)
+        if url:
+            try:
+                xom = _rasmni_tayyorla(await _fetch_bytes(url))
+                if xom:
+                    if variant == 1:
+                        return xom                      # asl holicha
+                    karta = make_photo_card(
+                        xom, text, rubrika,
+                        cover=ai_cover_title(post_id, text, rubrika),
+                        duotone=DUOTONE_MANBA)
+                    if karta:
+                        return karta
+            except Exception as e:
+                log.warning("Manba rasmi ishlatilmadi (%s): %s", url, e)
+        variant = 2   # rasm yo'q yoki ochilmadi — keyingisiga
+
+    # --- 2: AI chizgan muqova ---
+    if variant == 2 and Image is not None:
         card = await make_genai_card(post_id, text, rubrika)
         if card:
             return card
-        variant = 1   # AI ishlamasa — foto variantiga tushamiz
-    if PEXELS_KEY and variant < 3 and Image is not None:
+        variant = 3   # AI ishlamasa — foto variantiga tushamiz
+
+    # --- 3: Pexels stok foto ---
+    if PEXELS_KEY and variant == 3 and Image is not None:
         try:
             urls = _photo_cache.get(post_id)
             if urls is None:
                 urls = await pexels_photos(ai_photo_query(text))
                 _photo_cache[post_id] = urls
             if urls:
-                photo = await _fetch_bytes(urls[variant % len(urls)])
+                photo = await _fetch_bytes(urls[0])
                 card = make_photo_card(photo, text, rubrika,
                                        cover=ai_cover_title(post_id, text, rubrika))
                 if card:
                     return card
         except Exception as e:
             log.warning("Foto-karta xatosi (gradientga o'tildi): %s", e)
+
+    # --- 4: gradient karta (doim ishlaydi) ---
     return make_card(text, rubrika, variant)
 
 
@@ -1498,8 +1688,15 @@ def _post_rubrika(conn, post_id):
     return row[0] if row else "ai"
 
 async def rich_photo_url(post_id, text, variant=0):
-    """Rich maqola ICHIGA qo'yish uchun ochiq havolali foto (Pexels).
-    Rasm bloki faqat http(s) havola bilan ishlaydi, shuning uchun xom foto."""
+    """Rich maqola ICHIGA qo'yish uchun ochiq havolali foto.
+    Rasm bloki faqat http(s) havola bilan ishlaydi, shuning uchun xom foto.
+
+    Avval yangilikning O'Z surati sinaladi — u ham ochiq havola, ya'ni
+    to'g'ridan-to'g'ri yaraydi. Bo'lmasa Pexels."""
+    if variant in (0, 1):
+        url = await manba_rasmi(post_id)
+        if url:
+            return url
     if not PEXELS_KEY:
         return None
     try:
@@ -1934,9 +2131,10 @@ def fetch_new_articles(conn):
             summary = entry.get("summary", "") or entry.get("description", "")
             conn.execute(
                 "INSERT OR IGNORE INTO agent_articles"
-                "(url,title,source,seen_at,summary,rubrika) VALUES(?,?,?,?,?,?)",
+                "(url,title,source,seen_at,summary,rubrika,rasm_url) "
+                "VALUES(?,?,?,?,?,?,?)",
                 (url, title, source_name, datetime.now(TZ).isoformat(),
-                 summary[:2000], rubrika))
+                 summary[:2000], rubrika, _rss_rasm(entry)))
             added += 1
     conn.commit()
     return added
@@ -2150,7 +2348,8 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 try:
                     await context.bot.send_photo(
                         chat_id=ADMIN_ID, photo=url,
-                        caption=f"🖼 Rasm 1/{CARD_VARIANTS} — maqola ichiga shu ketadi",
+                        caption=f"🖼 Rasm 1/{CARD_VARIANTS} · "
+                                f"{VARIANT_NOMI.get(0, '')} — maqola ichiga shu ketadi",
                         reply_markup=preview_keyboard(post_id, 0))
                     await query.edit_message_text(f"🎨 RASM TANLANMOQDA (pastda)\n\n{text}")
                 except Exception as e:
@@ -2172,7 +2371,7 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             await context.bot.send_photo(
                 chat_id=ADMIN_ID, photo=img,
-                caption=f"🎨 Dizayn 1/{CARD_VARIANTS} — postga mos keladimi?",
+                caption=f"🎨 Dizayn 1/{CARD_VARIANTS} · {VARIANT_NOMI.get(0, '')}",
                 reply_markup=preview_keyboard(post_id, 0))
             await query.edit_message_text(f"🎨 RASM TANLANMOQDA (pastda)\n\n{text}")
         except Exception as e:
@@ -2190,7 +2389,8 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 try:
                     await query.edit_message_media(
                         InputMediaPhoto(url,
-                                        caption=f"🖼 Rasm {variant + 1}/{CARD_VARIANTS} — "
+                                        caption=f"🖼 Rasm {variant + 1}/{CARD_VARIANTS} · "
+                                                f"{VARIANT_NOMI.get(variant, '')} — "
                                                 f"maqola ichiga shu ketadi"),
                         reply_markup=preview_keyboard(post_id, variant))
                 except Exception as e:
@@ -2201,8 +2401,8 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             await query.edit_message_media(
                 InputMediaPhoto(img,
-                                caption=f"🎨 Dizayn {variant + 1}/{CARD_VARIANTS} — "
-                                        f"postga mos keladimi?"),
+                                caption=f"🎨 Dizayn {variant + 1}/{CARD_VARIANTS} · "
+                                        f"{VARIANT_NOMI.get(variant, '')}"),
                 reply_markup=preview_keyboard(post_id, variant))
         except Exception as e:
             await query.answer(f"Xato: {e}", show_alert=True)
@@ -2614,11 +2814,67 @@ async def cmd_rich_media(update, context):
 
 @admin_only
 async def cmd_sources(update, context):
-    parts = []
-    for rub in ("ai", "rivojlanish", "podcast", "dunyo", "mutolaa", "uzb", "sport", "texno", "islom"):
-        names = ", ".join(n for n, _, r in SOURCES if r == rub)
-        parts.append(f"{RUBRIKA_EMOJI[rub]} {RUBRIKA_NOMI[rub]}: {names}")
-    await update.message.reply_text("📡 Manbalar:\n" + "\n".join(parts))
+    """Manbalar ro'yxati. O'chirilgan rubrika ⏹ bilan belgilanadi —
+    avval ro'yxat qo'lda yozilgan rubrikalardan iborat edi va "smm"
+    umuman ko'rinmasdi."""
+    qatorlar = []
+    for rub in RUBRIKA_NOMI:
+        nomlar = ", ".join(n for n, _, r in SOURCES if r == rub)
+        if not nomlar:
+            continue
+        belgi = "⏹" if rub in RUBRIKA_OFF else RUBRIKA_EMOJI.get(rub, "📰")
+        qatorlar.append(f"{belgi} {RUBRIKA_NOMI[rub]}: {nomlar}")
+
+    conn = db()
+    try:
+        bor = conn.execute(
+            "SELECT COUNT(*) FROM agent_articles "
+            "WHERE rasm_url IS NOT NULL AND rasm_url NOT IN ('', '-')").fetchone()[0]
+        jami = conn.execute("SELECT COUNT(*) FROM agent_articles").fetchone()[0]
+    finally:
+        conn.close()
+
+    await update.message.reply_text(
+        "📡 Manbalar:\n" + "\n".join(qatorlar)
+        + f"\n\n🖼 Maqolalarning o'z surati bor: {bor}/{jami}"
+        + "\n⏹ — rubrika o'chirilgan (RUBRIKA_ON)"
+        + "\n\n🩺 Tirikligini tekshirish: /agent_sources tekshir")
+
+    if not (context.args and context.args[0].lower().startswith("tekshir")):
+        return
+
+    # --- Tiriklik tekshiruvi ---
+    # Nega kerak: RSS manzillari vaqt o'tib o'zgaradi yoki yopiladi, va
+    # buni bilmasdan "yangilik kam" deb o'ylab yurish mumkin. Yangi
+    # manba qo'shishdan oldin ham shu tekshiruv kerak bo'ladi.
+    xabar = await update.message.reply_text("🩺 Manbalar tekshirilmoqda...")
+    natija = []
+    for nom, url, rub in SOURCES:
+        if rub in RUBRIKA_OFF:
+            continue
+        if url.startswith("scrape:"):
+            try:
+                n = len(SCRAPERS.get(url[7:], lambda: [])())
+                natija.append(("✅" if n else "⚠️", nom, f"{n} ta"))
+            except Exception as e:
+                natija.append(("❌", nom, str(e)[:40]))
+            continue
+        try:
+            feed = await asyncio.to_thread(feedparser.parse, url, agent=USER_AGENT)
+            n = len(feed.entries)
+            rasmli = sum(1 for e in feed.entries[:10] if _rss_rasm(e))
+            if n:
+                natija.append(("✅", nom, f"{n} ta · rasmli {rasmli}"))
+            else:
+                natija.append(("⚠️", nom, f"bo'sh ({getattr(feed, 'status', '?')})"))
+        except Exception as e:
+            natija.append(("❌", nom, str(e)[:40]))
+
+    tirik = sum(1 for b, _, _ in natija if b == "✅")
+    await xabar.edit_text(
+        f"🩺 Manbalar: {tirik}/{len(natija)} ishlayapti\n\n"
+        + "\n".join(f"{b} {nom} — {izoh}" for b, nom, izoh in natija)
+        + "\n\n«rasmli N» — oxirgi 10 yozuvdan nechtasida o'z surati bor.")
 
 
 # ======================================================================
