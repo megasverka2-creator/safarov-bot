@@ -61,6 +61,7 @@ from aiohttp import web
 from telegram import Chat, Message, Update, User
 from telegram.ext import CallbackContext
 
+import ovoz_navbat
 import zikr
 
 log = logging.getLogger(__name__)
@@ -659,8 +660,71 @@ async def _himoya(request, handler):
     return javob
 
 
+# ======================================================================
+# OVOZ ISHCHISI — Mac'dagi VoiceStudio uchun (ovoz_navbat.py ga qarang)
+# ======================================================================
+# Kalit Railway'da: OVOZ_ISHCHI_KALIT. Berilmagan yoki qisqa bo'lsa, bu
+# yo'llar UMUMAN ishlamaydi (404) — tasodifan ochiq qolib ketmasin.
+ISHCHI_KALIT = os.environ.get("OVOZ_ISHCHI_KALIT", "").strip()
+ISHCHI_KALIT_MIN = 24
+# Bitta iboraning WAV'i (24 kHz mono, 12 s) ~0.6 MB. aiohttp standarti
+# 1 MB — zaxira bilan kattalashtiramiz.
+ISHCHI_MAKS_BAYT = 20 * 1024 * 1024
+UZUN_SOROV_SEK = 25      # ish bo'lmasa shuncha kutib, keyin 204 qaytadi
+
+
+def _ishchi_ruxsat(request):
+    """Ishchi kalitini tekshiradi. Qaytadi: None (ruxsat) yoki javob."""
+    if len(ISHCHI_KALIT) < ISHCHI_KALIT_MIN:
+        return web.json_response({"xato": "topilmadi"}, status=404)
+    sarlavha = request.headers.get("Authorization", "")
+    berilgan = sarlavha[7:] if sarlavha.startswith("Bearer ") else ""
+    if not berilgan or not hmac.compare_digest(berilgan, ISHCHI_KALIT):
+        return _xato("Kalit noto'g'ri", 401)
+    return None
+
+
+async def _api_ovoz_ish_ol(request):
+    """Ishchi navbatdagi ishni so'raydi (uzun so'rov: 25 s gacha kutadi)."""
+    rad = _ishchi_ruxsat(request)
+    if rad is not None:
+        return rad
+    tugash = time.time() + UZUN_SOROV_SEK
+    while True:
+        ish = ovoz_navbat.ol()
+        if ish is not None:
+            return web.json_response(ish)
+        if time.time() >= tugash:
+            return web.Response(status=204)
+        await asyncio.sleep(0.5)
+
+
+async def _api_ovoz_ish_topshir(request):
+    """Ishchi tayyor ovozni (WAV baytlari) yuklaydi."""
+    rad = _ishchi_ruxsat(request)
+    if rad is not None:
+        return rad
+    baytlar = await request.read()
+    if not baytlar:
+        return _xato("Bo'sh fayl", 400)
+    if not ovoz_navbat.topshir(request.match_info["ish_id"], baytlar):
+        return _xato("Bunday ish yo'q yoki allaqachon yopilgan", 409)
+    return web.json_response({"ok": True})
+
+
+async def _api_ovoz_ish_xato(request):
+    """Ishchi bu ishni bajara olmadi."""
+    rad = _ishchi_ruxsat(request)
+    if rad is not None:
+        return rad
+    data = await _tana(request)
+    ovoz_navbat.xato(request.match_info["ish_id"], str(data.get("sabab", "")))
+    return web.json_response({"ok": True})
+
+
 def server_yasa():
-    server = web.Application(middlewares=[_himoya])
+    server = web.Application(middlewares=[_himoya],
+                             client_max_size=ISHCHI_MAKS_BAYT)
     server.router.add_get("/", _index)
     server.router.add_get("/index.html", _index)
     server.router.add_get("/sog", _sog)
@@ -674,6 +738,9 @@ def server_yasa():
     server.router.add_get("/api/admin/holat", _api_admin_holat)
     server.router.add_get("/api/admin/postlar", _api_admin_postlar)
     server.router.add_post("/api/admin/post", _api_admin_post)
+    server.router.add_get("/api/ovoz/ish", _api_ovoz_ish_ol)
+    server.router.add_post("/api/ovoz/ish/{ish_id}", _api_ovoz_ish_topshir)
+    server.router.add_post("/api/ovoz/ish/{ish_id}/xato", _api_ovoz_ish_xato)
     return server
 
 

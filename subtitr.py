@@ -36,6 +36,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -1135,11 +1136,17 @@ async def on_video_tugma(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not segs:
             await q.answer("Segment ma'lumoti yo'q.", show_alert=True)
             return
+        tayyor, sabab = dublyaj.tayyormi()
+        if not tayyor:
+            await q.answer("Ovoz manbai tayyor emas", show_alert=True)
+            await context.bot.send_message(chat_id=q.from_user.id,
+                                           text="⚠️ " + sabab)
+            return
         await q.answer("Ovoz tayyorlanmoqda...")
+        manba = dublyaj.MANBA_NOMI.get(dublyaj.tts_manba(), dublyaj.tts_manba())
         holat = await context.bot.send_message(
             chat_id=q.from_user.id,
-            text=f"🔊 O'zbekcha ovozli tarjima boshlandi "
-                 f"(ovoz: {dublyaj.tts_manba()}).\n"
+            text=f"🔊 O'zbekcha ovozli tarjima boshlandi (ovoz: {manba}).\n"
                  f"Uzun videoda bir necha daqiqa oladi.")
         loop = asyncio.get_running_loop()
 
@@ -1391,6 +1398,59 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         shutil.rmtree(ish, ignore_errors=True)
 
 
+OVOZ_ISHCHI_FAYL = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "ovoz_ishchi.py")
+
+
+async def cmd_ovoz_ishchi(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/ovoz_ishchi — Mac'dagi VoiceStudio ishchisining holati va skripti.
+
+    Kalitni ATAYLAB yubormaymiz: u Railway Variables'da turadi. Telegram
+    chatida maxfiy kalit aylanib yurmasin."""
+    if update.effective_user is None or update.effective_user.id != ADMIN_ID:
+        return
+    import ovoz_navbat
+    h = ovoz_navbat.holat()
+    manba = dublyaj.tts_manba()
+    if h["oxirgi_korinish"]:
+        oldin = int(time.time() - h["oxirgi_korinish"])
+        korinish = (f"✅ ulangan ({oldin} s oldin ko'rindi)" if oldin <= 90
+                    else f"❌ ulanmagan (oxirgi marta {oldin // 60} daqiqa oldin)")
+    else:
+        korinish = "❌ hali bir marta ham ulanmagan"
+    kalit_bor = len(os.environ.get("OVOZ_ISHCHI_KALIT", "").strip()) >= 24
+
+    qatorlar = [
+        "🎙 VoiceStudio ovoz ishchisi",
+        "",
+        f"Dublyaj ovozi hozir: {dublyaj.MANBA_NOMI.get(manba, manba)}",
+        f"Ishchi: {korinish}",
+        f"Navbatda: {h['kutmoqda']} · bajarilmoqda: {h['olingan']}",
+        f"OVOZ_ISHCHI_KALIT: {'✅ berilgan' if kalit_bor else '❌ berilmagan (24+ belgi kerak)'}",
+    ]
+    if manba != "mac":
+        qatorlar += ["", "Yoqish uchun Railway → Variables: DUBLYAJ_TTS = voicestudio"]
+    qatorlar += [
+        "",
+        "Mac'da ishga tushirish:",
+        "1. VoiceStudio ilovasini oching (o'zbekcha ovoz uchun OmniVoice)",
+        "2. Pastdagi ovoz_ishchi.py faylini saqlang",
+        "3. Terminal'da:",
+        "   python3 ovoz_ishchi.py <bot_manzili> <kalit>",
+        "   bot manzili — Railway'dagi https://... domen,",
+        "   kalit — Railway'dagi OVOZ_ISHCHI_KALIT",
+        "",
+        "Terminal ochiq tursa — ishchi ishlaydi. Mac uxlab qolmasin.",
+    ]
+    await update.message.reply_text("\n".join(qatorlar))
+    if os.path.exists(OVOZ_ISHCHI_FAYL):
+        with open(OVOZ_ISHCHI_FAYL, "rb") as f:
+            await update.message.reply_document(
+                document=f, filename="ovoz_ishchi.py",
+                caption="Mac uchun ovoz ishchisi (Python 3, qo'shimcha "
+                        "kutubxona shart emas)")
+
+
 def register(app: Application):
     """bot.py dan: subtitr.register(app)"""
     if not ADMIN_ID:
@@ -1405,6 +1465,7 @@ def register(app: Application):
     app.add_handler(CommandHandler("uslub", cmd_uslub))
     app.add_handler(CommandHandler("bekor", cmd_bekor), group=-2)
     app.add_handler(CommandHandler("shriftlar", cmd_shriftlar))
+    app.add_handler(CommandHandler("ovoz_ishchi", cmd_ovoz_ishchi))
     # group=-2 — agent.py dagi matn ishlovchisidan (group=-1) OLDIN ishlaydi.
     # Kutilmayotgan paytda hech narsaga aralashmaydi.
     app.add_handler(MessageHandler(

@@ -34,10 +34,17 @@ YANGI TARTIB:
 OVOZ MANBAI (Railway → DUBLYAJ_TTS):
   openai       — standart, gpt-4o-mini-tts (OPENAI_API_KEY bor bo'lsa ishlaydi)
   aisha        — o'zbek tiliga maxsus; AISHA_API_KEY kerak
-  voicestudio  — o'z serveringizdagi VoiceStudio (masalan Mac'dagi, o'z
-                 ovozingiz klonlangan). OpenAI bilan bir xil API:
-                   VOICESTUDIO_URL   = http://<manzil>:3900/v1
-                   VOICESTUDIO_VOICE = <ovoz profili ID>
+  voicestudio  — TEKIN: VoiceStudio sizning Mac'ingizda ishlaydi.
+                 Ikki usul:
+                 (a) VOICESTUDIO_URL berilMAGAN — TAVSIYA: Mac'dagi
+                     ovoz_ishchi.py botdan ish so'rab turadi (ovoz_navbat.py).
+                     Mac'da port ochilmaydi, VoiceStudio internetga
+                     chiqmaydi. Railway: OVOZ_ISHCHI_KALIT.
+                 (b) VOICESTUDIO_URL berilgan — bot to'g'ridan-to'g'ri
+                     chaqiradi. Faqat xususiy tarmoq (Tailscale) va
+                     OMNIVOICE_API_KEY bilan; hech qachon ochiq tunnel
+                     orqali emas.
+                 VOICESTUDIO_VOICE = ovoz profili ID (klonlangan ovoz)
                  DIQQAT: VoiceStudio'ning standart modeli (OmniVoice)
                  og'irliklari CC-BY-NC — tijorat kanalida ishlatishdan
                  oldin litsenziyasini tekshiring.
@@ -54,6 +61,8 @@ import tempfile
 import wave
 
 import httpx
+
+import ovoz_navbat
 
 log = logging.getLogger(__name__)
 
@@ -93,6 +102,11 @@ TANAFFUS_SEK = 0.45            # shundan qisqa pauza — bitta ibora hisoblanadi
 # Aralashtirish: asl ovoz pauzalarda shu darajada, gapirilganda yana pastroq
 FON = float(os.environ.get("DUBLYAJ_FON", "0.35"))
 PARALLEL = int(os.environ.get("DUBLYAJ_PARALLEL", "4"))
+# Mac'dagi VoiceStudio baribir bittadan yasaydi (MPS'da bitta ishchi).
+# Ko'p parallel so'rov faqat navbatda turib qoladi va vaqti o'tadi —
+# ikkitasi yetarli: biri yasalayotganda ikkinchisi yuklanadi.
+MAC_PARALLEL = int(os.environ.get("DUBLYAJ_MAC_PARALLEL", "2"))
+MAC_KUTISH = int(os.environ.get("DUBLYAJ_MAC_KUTISH", "300"))    # soniya/ibora
 TOPLAM = int(os.environ.get("DUBLYAJ_TOPLAM", "40"))   # tarjima to'plami
 
 SR = 24000                     # ichki format: 24 kHz, mono, 16 bit
@@ -282,12 +296,43 @@ def _vs_klient():
 
 
 def tts_manba():
-    """Haqiqatda ishlatiladigan manba. Sozlama chala bo'lsa — openai."""
+    """Haqiqatda ishlatiladigan manba.
+
+    voicestudio tanlangan bo'lsa, URL bo'lmasa ham OpenAI'ga TUSHMAYDI:
+    siz tekin variantni tanlagansiz — Mac o'chiq bo'lsa jimgina pul
+    sarflash o'rniga, bot ochiq aytadi (tayyormi() ga qarang)."""
     if DUB_TTS == "aisha" and AISHA_API_KEY:
         return "aisha"
-    if DUB_TTS == "voicestudio" and VS_URL:
-        return "voicestudio"
+    if DUB_TTS == "voicestudio":
+        return "voicestudio" if VS_URL else "mac"
     return "openai"
+
+
+MANBA_NOMI = {"openai": "OpenAI", "aisha": "Aisha",
+              "voicestudio": "VoiceStudio (server)",
+              "mac": "VoiceStudio (Mac)"}
+
+
+def tayyormi():
+    """Dublyajni boshlashdan OLDIN tekshiruv. Qaytadi: (ha/yo'q, sabab).
+
+    Asosan Mac rejimi uchun: ishchi ulanmagan bo'lsa, videoni yuklab,
+    tarjima qilib, keyin 5 daqiqa kutib xato olishdan ko'ra — darrov
+    aytgan yaxshi."""
+    manba = tts_manba()
+    if manba == "mac":
+        if not ovoz_navbat.ishchi_tirikmi(90):
+            return False, ("Mac'dagi ovoz ishchisi ulanmagan.\n\n"
+                           "Tekshiring: Mac yoqiqmi, VoiceStudio ochiqmi va "
+                           "ovoz_ishchi.py ishlab turibdimi?\n"
+                           "Holat va ko'rsatma: /ovoz_ishchi")
+    if DUB_TTS == "aisha" and not AISHA_API_KEY:
+        return False, "DUBLYAJ_TTS=aisha, lekin AISHA_API_KEY berilmagan."
+    return True, ""
+
+
+def parallel_soni():
+    return MAC_PARALLEL if tts_manba() == "mac" else PARALLEL
 
 
 def tts(matn):
@@ -310,6 +355,9 @@ def tts(matn):
             a = cl.get(yol if yol.startswith("http") else AISHA_BASE + yol)
             a.raise_for_status()
             return a.content, "wav"
+    if manba == "mac":
+        ish_id = ovoz_navbat.qosh(matn[:1800], VS_VOICE, "uz", VS_MODEL)
+        return ovoz_navbat.kut(ish_id, MAC_KUTISH), "wav"
     if manba == "voicestudio":
         r = _vs_klient().audio.speech.create(
             model=VS_MODEL, voice=VS_VOICE, input=matn[:1800],
@@ -374,7 +422,7 @@ def _hammasini_ovozlat(iboralar, papka, holat=None):
     ishlar = [(i, ib) for i, ib in enumerate(iboralar) if ib.get("uz")]
     xato = 0
     tayyor = 0
-    with cf.ThreadPoolExecutor(max_workers=max(1, PARALLEL)) as ex:
+    with cf.ThreadPoolExecutor(max_workers=max(1, parallel_soni())) as ex:
         kelajak = {ex.submit(_ovozlat, ib, papka, i): ib for i, ib in ishlar}
         for f in cf.as_completed(kelajak):
             tayyor += 1
@@ -424,7 +472,7 @@ def _moslash(iboralar, papka, llm, holat=None):
             except Exception as e:
                 log.warning("Qisqa qatorni ovozlab bo'lmadi: %s", e)
 
-        with cf.ThreadPoolExecutor(max_workers=max(1, PARALLEL)) as ex:
+        with cf.ThreadPoolExecutor(max_workers=max(1, parallel_soni())) as ex:
             list(ex.map(_qayta_ovozlat, enumerate(qayta)))
 
     tezlatildi = 0
@@ -536,7 +584,7 @@ def dublyaj_qil(video_yol, segmentlar, chiqish_yol, llm, brif="", holat=None):
         if ovozlanadigan and xato > ovozlanadigan * 0.3:
             raise RuntimeError(
                 f"Ovoz yasalmadi: {xato}/{ovozlanadigan} ibora xato berdi "
-                f"(manba: {tts_manba()})")
+                f"(manba: {MANBA_NOMI.get(tts_manba(), tts_manba())})")
 
         tezlatildi, qisqartirildi = _moslash(iboralar, papka, llm, holat)
 
@@ -552,7 +600,7 @@ def dublyaj_qil(video_yol, segmentlar, chiqish_yol, llm, brif="", holat=None):
                 "tezlatildi": tezlatildi,
                 "qisqartirildi": qisqartirildi,
                 "kechikish": round(kechikish, 1),
-                "manba": tts_manba(),
+                "manba": MANBA_NOMI.get(tts_manba(), tts_manba()),
                 "matn": "\n".join(ib["uz"] for ib in iboralar if ib.get("uz"))}
     finally:
         shutil.rmtree(papka, ignore_errors=True)
