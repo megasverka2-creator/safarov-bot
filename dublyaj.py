@@ -65,6 +65,7 @@ import wave
 import httpx
 
 import ovoz_navbat
+import talaffuz
 
 log = logging.getLogger(__name__)
 
@@ -184,8 +185,9 @@ jumlalar. Kitobiy va idoraviy iboralar taqiq: "ushbu", "mazkur", \
 "bir yuz o'n yetti million".
 7. Qisqartmalarni o'qilishicha yoz: "AI" -> "sun'iy intellekt" (yoki qator \
 qisqa bo'lsa "ey-ay"), "GPT" -> "ji-pi-ti", "CEO" -> "bosh direktor".
-8. Ism, kompaniya, mahsulot nomlari — lotin yozuvida, o'qilishiga yaqin: \
-"OpenAI", "Google", "Sam Altman".
+8. Ism, kompaniya, mahsulot nomlari — ASL yozilishida qoldir: "OpenAI", \
+"Google", "Sam Altman". Ularni diktor uchun o'qilishiga bot lug'ati o'zi \
+moslaydi — sen talaffuz yozuvini o'ylab topma.
 9. So'zlashuvdagi "uh", "you know", "I mean", ikkilanish, takror — TASHLA.
 
 C. MA'NO VA OHANG:
@@ -338,7 +340,11 @@ def parallel_soni():
 
 
 def tts(matn):
-    """Bitta ibora uchun ovoz. Qaytadi: (baytlar, kengaytma)."""
+    """Bitta ibora uchun ovoz. Qaytadi: (baytlar, kengaytma).
+
+    Matn avval talaffuz.ozgartir() dan o'tadi: raqamlar so'zga, nomlar
+    o'zbekcha o'qilishiga (lug'at — /talaffuz)."""
+    matn = talaffuz.ozgartir(matn)
     manba = tts_manba()
     if manba == "aisha":
         with httpx.Client(timeout=90) as cl:
