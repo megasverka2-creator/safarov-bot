@@ -50,6 +50,7 @@ from telegram.ext import (
 )
 
 import dublyaj  # ovozli tarjima (voice-over)
+import talaffuz  # diktor uchun o'qilish lug'ati
 
 try:  # Pillow — mavjud subtitrni aniqlash va matn enini o'lchash uchun
     from PIL import Image, ImageFont
@@ -1490,6 +1491,138 @@ async def cmd_ovoz_ishchi(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         "kutubxona shart emas)")
 
 
+# ======================================================================
+# TALAFFUZ — ovozni o'zbekchaga "o'rgatish" (lug'at + sinov)
+# ======================================================================
+SINOV_MATNI = ("2025-yilda OpenAI va Google sun'iy intellekt bo'yicha "
+               "40% ko'proq sarmoya kiritdi — jami $20 mlrd. ChatGPT'ning "
+               "haftalik foydalanuvchilari 800 million, o'g'il-qizlar ham "
+               "undan faol foydalanmoqda.")
+
+
+def _talaffuz_royxat():
+    admin = talaffuz.admin_qoidalari()
+    ochirilgan = talaffuz.ochirilgan_standartlar()
+    standart = [k for k in talaffuz.STANDART
+                if k not in ochirilgan
+                and not any(a.lower() == k.lower() for a in admin)]
+    q = ["🗣 Talaffuz lug'ati — diktor so'zni QANDAY o'qishi", ""]
+    if admin:
+        q.append(f"Siz qo'shganlar ({len(admin)}):")
+        q += [f"  {k} → {v}" for k, v in sorted(admin.items(), key=lambda x: x[0].lower())]
+        q.append("")
+    q.append(f"Tayyor qoidalar ({len(standart)}):")
+    q.append("  " + ", ".join(f"{k}→{talaffuz.STANDART[k]}" for k in standart))
+    if ochirilgan:
+        q += ["", "O'chirilgan tayyor qoidalar: " + ", ".join(ochirilgan)]
+    q += [
+        "",
+        "Raqamlar o'zi so'zga aylanadi: 2025-yil → ikki ming yigirma "
+        "beshinchi yil, 40% → qirq foiz, $20 mln → yigirma million dollar.",
+        "",
+        "Qo'shish:   /talaffuz So'z = aytilishi",
+        "   masalan: /talaffuz Sam Altman = Sem Oltmen",
+        "O'chirish:  /talaffuz_ochir So'z",
+        "Eshitish:   /talaffuz_sinov matn",
+        "",
+        "Maslahat: ovoz xato o'qigan so'zni o'zbekcha qanday eshitilishi "
+        "kerak bo'lsa, shunday yozing. Qo'shimchalar o'zi ulanadi: "
+        "Google'ning → guglning.",
+    ]
+    return "\n".join(q)
+
+
+async def cmd_talaffuz(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/talaffuz — lug'at; /talaffuz So'z = aytilishi — qoida qo'shish."""
+    if update.effective_user is None or update.effective_user.id != ADMIN_ID:
+        return
+    matn = (update.message.text or "").partition(" ")[2].strip()
+    if not matn:
+        await update.message.reply_text(_talaffuz_royxat())
+        return
+    soz, teng, aytilish = matn.partition("=")
+    if not teng:
+        await update.message.reply_text(
+            "Shunday yozing:  /talaffuz So'z = aytilishi\n"
+            "masalan:  /talaffuz Nvidia = envidia")
+        return
+    try:
+        kalit = talaffuz.qosh(soz, aytilish)
+    except ValueError as e:
+        await update.message.reply_text(f"Saqlanmadi: {e}")
+        return
+    namuna = talaffuz.ozgartir(kalit)
+    await update.message.reply_text(
+        f"✅ Saqlandi: {kalit} → {namuna}\n\n"
+        f"Eshitib ko'rish:  /talaffuz_sinov {kalit}")
+
+
+async def cmd_talaffuz_ochir(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user is None or update.effective_user.id != ADMIN_ID:
+        return
+    soz = (update.message.text or "").partition(" ")[2].strip()
+    if not soz:
+        await update.message.reply_text("Shunday yozing:  /talaffuz_ochir So'z")
+        return
+    if talaffuz.ochir(soz):
+        await update.message.reply_text(f"🗑 O'chirildi: {soz}")
+    else:
+        await update.message.reply_text(
+            f"«{soz}» lug'atda yo'q. Ro'yxat: /talaffuz")
+
+
+def _sinov_ovoz(matn, papka):
+    """Bitta sinov ovozi -> Telegram voice (ogg/opus) fayl yo'li."""
+    xom, ext = dublyaj.tts(matn)
+    xom_yol = os.path.join(papka, "sinov." + ext)
+    with open(xom_yol, "wb") as f:
+        f.write(xom)
+    ogg = os.path.join(papka, "sinov.ogg")
+    try:
+        r = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", xom_yol,
+             "-ac", "1", "-c:a", "libopus", "-b:a", "48k", "-y", ogg],
+            capture_output=True, text=True)
+        if r.returncode == 0:
+            return ogg, True
+    except OSError:
+        pass
+    return xom_yol, False
+
+
+async def cmd_talaffuz_sinov(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/talaffuz_sinov [matn] — matnni hozirgi dublyaj ovozida eshittiradi."""
+    if update.effective_user is None or update.effective_user.id != ADMIN_ID:
+        return
+    matn = (update.message.text or "").partition(" ")[2].strip() or SINOV_MATNI
+    matn = matn[:600]
+    ok, sabab = dublyaj.tayyormi()
+    if not ok:
+        await update.message.reply_text(sabab)
+        return
+    manba = dublyaj.MANBA_NOMI.get(dublyaj.tts_manba(), dublyaj.tts_manba())
+    holat = await update.message.reply_text(
+        f"🔊 {manba} o'qiyapti...\n\nDiktor ko'radigan matn:\n"
+        f"{talaffuz.ozgartir(matn)}")
+    papka = tempfile.mkdtemp(prefix="talaffuz_")
+    try:
+        yol, ovozmi = await asyncio.to_thread(_sinov_ovoz, matn, papka)
+        with open(yol, "rb") as f:
+            if ovozmi:
+                await update.message.reply_voice(voice=f)
+            else:
+                await update.message.reply_audio(audio=f, filename=os.path.basename(yol))
+        await holat.edit_text(
+            f"🔊 {manba}\n\nDiktor ko'rgan matn:\n{talaffuz.ozgartir(matn)}\n\n"
+            "Biror so'z noto'g'ri o'qildimi? Tuzating:\n"
+            "/talaffuz So'z = aytilishi")
+    except Exception as e:
+        log.warning("talaffuz sinovi: %s", e)
+        await holat.edit_text(f"Ovoz yasalmadi: {str(e)[:200]}")
+    finally:
+        shutil.rmtree(papka, ignore_errors=True)
+
+
 def register(app: Application):
     """bot.py dan: subtitr.register(app)"""
     if not ADMIN_ID:
@@ -1505,6 +1638,9 @@ def register(app: Application):
     app.add_handler(CommandHandler("bekor", cmd_bekor), group=-2)
     app.add_handler(CommandHandler("shriftlar", cmd_shriftlar))
     app.add_handler(CommandHandler("ovoz_ishchi", cmd_ovoz_ishchi))
+    app.add_handler(CommandHandler("talaffuz", cmd_talaffuz))
+    app.add_handler(CommandHandler("talaffuz_ochir", cmd_talaffuz_ochir))
+    app.add_handler(CommandHandler("talaffuz_sinov", cmd_talaffuz_sinov))
     # group=-2 — agent.py dagi matn ishlovchisidan (group=-1) OLDIN ishlaydi.
     # Kutilmayotgan paytda hech narsaga aralashmaydi.
     app.add_handler(MessageHandler(
