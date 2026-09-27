@@ -22,6 +22,12 @@ ISHGA TUSHIRISH (Terminal):
     <kalit>       — Railway Variables'dagi OVOZ_ISHCHI_KALIT
     caffeinate -i — Mac uxlab qolmasin (skript ishlab turganda)
 
+QAYSI OVOZ: Railway'dagi VOICESTUDIO_VOICE. VoiceStudio'da ovozingizni
+klonlab, unga nom bering (masalan "Muslim") va o'sha NOMNI yozing —
+skript uni o'zi VoiceStudio'ning ichki ID'siga aylantiradi. Yozilmasa
+yoki topilmasa — standart ovoz. Ishga tushganda mavjud ovozlar ro'yxati
+chiqadi.
+
 Ixtiyoriy (atrof-muhit o'zgaruvchilari):
     VOICESTUDIO=http://127.0.0.1:3900   VoiceStudio manzili
 To'xtatish: Ctrl+C
@@ -75,11 +81,67 @@ def voicestudio_tirikmi():
         return False
 
 
+# ----------------------------------------------------------------------
+# OVOZ NOMI -> ID
+# ----------------------------------------------------------------------
+# VoiceStudio /v1/audio/speech faqat profilning ICHKI ID'sini taniydi
+# (uzun, "3f2a9c1e-..." ko'rinishida). Noma'lum satr kelsa u JIMGINA
+# standart ovozga o'tadi — ya'ni "Muslim" deb yozgan odam o'z ovozini
+# eshitmay, nima uchunligini ham bilmay qolardi. Shuning uchun nomni shu
+# yerda, Mac'ning o'zida, ro'yxatdan topamiz.
+_ovozlar = {"vaqt": 0.0, "royxat": []}
+_ogohlantirilgan = set()
+
+
+def ovozlar_royxati(yangila=False):
+    """VoiceStudio'dagi klonlangan ovozlar: [{"voice_id", "name"}, ...]."""
+    if yangila or time.time() - _ovozlar["vaqt"] > 60:
+        try:
+            _, tana = _sorov(VS + "/v1/audio/voices", timeout=10)
+            d = json.loads(tana)
+            _ovozlar["royxat"] = [v for v in (d.get("voices") or [])
+                                  if v.get("type") == "profile" and v.get("voice_id")]
+            _ovozlar["vaqt"] = time.time()
+        except Exception:
+            pass                       # eski ro'yxat bilan davom etamiz
+    return _ovozlar["royxat"]
+
+
+def _qidir(nom, royxat):
+    for v in royxat:
+        if v["voice_id"] == nom:
+            return nom
+    past = nom.strip().lower()
+    for v in royxat:
+        if (v.get("name") or "").strip().lower() == past:
+            return v["voice_id"]
+    return None
+
+
+def ovozni_top(nom):
+    """Nom yoki ID -> VoiceStudio ID. Topilmasa — 'default' (bir marta
+    ogohlantiriladi)."""
+    nom = (nom or "").strip()
+    if not nom or nom == "default":
+        return "default"
+    topildi = _qidir(nom, ovozlar_royxati())
+    if topildi is None:                # hozirgina klonlangan bo'lishi mumkin
+        topildi = _qidir(nom, ovozlar_royxati(yangila=True))
+    if topildi:
+        return topildi
+    if nom not in _ogohlantirilgan:
+        _ogohlantirilgan.add(nom)
+        bor = ", ".join(v.get("name") or v["voice_id"] for v in ovozlar_royxati())
+        ayt(f"⚠️  '{nom}' degan ovoz VoiceStudio'da topilmadi — standart ovoz "
+            f"ishlatiladi. Mavjud ovozlar: {bor or 'hali yo`q'}")
+    return "default"
+
+
 def ovoz_yasa(ish):
     """VoiceStudio'ning OpenAI bilan bir xil /v1/audio/speech yo'li."""
     tana = json.dumps({
         "model": ish.get("model") or "omnivoice",
-        "voice": ish.get("ovoz") or "default",
+        "voice": ovozni_top(ish.get("ovoz")),
         "input": ish["matn"],
         "language": ish.get("til") or "uz",
         "response_format": "wav",
@@ -120,7 +182,15 @@ def main():
         ayt("⏳ VoiceStudio javob bermayapti — ilova ochiqmi? 10 s dan keyin "
             "yana tekshiraman...")
         time.sleep(10)
-    ayt("✅ VoiceStudio tayyor. Botdan ish kutilmoqda... (Ctrl+C — to'xtatish)")
+    ayt("✅ VoiceStudio tayyor.")
+    royxat = ovozlar_royxati(yangila=True)
+    if royxat:
+        ayt("🎙 Klonlangan ovozlar: "
+            + ", ".join(v.get("name") or v["voice_id"] for v in royxat))
+        ayt("   Railway'dagi VOICESTUDIO_VOICE ga shu nomlardan birini yozing.")
+    else:
+        ayt("🎙 Klonlangan ovoz yo'q — standart ovoz ishlatiladi.")
+    ayt("Botdan ish kutilmoqda... (Ctrl+C — to'xtatish)")
 
     bajarildi, xatolar, tarmoq_xato = 0, 0, False
     while True:
