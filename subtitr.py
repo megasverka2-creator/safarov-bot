@@ -1071,13 +1071,23 @@ JAVOB — faqat post matni, izohsiz. Shu tuzilmada:
 Nima qilish kerak: [bir gap]"""
 
 
+# GPT-5 oilasi javob yozishdan oldin "o'ylaydi" va o'sha o'ylash ham shu
+# chegaradan yeydi. Avval 500 edi — o'ylashning o'ziga ketib, javob BO'SH
+# qaytishi mumkin edi. Post o'zi ~150 so'z, zaxira keng.
+POST_TOKEN = int(os.environ.get("SUBTITR_POST_TOKEN", "2500"))
+
+
 def _maqola_yoz(tarjima_matni):
     """Tarjimadan kanal posti yasaydi."""
     r = ai().chat.completions.create(
-        model=MODEL_SMART, max_completion_tokens=500,
+        model=MODEL_SMART, max_completion_tokens=POST_TOKEN,
         messages=[{"role": "system", "content": MAQOLA_PROMPT},
                   {"role": "user", "content": tarjima_matni[:6000]}])
-    return (r.choices[0].message.content or "").strip()
+    matn = (r.choices[0].message.content or "").strip()
+    if not matn:
+        log.warning("Kanal posti bo'sh qaytdi (finish_reason=%s, model=%s)",
+                    getattr(r.choices[0], "finish_reason", "?"), MODEL_SMART)
+    return matn
 
 
 def _post_matni(maqola, kanal):
@@ -1094,7 +1104,18 @@ _kutilmoqda = {}          # {admin_id: (draft_id, "fikr" yoki "tahrir")}
 _navbat = [0]
 
 
-def _qoralama_tugmalari(qid):
+def _qoralama_tugmalari(qid, post_bor=True):
+    """post_bor=False — AI post yoza olmagan holat: kanalga chiqarish va
+    fikr qo'shish yashiriladi (chiqaradigan matn yo'q), lekin OVOZLI
+    QILISH va postni qo'lda yozish qoladi. Avval bunday holatda umuman
+    tugma chiqmasdi — ovoz post yozilishiga bog'lanib qolgan edi."""
+    if not post_bor:
+        return InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔊 Ovozli", callback_data=f"vovoz:{qid}"),
+            InlineKeyboardButton("✏️ Post yozish", callback_data=f"vtah:{qid}"),
+        ], [
+            InlineKeyboardButton("❌ Bekor", callback_data=f"vno:{qid}"),
+        ]])
     return InlineKeyboardMarkup([[
         InlineKeyboardButton("✅ Kanalga", callback_data=f"vpub:{qid}"),
         InlineKeyboardButton("✍️ Fikr", callback_data=f"vfikr:{qid}"),
@@ -1216,6 +1237,10 @@ async def on_video_tugma(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if amal == "vpub":
+        if not (d.get("matn") or "").strip():
+            await q.answer("Avval post matnini yozing (✏️ Post yozish).",
+                           show_alert=True)
+            return
         kanal = d["kanal"]
         try:
             await context.bot.send_video(
@@ -1371,19 +1396,31 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             log.warning("Maqola yozilmadi: %s", e)
             maqola = ""
 
+        # Telegram ba'zan mp4 ni "video" emas, "animation" yoki "document"
+        # qilib qaytaradi — file_id ularning qaysi birida bo'lsa ham olamiz.
         file_id = None
-        if yuborilgan and yuborilgan.video:
-            file_id = yuborilgan.video.file_id
+        if yuborilgan:
+            for tur in (yuborilgan.video, yuborilgan.animation, yuborilgan.document):
+                if tur is not None:
+                    file_id = tur.file_id
+                    break
 
-        if maqola and file_id:
+        if file_id:
             _navbat[0] += 1
             qid = str(_navbat[0])
             _qoralama[qid] = {"file_id": file_id, "matn": maqola, "kanal": KANAL,
                               "segmentlar": segmentlar, "tarjimalar": uz,
                               "brif": brif}
-            await msg.reply_text(
-                f"📰 KANAL POSTI ({KANAL})\n\n{maqola}{izoh}",
-                reply_markup=_qoralama_tugmalari(qid))
+            if maqola:
+                await msg.reply_text(
+                    f"📰 KANAL POSTI ({KANAL})\n\n{maqola}{izoh}",
+                    reply_markup=_qoralama_tugmalari(qid))
+            else:
+                await msg.reply_text(
+                    "📄 To'liq tarjima:\n\n" + toliq[:3300]
+                    + "\n\n⚠️ Kanal posti avtomatik yozilmadi. Videoni baribir "
+                      "ovozli qilish mumkin, postni esa o'zingiz yozasiz." + izoh,
+                    reply_markup=_qoralama_tugmalari(qid, post_bor=False))
         else:
             await msg.reply_text("📄 To'liq tarjima:\n\n" + toliq[:3800])
         await holat.delete()
