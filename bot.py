@@ -39,6 +39,7 @@ import iqtibos  # Iqtibos kartalari (/iqtibos, 3 uslub + AI rasm)
 import subtitr  # Video subtitr (faqat admin)
 import reels    # Stories/Reels generatori (faqat admin)
 import maqola   # Ovozdan maqola: tahlil + muharrir (faqat admin)
+import ovoz_yozuv  # O'z ovozim: model o'qitish uchun yozuvlar (faqat admin)
 import miniapp  # Mini App serveri (index.html + /api)
 import kurs   # Marketing kursi moduli (Stars to'lovi bilan)
 import ustoz  # AI Ustoz: topshiriq tekshirish va savol-javob
@@ -1433,6 +1434,8 @@ BUYRUQLAR_ADMIN = [
     ("ovoz_ishchi",  "Mac'dagi VoiceStudio ovoz ishchisi"),
     ("talaffuz",     "Ovoz talaffuz lug'ati"),
     ("talaffuz_sinov", "Ovozni eshitib sinash"),
+    ("ovoz_yozuv",   "O'z ovozimni yozish (model o'qitish uchun)"),
+    ("ovoz_dataset", "Ovoz yozuvlarini yuklab olish (zaxira)"),
     ("shriftlar",    "Subtitr shriftlari ro'yxati"),
     ("uslub",        "Subtitr uslubi (captions, oltin...)"),
     ("reels",        "Matndan tik video (Stories/Reels)"),
@@ -1539,6 +1542,7 @@ def main():
     subtitr.register(app)  # Video subtitr (admin video tashlaydi)
     reels.register(app)    # Stories/Reels generatori (/reels)
     maqola.register(app)   # Ovozdan maqola (/maqola)
+    ovoz_yozuv.register(app)  # O'z ovozim: o'qitish uchun yozuvlar (/ovoz_yozuv)
     kurs.register(app)   # Marketing kursi (/kurs, 10 Stars)
     ustoz.register(app)  # AI Ustoz (/topshiriq, /savol)
     farosat.register(app)  # Farosat-agent (/farosat)
