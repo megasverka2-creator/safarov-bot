@@ -1430,6 +1430,7 @@ BUYRUQLAR_ADMIN = [
     ("zikr_elon",    "Kanalga zikr banneri"),
     ("zikr_sinov",   "Zikr eslatmasini sinash"),
     ("salovat_matn", "Salovat matnini qo'yish"),
+    ("ovoz_ishchi",  "Mac'dagi VoiceStudio ovoz ishchisi"),
     ("shriftlar",    "Subtitr shriftlari ro'yxati"),
     ("uslub",        "Subtitr uslubi (captions, oltin...)"),
     ("reels",        "Matndan tik video (Stories/Reels)"),

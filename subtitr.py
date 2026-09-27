@@ -8,9 +8,12 @@ Ishlash tartibi:
   3. Whisper (whisper-1) matnga o'giradi — VAQT BELGILARI bilan
      (diqqat: gpt-4o transkripsiya modellari vaqt belgisi bermaydi).
      Uzun yozuv bo'laklarga bo'lib o'giriladi — video uzunligi cheklovsiz.
-  4. AI segmentlarni o'zbekchaga o'giradi — to'plamlab, kontekst saqlanadi
-  5. Matn "kartalar"ga bo'linadi (1-2 qator), .srt yasaladi va kuyiladi
-  6. Admin oladi: subtitrli video + .srt fayl + to'liq tarjima matni
+  4. BRIF: butun matn bir marta o'qilib, mavzu, ohang va atamalar lug'ati
+     tuziladi — uzun podkastda atamalar va ohang bir xil qolsin
+  5. AI segmentlarni o'zbekchaga o'giradi — to'plamlab, brif + kontekst bilan
+  6. Matn "kartalar"ga bo'linadi (1-2 qator), .srt yasaladi va kuyiladi
+  7. Admin oladi: subtitrli video + .srt fayl + to'liq tarjima matni
+  8. "🔊 Ovozli" tugmasi — o'zbekcha ovozli tarjima (dublyaj.py)
 
 KO'RINISH: standart uslub — "captions", ya'ni Captions/CapCut ilovalaridagi
 ko'rinish: Montserrat ExtraBold, yirik matn, bir kartada 7 tagacha so'z,
@@ -33,6 +36,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -44,6 +48,8 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+
+import dublyaj  # ovozli tarjima (voice-over)
 
 try:  # Pillow — mavjud subtitrni aniqlash va matn enini o'lchash uchun
     from PIL import Image, ImageFont
@@ -152,6 +158,9 @@ D. QAT'IY TAQIQ:
 13. Manbada YO'Q narsani QO'SHMA. To'qima fakt, to'qima izoh, "menimcha" \
 qabilidagi o'z fikring — TAQIQ.
 14. Tushunmagan joyingni tashlab ketma — eng yaqin ma'noni ber.
+15. BRIF berilgan bo'lsa — undagi atama tarjimalari, ismlar va ohangga \
+QAT'IY amal qil. Bir atama butun video bo'ylab BIR XIL tarjima qilinsin: \
+bir joyda "sozlash", boshqasida "moslashtirish" bo'lmasin.
 
 O'Z-O'ZINI TEKSHIRISH: har qatorni o'qib chiq — (1) o'zbek shunday gapiradimi? \
 (2) 2-4 soniyada o'qib bo'ladimi? (3) manbadagi ma'no to'liq saqlanganmi?
@@ -159,6 +168,79 @@ O'Z-O'ZINI TEKSHIRISH: har qatorni o'qib chiq — (1) o'zbek shunday gapiradimi?
 JAVOB SHAKLI — faqat JSON, izohsiz:
 {"lines": [{"n": 1, "uz": "tarjima"}, {"n": 2, "uz": "tarjima"}]}
 Har kirish segmenti uchun bittadan qator bo'lishi SHART."""
+
+
+# ======================================================================
+# BRIF — butun video bo'yicha bitta "yo'l xaritasi"
+# ======================================================================
+# NEGA KERAK: tarjima 60 segmentlik to'plamlarda qilinadi va har to'plam
+# oldingisidan faqat 3 qatorni ko'radi. Natijada uzun podkastda bitta
+# atama turli joyda turlicha o'girilardi, suhbat ohangi (jiddiy/hazil,
+# "siz"/"sen") to'plamdan to'plamga sakrardi, model esa kim gapirayotganini
+# bilmasdi. Brif — butun matnni BIR MARTA o'qib chiqilgan qisqa xulosa:
+# mavzu, ohang, atamalar lug'ati, ismlar. U har to'plamga (subtitr ham,
+# ovozli tarjima ham) qo'shib beriladi. Narxi — bitta qo'shimcha so'rov.
+BRIF_PROMPT = """Sen video tarjimasiga tayyorgarlik ko'rayotgan muharrirsan. \
+Quyida videoning inglizcha matni. Uni o'qib, tarjimon uchun QISQA brif tuz.
+
+Faqat JSON qaytar:
+{
+  "mavzu": "1-2 jumla: nima haqida, kimlar gapiryapti (o'zbekcha)",
+  "ohang": "masalan: jonli suhbat, hazil aralash / jiddiy ma'ruza",
+  "murojaat": "siz yoki sen — o'zbek tomoshabinga qaysi biri mos",
+  "atamalar": [{"en": "fine-tuning", "uz": "fine-tuning (qo'shimcha o'qitish)"}],
+  "ismlar": ["Sam Altman", "OpenAI"]
+}
+
+Qoidalar:
+- "atamalar" — matnda BIR NECHA MARTA uchraydigan va turlicha o'girilishi \
+mumkin bo'lgan 5-15 ta so'z/ibora. Har biriga BITTA o'zbekcha variant tanla. \
+O'zbekda o'rnashgan inglizcha atamani (startap, marketing, AI) tarjima qilma.
+- "ismlar" — odam, kompaniya, mahsulot nomlari, manbadagi yozilishida.
+- O'zingdan fakt qo'shma."""
+
+BRIF_MAKS = int(os.environ.get("SUBTITR_BRIF_MAKS", "14000"))
+
+
+def _brif(segmentlar):
+    """Butun matndan tarjima brifi. Ishlamasa — bo'sh satr (tarjima
+    baribir davom etadi, faqat brifsiz)."""
+    matn = " ".join(t for _, _, t in segmentlar).strip()
+    if len(matn) < 200:            # qisqa video — brifga hojat yo'q
+        return ""
+    if len(matn) > BRIF_MAKS:      # uzun podkast: boshi, o'rtasi, oxiri
+        u = BRIF_MAKS // 3
+        orta = len(matn) // 2
+        matn = (matn[:u] + " [...] " + matn[orta - u // 2:orta + u // 2]
+                + " [...] " + matn[-u:])
+    try:
+        r = ai().chat.completions.create(
+            model=MODEL_SMART,
+            response_format={"type": "json_object"},
+            max_completion_tokens=900,
+            messages=[{"role": "system", "content": BRIF_PROMPT},
+                      {"role": "user", "content": matn}])
+        d = json.loads(r.choices[0].message.content)
+    except Exception as e:
+        log.warning("Brif tuzilmadi: %s", e)
+        return ""
+
+    qatorlar = []
+    if d.get("mavzu"):
+        qatorlar.append(f"Mavzu: {d['mavzu']}")
+    if d.get("ohang"):
+        qatorlar.append(f"Ohang: {d['ohang']}")
+    if d.get("murojaat"):
+        qatorlar.append(f"Tomoshabinga murojaat: {d['murojaat']}")
+    atamalar = [a for a in (d.get("atamalar") or [])
+                if isinstance(a, dict) and a.get("en") and a.get("uz")]
+    if atamalar:
+        qatorlar.append("Atamalar (butun video bo'ylab SHU tarjima):")
+        qatorlar += [f"  - {a['en']} -> {a['uz']}" for a in atamalar[:20]]
+    ismlar = [str(x) for x in (d.get("ismlar") or []) if x]
+    if ismlar:
+        qatorlar.append("Ismlar (o'zgartirilmaydi): " + ", ".join(ismlar[:25]))
+    return "\n".join(qatorlar)
 
 
 # ======================================================================
@@ -694,10 +776,12 @@ def _transkripsiya(ovoz_yol, davomiylik=0.0):
     return hammasi, til
 
 
-def _tarjima_toplam(matnlar, kontekst=""):
+def _tarjima_toplam(matnlar, kontekst="", brif=""):
     """Bitta to'plamni o'giradi. Qaytadi: tartib bo'yicha tarjimalar."""
     kirish = "\n".join(f"[{i}] {t}" for i, t in enumerate(matnlar, 1))
     xabarlar = [{"role": "system", "content": TARJIMA_PROMPT}]
+    if brif:
+        xabarlar.append({"role": "user", "content": "BRIF:\n" + brif})
     if kontekst:
         xabarlar.append({
             "role": "user",
@@ -720,7 +804,7 @@ def _tarjima_toplam(matnlar, kontekst=""):
     return [xarita.get(i) or matnlar[i - 1] for i in range(1, len(matnlar) + 1)]
 
 
-def _tarjima(segmentlar, toplam_no=None):
+def _tarjima(segmentlar, toplam_no=None, brif=""):
     """Segmentlarni o'giradi.
 
     Uzun videoda segment yuzlab bo'ladi — hammasini bitta javobda so'rasak,
@@ -734,7 +818,7 @@ def _tarjima(segmentlar, toplam_no=None):
     if len(matnlar) <= TARJIMA_TOPLAM:
         if toplam_no:
             toplam_no(1, 1)
-        return _tarjima_toplam(matnlar)
+        return _tarjima_toplam(matnlar, brif=brif)
 
     natija, kontekst = [], ""
     jami = (len(matnlar) + TARJIMA_TOPLAM - 1) // TARJIMA_TOPLAM
@@ -742,7 +826,7 @@ def _tarjima(segmentlar, toplam_no=None):
         bolak = matnlar[k * TARJIMA_TOPLAM:(k + 1) * TARJIMA_TOPLAM]
         if toplam_no:
             toplam_no(k + 1, jami)
-        uz = _tarjima_toplam(bolak, kontekst)
+        uz = _tarjima_toplam(bolak, kontekst, brif)
         natija += uz
         kontekst = " ".join(uz[-3:])
     return natija
@@ -949,89 +1033,18 @@ async def on_uslub_tugma(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ======================================================================
-# OVOZLI VARIANT (dublyaj) — OpenAI TTS
+# OVOZLI VARIANT (dublyaj) — dublyaj.py da
 # ======================================================================
-TTS_MODEL = os.environ.get("SUBTITR_TTS_MODEL", "gpt-4o-mini-tts")
-TTS_VOICE = os.environ.get("SUBTITR_TTS_VOICE", "onyx")
-TTS_INSTR = os.environ.get(
-    "SUBTITR_TTS_INSTR",
-    "Speak in Uzbek with natural Uzbek pronunciation. "
-    "Calm, clear, neutral narrator tone. Do not add an English accent.")
-ASL_OVOZ = float(os.environ.get("SUBTITR_ASL_OVOZ", "0.18"))   # asl ovoz darajasi
+def _llm_json(xabarlar, max_tokens):
+    """dublyaj.py uchun: xabarlar -> JSON matn. Subtitr bilan bir model."""
+    r = ai().chat.completions.create(
+        model=MODEL_SMART, response_format={"type": "json_object"},
+        max_completion_tokens=max_tokens, messages=xabarlar)
+    return r.choices[0].message.content
 
 
-def _tts_bytes(matn):
-    """Bitta bo'lak uchun o'zbekcha ovoz (mp3 baytlari)."""
-    kw = {"model": TTS_MODEL, "voice": TTS_VOICE, "input": matn[:1800],
-          "response_format": "mp3"}
-    if TTS_MODEL.startswith("gpt-"):        # yangi modellar yo'riqnoma qabul qiladi
-        kw["instructions"] = TTS_INSTR
-    r = ai().audio.speech.create(**kw)
-    return r.content
-
-
-def _audio_davomiylik(yol):
-    r = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "default=noprint_wrappers=1:nokey=1", yol],
-        capture_output=True, text=True)
-    try:
-        return float(r.stdout.strip())
-    except ValueError:
-        return 0.0
-
-
-def _ovoz_bolaklari(segmentlar, matnlar, papka):
-    """Har segment uchun TTS yasaydi va uni segment vaqtiga moslaydi.
-    O'zbekcha matn odatda uzunroq chiqadi — ovoz biroz tezlashtiriladi.
-    Tezlik 0.75-1.6 oralig'ida cheklangan: undan tashqarida ovoz buziladi."""
-    natija = []
-    for i, ((b, o, _), m) in enumerate(zip(segmentlar, matnlar)):
-        m = (m or "").strip()
-        if not m:
-            continue
-        yol = os.path.join(papka, f"tts{i}.mp3")
-        try:
-            with open(yol, "wb") as f:
-                f.write(_tts_bytes(m))
-        except Exception as e:
-            log.warning("TTS xatosi (%d): %s", i, e)
-            continue
-        d = _audio_davomiylik(yol)
-        maqsad = max(float(o) - float(b), 0.6)
-        if d > 0.1:
-            tempo = max(0.75, min(d / maqsad, 1.6))
-            if abs(tempo - 1.0) > 0.04:
-                tez = os.path.join(papka, f"tez{i}.mp3")
-                r = subprocess.run(
-                    ["ffmpeg", "-i", yol, "-filter:a", f"atempo={tempo:.3f}",
-                     "-y", tez], capture_output=True)
-                if r.returncode == 0:
-                    yol = tez
-        natija.append((float(b), yol))
-    return natija
-
-
-def _dublyaj_qil(video_yol, bolaklar, chiqish_yol):
-    """Asl ovozni pasaytirib, ustiga o'zbekcha ovozni qo'yadi."""
-    if not bolaklar:
-        raise RuntimeError("Ovoz bo'laklari yasalmadi")
-    inp = ["-i", video_yol]
-    for _, y in bolaklar:
-        inp += ["-i", y]
-    filt = [f"[0:a]volume={ASL_OVOZ}[orig]"]
-    for i, (b, _) in enumerate(bolaklar, start=1):
-        ms = int(max(b, 0) * 1000)
-        filt.append(f"[{i}:a]adelay={ms}|{ms}[d{i}]")
-    yorliq = "[orig]" + "".join(f"[d{i}]" for i in range(1, len(bolaklar) + 1))
-    filt.append(f"{yorliq}amix=inputs={len(bolaklar) + 1}"
-                f":duration=first:normalize=0[a]")
-    r = subprocess.run(
-        ["ffmpeg", *inp, "-filter_complex", ";".join(filt),
-         "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac",
-         "-y", chiqish_yol], capture_output=True, text=True)
-    if r.returncode != 0:
-        raise RuntimeError(f"Dublyaj xatosi: {r.stderr[-300:]}")
+# Telegram bot 50 MB dan katta faylni yubora olmaydi
+YUBORISH_MAKS = 49 * 1024 * 1024
 
 
 MAQOLA_PROMPT = """Sen o'zbek Telegram kanalining muharririsan. Senga video \
@@ -1120,34 +1133,77 @@ async def on_video_tugma(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if amal == "vovoz":
         segs = d.get("segmentlar") or []
-        trs = d.get("tarjimalar") or []
-        if not segs or not trs:
+        if not segs:
             await q.answer("Segment ma'lumoti yo'q.", show_alert=True)
             return
+        tayyor, sabab = dublyaj.tayyormi()
+        if not tayyor:
+            await q.answer("Ovoz manbai tayyor emas", show_alert=True)
+            await context.bot.send_message(chat_id=q.from_user.id,
+                                           text="⚠️ " + sabab)
+            return
         await q.answer("Ovoz tayyorlanmoqda...")
+        manba = dublyaj.MANBA_NOMI.get(dublyaj.tts_manba(), dublyaj.tts_manba())
         holat = await context.bot.send_message(
             chat_id=q.from_user.id,
-            text=f"🔊 O'zbekcha ovoz yasalmoqda ({len(segs)} bo'lak)...\n"
-                 f"Bu bir necha daqiqa olishi mumkin.")
+            text=f"🔊 O'zbekcha ovozli tarjima boshlandi (ovoz: {manba}).\n"
+                 f"Uzun videoda bir necha daqiqa oladi.")
+        loop = asyncio.get_running_loop()
+
+        def holat_yoz(matn):
+            # dublyaj alohida oqimda ishlaydi — xabar asosiy halqada yangilanadi
+            async def _yoz():
+                try:
+                    await holat.edit_text(matn)
+                except Exception:
+                    pass
+            asyncio.run_coroutine_threadsafe(_yoz(), loop)
+
         ish = tempfile.mkdtemp(prefix="dub_")
         try:
             fayl = await context.bot.get_file(d["file_id"])
             video_yol = os.path.join(ish, "kirish.mp4")
             await fayl.download_to_drive(video_yol)
 
-            bolaklar = await asyncio.to_thread(_ovoz_bolaklari, segs, trs, ish)
-            if not bolaklar:
-                await holat.edit_text("Ovoz yasalmadi — TTS javob bermadi.")
-                return
-            await holat.edit_text(
-                f"🎚 Ovoz aralashtirilmoqda ({len(bolaklar)} bo'lak)...")
             chiqish = os.path.join(ish, "ovozli.mp4")
-            await asyncio.to_thread(_dublyaj_qil, video_yol, bolaklar, chiqish)
+            h = await asyncio.to_thread(
+                dublyaj.dublyaj_qil, video_yol, segs, chiqish, _llm_json,
+                d.get("brif", ""), holat_yoz)
 
-            with open(chiqish, "rb") as f:
-                await context.bot.send_video(
-                    chat_id=q.from_user.id, video=f,
-                    caption="O'zbekcha ovoz bilan (asl ovoz pastda)")
+            izoh = (f"🔊 O'zbekcha ovoz · {h['ovozlandi']}/{h['iboralar']} ibora"
+                    f" · ovoz: {h['manba']}")
+            if h["qisqartirildi"] or h["tezlatildi"]:
+                izoh += (f"\nVaqtga moslandi: {h['qisqartirildi']} qisqartirildi, "
+                         f"{h['tezlatildi']} biroz tezlatildi")
+            if h["kechikish"] >= 1.0:
+                izoh += f"\nEng katta kechikish: {h['kechikish']} s"
+            if h["xato"]:
+                izoh += f"\n⚠️ {h['xato']} ta ibora ovozlanmadi"
+
+            if os.path.getsize(chiqish) <= YUBORISH_MAKS:
+                with open(chiqish, "rb") as f:
+                    await context.bot.send_video(
+                        chat_id=q.from_user.id, video=f, caption=izoh[:1024],
+                        supports_streaming=True)
+            else:
+                # Uzun podkast videosi 50 MB ga sig'maydi — ovozini yuboramiz
+                mp3 = os.path.join(ish, "ovozli.mp3")
+                await asyncio.to_thread(dublyaj.faqat_audio, chiqish, mp3)
+                with open(mp3, "rb") as f:
+                    await context.bot.send_audio(
+                        chat_id=q.from_user.id, audio=f,
+                        title="O'zbekcha ovozli tarjima",
+                        caption=(izoh + "\n\nVideo 50 MB dan katta — Telegram "
+                                 "bot yubora olmaydi, shuning uchun faqat ovoz.")[:1024])
+            if h.get("matn"):
+                with open(os.path.join(ish, "ovoz_matni.txt"), "w",
+                          encoding="utf-8") as f:
+                    f.write(h["matn"])
+                with open(os.path.join(ish, "ovoz_matni.txt"), "rb") as f:
+                    await context.bot.send_document(
+                        chat_id=q.from_user.id, document=f,
+                        filename="ovoz_matni.txt",
+                        caption="Diktor o'qigan matn — tekshirish uchun")
             await holat.delete()
         except Exception as e:
             log.exception("Dublyaj xatosi")
@@ -1261,6 +1317,9 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await holat.edit_text("Nutq topilmadi — videoda ovoz bormi?")
             return
 
+        await holat_yoz("🧭 Mavzu, ohang va atamalar aniqlanmoqda...")
+        brif = await asyncio.to_thread(_brif, segmentlar)
+
         await holat_yoz(
             f"🌐 Tarjima qilinmoqda ({len(segmentlar)} segment, manba: {til})...")
         loop = asyncio.get_running_loop()
@@ -1270,7 +1329,7 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 asyncio.run_coroutine_threadsafe(
                     holat_yoz(f"🌐 Tarjima qilinmoqda... {k}/{jami}"), loop)
 
-        uz = await asyncio.to_thread(_tarjima, segmentlar, tarjima_belgisi)
+        uz = await asyncio.to_thread(_tarjima, segmentlar, tarjima_belgisi, brif)
 
         en0, bal0 = await asyncio.to_thread(_video_olchami, video_yol)
         uslub_nomi = joriy_uslub()
@@ -1320,7 +1379,8 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _navbat[0] += 1
             qid = str(_navbat[0])
             _qoralama[qid] = {"file_id": file_id, "matn": maqola, "kanal": KANAL,
-                              "segmentlar": segmentlar, "tarjimalar": uz}
+                              "segmentlar": segmentlar, "tarjimalar": uz,
+                              "brif": brif}
             await msg.reply_text(
                 f"📰 KANAL POSTI ({KANAL})\n\n{maqola}{izoh}",
                 reply_markup=_qoralama_tugmalari(qid))
@@ -1338,6 +1398,59 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         shutil.rmtree(ish, ignore_errors=True)
 
 
+OVOZ_ISHCHI_FAYL = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "ovoz_ishchi.py")
+
+
+async def cmd_ovoz_ishchi(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/ovoz_ishchi — Mac'dagi VoiceStudio ishchisining holati va skripti.
+
+    Kalitni ATAYLAB yubormaymiz: u Railway Variables'da turadi. Telegram
+    chatida maxfiy kalit aylanib yurmasin."""
+    if update.effective_user is None or update.effective_user.id != ADMIN_ID:
+        return
+    import ovoz_navbat
+    h = ovoz_navbat.holat()
+    manba = dublyaj.tts_manba()
+    if h["oxirgi_korinish"]:
+        oldin = int(time.time() - h["oxirgi_korinish"])
+        korinish = (f"✅ ulangan ({oldin} s oldin ko'rindi)" if oldin <= 90
+                    else f"❌ ulanmagan (oxirgi marta {oldin // 60} daqiqa oldin)")
+    else:
+        korinish = "❌ hali bir marta ham ulanmagan"
+    kalit_bor = len(os.environ.get("OVOZ_ISHCHI_KALIT", "").strip()) >= 24
+
+    qatorlar = [
+        "🎙 VoiceStudio ovoz ishchisi",
+        "",
+        f"Dublyaj ovozi hozir: {dublyaj.MANBA_NOMI.get(manba, manba)}",
+        f"Ishchi: {korinish}",
+        f"Navbatda: {h['kutmoqda']} · bajarilmoqda: {h['olingan']}",
+        f"OVOZ_ISHCHI_KALIT: {'✅ berilgan' if kalit_bor else '❌ berilmagan (24+ belgi kerak)'}",
+    ]
+    if manba != "mac":
+        qatorlar += ["", "Yoqish uchun Railway → Variables: DUBLYAJ_TTS = voicestudio"]
+    qatorlar += [
+        "",
+        "Mac'da ishga tushirish:",
+        "1. VoiceStudio ilovasini oching (o'zbekcha ovoz uchun OmniVoice)",
+        "2. Pastdagi ovoz_ishchi.py faylini saqlang",
+        "3. Terminal'da:",
+        "   python3 ovoz_ishchi.py <bot_manzili> <kalit>",
+        "   bot manzili — Railway'dagi https://... domen,",
+        "   kalit — Railway'dagi OVOZ_ISHCHI_KALIT",
+        "",
+        "Terminal ochiq tursa — ishchi ishlaydi. Mac uxlab qolmasin.",
+    ]
+    await update.message.reply_text("\n".join(qatorlar))
+    if os.path.exists(OVOZ_ISHCHI_FAYL):
+        with open(OVOZ_ISHCHI_FAYL, "rb") as f:
+            await update.message.reply_document(
+                document=f, filename="ovoz_ishchi.py",
+                caption="Mac uchun ovoz ishchisi (Python 3, qo'shimcha "
+                        "kutubxona shart emas)")
+
+
 def register(app: Application):
     """bot.py dan: subtitr.register(app)"""
     if not ADMIN_ID:
@@ -1352,6 +1465,7 @@ def register(app: Application):
     app.add_handler(CommandHandler("uslub", cmd_uslub))
     app.add_handler(CommandHandler("bekor", cmd_bekor), group=-2)
     app.add_handler(CommandHandler("shriftlar", cmd_shriftlar))
+    app.add_handler(CommandHandler("ovoz_ishchi", cmd_ovoz_ishchi))
     # group=-2 — agent.py dagi matn ishlovchisidan (group=-1) OLDIN ishlaydi.
     # Kutilmayotgan paytda hech narsaga aralashmaydi.
     app.add_handler(MessageHandler(
