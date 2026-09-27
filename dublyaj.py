@@ -44,7 +44,9 @@ OVOZ MANBAI (Railway → DUBLYAJ_TTS):
                      chaqiradi. Faqat xususiy tarmoq (Tailscale) va
                      OMNIVOICE_API_KEY bilan; hech qachon ochiq tunnel
                      orqali emas.
-                 VOICESTUDIO_VOICE = ovoz profili ID (klonlangan ovoz)
+                 VOICESTUDIO_VOICE = klonlangan ovozning NOMI (masalan
+                 "Muslim"); Mac ishchisi uni ID'ga o'zi aylantiradi.
+                 Berilmasa — standart ovoz.
                  DIQQAT: VoiceStudio'ning standart modeli (OmniVoice)
                  og'irliklari CC-BY-NC — tijorat kanalida ishlatishdan
                  oldin litsenziyasini tekshiring.

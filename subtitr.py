@@ -1426,6 +1426,8 @@ async def cmd_ovoz_ishchi(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Dublyaj ovozi hozir: {dublyaj.MANBA_NOMI.get(manba, manba)}",
         f"Ishchi: {korinish}",
         f"Navbatda: {h['kutmoqda']} · bajarilmoqda: {h['olingan']}",
+        f"Ovoz (VOICESTUDIO_VOICE): {dublyaj.VS_VOICE}"
+        + ("  ← standart ovoz" if dublyaj.VS_VOICE == "default" else ""),
         f"OVOZ_ISHCHI_KALIT: {'✅ berilgan' if kalit_bor else '❌ berilmagan (24+ belgi kerak)'}",
     ]
     if manba != "mac":
