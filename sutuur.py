@@ -14,6 +14,7 @@ Sozlash: SUTUUR_CHANNEL env (standart @Sutuur_uz).
 bot.py:  import sutuur  →  sutuur.register(app)
 """
 
+import asyncio
 import logging
 import os
 import random
@@ -132,7 +133,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if q.data.startswith("st_satr"):
         await q.answer("Satrlar yozilmoqda... ✍️")
         try:
-            raw = _gen(SATR_PROMPT)
+            raw = await asyncio.to_thread(_gen, SATR_PROMPT)
         except Exception as e:
             await context.bot.send_message(q.message.chat_id, f"Xatolik: {e}")
             return
@@ -151,7 +152,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer("Hikoya yozilmoqda... 📖 (20-30 soniya)")
         mavzu = random.choice(ADAB_MAVZULAR)
         try:
-            post = _gen(ADAB_PROMPT.format(mavzu=mavzu))
+            post = await asyncio.to_thread(_gen, ADAB_PROMPT.format(mavzu=mavzu))
         except Exception as e:
             await context.bot.send_message(q.message.chat_id, f"Xatolik: {e}")
             return

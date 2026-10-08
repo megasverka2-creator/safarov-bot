@@ -35,6 +35,7 @@ Taklif matni ham qo'lda yozilgan — hech qanday diniy hukm yoki savob va'dasi
 yo'q, faqat samimiy chaqiruv.
 """
 
+import asyncio
 import logging
 import os
 import random
@@ -49,7 +50,7 @@ from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
     InlineQueryResultArticle, InputTextMessageContent,
 )
-from telegram.error import Forbidden, BadRequest
+from telegram.error import Forbidden, BadRequest, RetryAfter
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -330,76 +331,139 @@ async def cmd_zikr_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ======================================================================
 # "AYTDIM" — tasbehdek TAKROR marta bosiladi
 # ======================================================================
+# Telegram bitta xabarni tez-tez tahrirlashni cheklaydi (RetryAfter).
+# Tasbeh 10 marta tez bosilganda har bosishga tahrir yuborilsa, cheklovga
+# urilib sanoq "qotib" qolardi. Endi: sanoq DARHOL javob oynachasida
+# (toast) ko'rinadi, xabar esa ko'pi bilan TAHRIR_ORALIQ soniyada bir marta
+# — eng so'nggi holat bilan — yangilanadi. Oraliq bosishlar birlashadi.
+TAHRIR_ORALIQ = float(os.environ.get("ZIKR_TAHRIR_ORALIQ", "1.2"))
+_tahrirlar = {}   # (chat_id, message_id) -> {"oxirgi", "navbat", "vazifa"}
+
+
+def _kutish_sek(e):
+    ra = e.retry_after
+    return ra.total_seconds() if hasattr(ra, "total_seconds") else float(ra)
+
+
+async def _tahrir_ishchi(bot, kalit, h):
+    loop = asyncio.get_running_loop()
+    while h["navbat"] is not None:
+        kut = h["oxirgi"] + TAHRIR_ORALIQ - loop.time()
+        if kut > 0:
+            await asyncio.sleep(kut)
+        matn, tugma = h["navbat"]
+        h["navbat"] = None
+        try:
+            await bot.edit_message_text(matn, chat_id=kalit[0],
+                                        message_id=kalit[1], reply_markup=tugma)
+        except RetryAfter as e:
+            if h["navbat"] is None:            # yangisi kelmagan — shuni qayta
+                h["navbat"] = (matn, tugma)
+            await asyncio.sleep(_kutish_sek(e) + 0.3)
+        except BadRequest as e:
+            if "not modified" not in str(e).lower():
+                log.warning("Zikr xabarini tahrirlab bo'lmadi: %s", e)
+        except Exception as e:
+            log.warning("Zikr xabarini tahrirlab bo'lmadi: %s", e)
+        h["oxirgi"] = loop.time()
+
+
+def _tahrirla(query, matn, tugma=None):
+    """Xabarni (cheklov bilan) yangilaydi. Kutmaydi — darhol qaytadi."""
+    loop = asyncio.get_running_loop()
+    if len(_tahrirlar) > 500:                  # eski yozuvlarni tozalash
+        for k in [k for k, v in _tahrirlar.items()
+                  if v["navbat"] is None and loop.time() - v["oxirgi"] > 60]:
+            _tahrirlar.pop(k, None)
+    kalit = (query.message.chat_id, query.message.message_id)
+    h = _tahrirlar.setdefault(kalit, {"oxirgi": 0.0, "navbat": None,
+                                      "vazifa": None})
+    h["navbat"] = (matn, tugma)
+    if h["vazifa"] is None or h["vazifa"].done():
+        h["vazifa"] = asyncio.create_task(
+            _tahrir_ishchi(query.get_bot(), kalit, h))
+
+
+def _aytdim_bazada(uid, kun, vaqt):
+    """Bitta "Aytdim" — bazadagi hamma ish (thread ichida ishlaydi).
+
+    BEGIN IMMEDIATE: umumiy hisob "o'qi -> +1 -> yoz" ko'rinishida. Ko'p
+    odam bir vaqtda bossa, qulfsiz ikkitasi bir xil sonni o'qib, bittasi
+    yo'qolardi."""
+    conn = db()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        row = None
+        if kun is not None:
+            row = conn.execute(
+                "SELECT bosildi, zikr_idx FROM zikr_plan "
+                "WHERE uid=? AND kun=? AND vaqt=?", (uid, kun, vaqt)).fetchone()
+        if row is None:
+            # eski format (zikr_ok) yoki reja tozalangan — bir marta hisoblab yopamiz
+            natija = {"tur": "eski", "kunlik": hisob_oshir(conn)}
+            conn.commit()
+            return natija
+        bosildi, idx = int(row[0] or 0), int(row[1] or 0)
+        if bosildi >= TAKROR:                  # ikki marta bosib yuborilgan
+            conn.commit()
+            return {"tur": "tugagan"}
+        bosildi += 1
+        conn.execute(
+            "UPDATE zikr_plan SET bosildi=? WHERE uid=? AND kun=? AND vaqt=?",
+            (bosildi, uid, kun, vaqt))
+        natija = {"tur": "tasbeh", "bosildi": bosildi, "idx": idx,
+                  "kunlik": hisob_oshir(conn), "yakun": False}
+        if bosildi >= TAKROR and _kun_yakunlandimi(conn, uid, kun):
+            natija["yakun"] = True
+            natija["streak"] = _streak_yangila(conn, uid, kun)
+            natija["taklif"] = _taklif_vaqtimi(conn, uid, kun)
+            if natija["taklif"]:
+                conn.execute("UPDATE zikr_users SET oxirgi_taklif=? WHERE uid=?",
+                             (kun, uid))
+        conn.commit()
+        return natija
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 async def on_aytdim(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     uid = query.from_user.id
-    data = query.data or ""
-    bolak = data.split("|")
+    bolak = (query.data or "").split("|")
+    kun, vaqt = (bolak[1], bolak[2]) if len(bolak) == 3 else (None, None)
 
-    conn = db()
-    row = None
-    kun = vaqt = None
-    if len(bolak) == 3:
-        kun, vaqt = bolak[1], bolak[2]
-        row = conn.execute(
-            "SELECT bosildi, zikr_idx FROM zikr_plan "
-            "WHERE uid=? AND kun=? AND vaqt=?", (uid, kun, vaqt)).fetchone()
-
-    # Eski format (zikr_ok) yoki reja tozalangan — bir marta hisoblab yopamiz
-    if row is None:
-        kunlik = hisob_oshir(conn)
-        conn.commit()
-        conn.close()
-        await query.answer()
-        try:
-            await query.edit_message_text(f"Hammamiz bugun: {raqam(kunlik)}")
-        except BadRequest as e:
-            log.warning("Zikr xabarini tahrirlab bo'lmadi: %s", e)
-        return
-
-    bosildi, idx = int(row[0] or 0), int(row[1] or 0)
-    if bosildi >= TAKROR:                      # ikki marta bosib yuborilgan
-        conn.close()
-        await query.answer()
-        return
-
-    bosildi += 1
-    conn.execute(
-        "UPDATE zikr_plan SET bosildi=? WHERE uid=? AND kun=? AND vaqt=?",
-        (bosildi, uid, kun, vaqt))
-    kunlik = hisob_oshir(conn)
-    conn.commit()
-    await query.answer()
-
-    # --- hali tasbeh to'lmadi ---
-    if bosildi < TAKROR:
-        arab, lotin, mano = ZIKRLAR[idx % len(ZIKRLAR)]
-        try:
-            await query.edit_message_text(
-                zikr_matni(arab, lotin, mano, bosildi),
-                reply_markup=_tugma(kun, vaqt))
-        except BadRequest as e:
-            log.warning("Zikr tasbehini yangilab bo'lmadi: %s", e)
-        conn.close()
-        return
-
-    # --- bu eslatma to'liq aytildi ---
     try:
-        await query.edit_message_text(f"Hammamiz bugun: {raqam(kunlik)}")
-    except BadRequest as e:
-        log.warning("Zikr xabarini tahrirlab bo'lmadi: %s", e)
+        n = await asyncio.to_thread(_aytdim_bazada, uid, kun, vaqt)
+    except Exception as e:
+        log.warning("Zikr bosilishi saqlanmadi: %s", e)
+        await query.answer("Qayta bosing", show_alert=False)
+        return
 
-    # --- kunning hamma eslatmasi tugadimi? ---
-    if _kun_yakunlandimi(conn, uid, kun):
-        streak = _streak_yangila(conn, uid, kun)
-        taklif = _taklif_vaqtimi(conn, uid, kun)
-        if taklif:
-            conn.execute("UPDATE zikr_users SET oxirgi_taklif=? WHERE uid=?",
-                         (kun, uid))
-        conn.commit()
-        await _kun_yakun_xabar(context, uid, kun, streak, kunlik, taklif)
-    conn.commit()
-    conn.close()
+    if n["tur"] == "tugagan":
+        await query.answer()
+        return
+    if n["tur"] == "eski":
+        await query.answer()
+        _tahrirla(query, f"Hammamiz bugun: {raqam(n['kunlik'])}")
+        return
+
+    bosildi = n["bosildi"]
+    await query.answer(f"{bosildi}/{TAKROR}")
+
+    if bosildi < TAKROR:                       # hali tasbeh to'lmadi
+        arab, lotin, mano = ZIKRLAR[n["idx"] % len(ZIKRLAR)]
+        _tahrirla(query, zikr_matni(arab, lotin, mano, bosildi),
+                  _tugma(kun, vaqt))
+        return
+
+    # bu eslatma to'liq aytildi
+    _tahrirla(query, f"Hammamiz bugun: {raqam(n['kunlik'])}")
+    if n["yakun"]:
+        await _kun_yakun_xabar(context, uid, kun, n["streak"], n["kunlik"],
+                               n["taklif"])
 
 
 # ======================================================================
@@ -676,6 +740,7 @@ async def _oylik_xabar(context, conn, oy_nomi, jami):
             yuborildi += 1
         except Forbidden:
             conn.execute("UPDATE zikr_users SET active=0 WHERE uid=?", (uid,))
+            conn.commit()      # baza keyingi yuborishlar davomida band turmasin
         except Exception as e:
             log.warning("Zikr oylik xabar (%s): %s", uid, e)
     conn.commit()
@@ -715,6 +780,7 @@ async def job_tekshir(context: ContextTypes.DEFAULT_TYPE):
             conn.execute("UPDATE zikr_users SET active=0 WHERE uid=?", (uid,))
             conn.execute("DELETE FROM zikr_plan WHERE uid=? AND yuborildi=0",
                          (uid,))
+            conn.commit()
             log.info("Zikr: %s bloklagan, ro'yxatdan chiqarildi", uid)
             continue
         except Exception as e:
@@ -722,7 +788,10 @@ async def job_tekshir(context: ContextTypes.DEFAULT_TYPE):
         conn.execute(
             "UPDATE zikr_plan SET yuborildi=1, zikr_idx=?, bosildi=0 "
             "WHERE uid=? AND kun=? AND vaqt=?", (idx, uid, kun, t))
-    conn.commit()
+        # DARHOL commit: yozuv tranzaksiyasi keyingi send_message'lar
+        # davomida ochiq qolsa, baza band turadi va "Aytdim" bosgan har
+        # kim 30 soniyagacha kutib qolardi (bot qotishining asosiy sababi).
+        conn.commit()
     conn.close()
 
 
@@ -1002,17 +1071,16 @@ async def on_salovat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except (IndexError, ValueError):
         qadam = 1
 
-    conn = db()
-    matn = salovat_matn_ol(conn)
-    if matn is None:
-        conn.close()
+    try:
+        n = await asyncio.to_thread(_salovat_bazada, uid, kun, qadam)
+    except Exception as e:
+        log.warning("Salovat bosilishi saqlanmadi: %s", e)
+        await query.answer("Qayta bosing")
+        return
+    if n is None:
         await query.answer("Salovat matni hali qo'yilmagan.", show_alert=True)
         return
-    avval = salovat_soni(conn, uid, kun)
-    soni, qoshildi = salovat_oshir(conn, uid, kun, qadam)
-    jami = salovat_hammasi(conn, qoshildi)
-    conn.commit()
-    conn.close()
+    matn, avval, soni, qoshildi, jami = n
 
     if not qoshildi:
         await query.answer(f"{soni}/{SALOVAT_SONI} — to'ldi")
@@ -1020,21 +1088,33 @@ async def on_salovat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer(f"{soni}/{SALOVAT_SONI}")
 
     if soni >= SALOVAT_SONI:
-        try:
-            await query.edit_message_text(
-                f"Juma salovati to'ldi: {SALOVAT_SONI} marta.\n"
-                f"Hammamiz bugun: {raqam(jami)} marta.")
-        except BadRequest as e:
-            log.warning("Salovat yakunini yozib bo'lmadi: %s", e)
+        _tahrirla(query, f"Juma salovati to'ldi: {SALOVAT_SONI} marta.\n"
+                         f"Hammamiz bugun: {raqam(jami)} marta.")
         return
-
     if salovat_chiziq(avval) != salovat_chiziq(soni):
-        try:
-            await query.edit_message_text(
-                salovat_matni(matn, soni),
-                reply_markup=salovat_tugma(kun, soni))
-        except BadRequest as e:
-            log.warning("Salovat sanog'ini yangilab bo'lmadi: %s", e)
+        _tahrirla(query, salovat_matni(matn, soni), salovat_tugma(kun, soni))
+
+
+def _salovat_bazada(uid, kun, qadam):
+    """Salovat bosilishi — bazadagi ish (thread ichida, qulf bilan).
+    Qaytadi: (matn, avval, soni, qo'shildi, hammasi) yoki None."""
+    conn = db()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        matn = salovat_matn_ol(conn)
+        if matn is None:
+            conn.commit()
+            return None
+        avval = salovat_soni(conn, uid, kun)
+        soni, qoshildi = salovat_oshir(conn, uid, kun, qadam)
+        jami = salovat_hammasi(conn, qoshildi)
+        conn.commit()
+        return matn, avval, soni, qoshildi, jami
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 async def cmd_salovat(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1181,6 +1261,7 @@ async def job_salovat(context: ContextTypes.DEFAULT_TYPE):
             yuborildi += 1
         except Forbidden:
             conn.execute("UPDATE zikr_users SET active=0 WHERE uid=?", (uid,))
+            conn.commit()      # baza keyingi yuborishlar davomida band turmasin
         except Exception as e:
             log.warning("Salovat yuborishda xato (%s): %s", uid, e)
     conn.commit()
@@ -1214,6 +1295,7 @@ def salovat_qadam(uid, qadam=1):
     """Mini App'dan sanoqni oshirish. Qaytadi: holat dict."""
     conn = db()
     try:
+        conn.execute("BEGIN IMMEDIATE")      # umumiy hisob yo'qolmasin
         if salovat_matn_ol(conn) is None:
             return None
         kun = _bugun()

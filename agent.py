@@ -270,7 +270,11 @@ def ai_client():
 # BAZA (SQLite)
 # ======================================================================
 def db():
-    conn = sqlite3.connect(DB_PATH)
+    # check_same_thread=False: og'ir ishlar (AI, RSS) asyncio.to_thread
+    # orqali boshqa oqimda ishlaydi va shu ulanishni ishlatadi. Bir ulanish
+    # bir vaqtda faqat bitta joyda ishlatiladi (chaqiruvchi await qiladi).
+    conn = sqlite3.connect(DB_PATH, timeout=10, check_same_thread=False)
+    conn.execute("PRAGMA journal_mode=WAL")   # o'quvchilar yozuvchini kutmaydi
     conn.execute("""CREATE TABLE IF NOT EXISTS agent_articles(
         url TEXT PRIMARY KEY, title TEXT, source TEXT,
         seen_at TEXT, score INTEGER, status TEXT DEFAULT 'new')""")
@@ -1646,9 +1650,10 @@ async def make_card_variant(post_id, text, rubrika, variant):
                 if xom:
                     if variant == 1:
                         return xom, VARIANT_NOMI[1]     # asl holicha
-                    karta = make_photo_card(
-                        xom, text, rubrika,
-                        cover=ai_cover_title(post_id, text, rubrika),
+                    karta = await asyncio.to_thread(
+                        make_photo_card, xom, text, rubrika,
+                        cover=await asyncio.to_thread(
+                            ai_cover_title, post_id, text, rubrika),
                         duotone=DUOTONE_MANBA)
                     if karta:
                         return karta, VARIANT_NOMI[0]
@@ -1668,12 +1673,15 @@ async def make_card_variant(post_id, text, rubrika, variant):
         try:
             urls = _photo_cache.get(post_id)
             if urls is None:
-                urls = await pexels_photos(ai_photo_query(text))
+                urls = await pexels_photos(
+                    await asyncio.to_thread(ai_photo_query, text))
                 _photo_cache[post_id] = urls
             if urls:
                 photo = await _fetch_bytes(urls[0])
-                card = make_photo_card(photo, text, rubrika,
-                                       cover=ai_cover_title(post_id, text, rubrika))
+                card = await asyncio.to_thread(
+                    make_photo_card, photo, text, rubrika,
+                    cover=await asyncio.to_thread(
+                        ai_cover_title, post_id, text, rubrika))
                 if card:
                     return card, VARIANT_NOMI[3]
         except Exception as e:
@@ -1723,14 +1731,16 @@ async def make_genai_card(post_id, text, rubrika):
         return None
     try:
         import base64
-        prompt = ai_image_prompt(text, rubrika)
-        resp = ai_client().images.generate(
+        prompt = await asyncio.to_thread(ai_image_prompt, text, rubrika)
+        resp = await asyncio.to_thread(
+            ai_client().images.generate,
             model=IMG_MODEL, prompt=prompt,
             size="1024x1536", quality=IMG_QUALITY, n=1)
         raw = base64.b64decode(resp.data[0].b64_json)
-        card = make_photo_card(raw, text, rubrika,
-                               cover=ai_cover_title(post_id, text, rubrika),
-                               size=(1080, 1350))   # 4:5
+        card = await asyncio.to_thread(
+            make_photo_card, raw, text, rubrika,
+            cover=await asyncio.to_thread(ai_cover_title, post_id, text, rubrika),
+            size=(1080, 1350))   # 4:5
         if card:
             _genimg_cache[post_id] = card
         return card
@@ -1763,7 +1773,7 @@ async def rich_photo_url(post_id, text, variant=0):
     try:
         urls = _photo_cache.get(post_id)
         if urls is None:
-            urls = await pexels_photos(ai_photo_query(text))
+            urls = await pexels_photos(await asyncio.to_thread(ai_photo_query, text))
             _photo_cache[post_id] = urls
         if urls:
             return urls[variant % len(urls)], "Pexels foto (manbada rasm yo'q)"
@@ -2012,13 +2022,12 @@ async def publish_article(context, conn, url, ovozli):
         raise RuntimeError("Bu maqola bazada topilmadi")
     title, summary, rubrika = row
     try:
-        downloaded = trafilatura.fetch_url(url)
-        text = trafilatura.extract(downloaded) if downloaded else None
+        text = await asyncio.to_thread(_maqola_matni, url)
     except Exception:
         text = None
     if not text:
         text = title + "\n\n" + summary
-    post_text = ai_write_post(conn, url, text, rubrika)
+    post_text = await asyncio.to_thread(ai_write_post, conn, url, text, rubrika)
     if not post_text:
         raise RuntimeError("Kunlik AI limiti tugadi")
 
@@ -2074,7 +2083,7 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             conn.close()
             return
 
-        data = ai_voice_router(conn, question, digest)
+        data = await asyncio.to_thread(ai_voice_router, conn, question, digest)
 
         # --- Buyruq: N-yangilikni kanalga chiqarish ---
         if data.get("intent") == "chiqarish":
@@ -2197,8 +2206,15 @@ def fetch_new_articles(conn):
                 (url, title, source_name, datetime.now(TZ).isoformat(),
                  summary[:2000], rubrika, _rss_rasm(entry)))
             added += 1
-    conn.commit()
+        # har manbadan keyin — keyingi manba yuklanayotganda baza band turmasin
+        conn.commit()
     return added
+
+
+def _maqola_matni(url):
+    """Maqola sahifasini yuklab, asosiy matnini ajratadi (bloklovchi)."""
+    downloaded = trafilatura.fetch_url(url)
+    return trafilatura.extract(downloaded) if downloaded else None
 
 
 async def run_agent(context: ContextTypes.DEFAULT_TYPE):
@@ -2212,7 +2228,7 @@ async def run_agent(context: ContextTypes.DEFAULT_TYPE):
         conn.close()
         return
 
-    added = fetch_new_articles(conn)
+    added = await asyncio.to_thread(fetch_new_articles, conn)
     log.info("Agent: yangi maqolalar %d", added)
 
     # --- Bosqich A: saralash ('new' navbatidan; post yozish uchun zaxira qoladi) ---
@@ -2227,7 +2243,7 @@ async def run_agent(context: ContextTypes.DEFAULT_TYPE):
             log.info("Saralash to'xtadi — zaxira limitiga yetildi, qolgani ertaga.")
             break
         bolak = queue[i:i + SCORE_BATCH]
-        ballar = ai_score_batch(conn, bolak)
+        ballar = await asyncio.to_thread(ai_score_batch, conn, bolak)
         if ballar is None:          # kunlik limit tugadi
             break
         for url, title, summary, rubrika in bolak:
@@ -2235,12 +2251,14 @@ async def run_agent(context: ContextTypes.DEFAULT_TYPE):
             if score is None:       # to'plamda tushib qolgan bo'lsa — bittalab
                 if api_calls_today(conn) >= MAX_API_CALLS_PER_DAY - SCORING_RESERVE:
                     break
-                score = ai_score(conn, title, summary, rubrika)
+                score = await asyncio.to_thread(ai_score, conn, title, summary, rubrika)
                 if score is None:
                     break
             conn.execute(
                 "UPDATE agent_articles SET score=?, status='scored' WHERE url=?",
                 (score, url))
+            # darhol: keyingi AI so'rovi kutilayotganda baza band turmasin
+            conn.commit()
     conn.commit()
 
     # --- Bosqich B: nomzodlar (har rubrikadan ko'pi bilan MAX_PER_RUBRIKA ta) ---
@@ -2273,11 +2291,10 @@ async def run_agent(context: ContextTypes.DEFAULT_TYPE):
 
     for url, title, source, score, summary, rubrika in candidates:
         try:
-            downloaded = trafilatura.fetch_url(url)
-            text = trafilatura.extract(downloaded) if downloaded else None
+            text = await asyncio.to_thread(_maqola_matni, url)
             if not text:
                 text = title + "\n\n" + summary
-            post_text = ai_write_post(conn, url, text, rubrika)
+            post_text = await asyncio.to_thread(ai_write_post, conn, url, text, rubrika)
             if not post_text:
                 log.info("Kunlik API limiti tugadi — qolgan nomzodlar ertaga.")
                 break
@@ -2765,7 +2782,7 @@ async def cmd_rich_rasm(update, context):
         return
     await update.message.reply_text(f"🧪 #{post_id} — ochiq havolali rasm izlanmoqda...")
     try:
-        urls = await pexels_photos(ai_photo_query(text))
+        urls = await pexels_photos(await asyncio.to_thread(ai_photo_query, text))
         if not urls:
             await update.message.reply_text("❌ Pexels rasm topmadi.")
             return
