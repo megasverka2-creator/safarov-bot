@@ -16,6 +16,7 @@ bot.py ga ulash:  import ustoz  →  ustoz.register(app)
 """
 
 import json
+import asyncio
 import logging
 import os
 import re
@@ -305,7 +306,7 @@ async def _process_task(user, text, week, context):
         return
     await context.bot.send_message(user.id, "🎓 Ustoz o'qiyapti... (10-20 soniya)")
     try:
-        feedback = ai_check_task(week, text)
+        feedback = await asyncio.to_thread(ai_check_task, week, text)
     except Exception as e:
         log.exception("Ustoz xatosi: %s", e)
         await context.bot.send_message(
@@ -340,7 +341,7 @@ async def _process_question(user, text, context):
         return
     await context.bot.send_message(user.id, "🎓 O'ylayapman...")
     try:
-        answer = ai_answer_question(user.id, text)
+        answer = await asyncio.to_thread(ai_answer_question, user.id, text)
     except Exception as e:
         log.exception("Savol xatosi: %s", e)
         await context.bot.send_message(

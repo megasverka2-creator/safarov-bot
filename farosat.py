@@ -11,6 +11,7 @@ Sozlash: FAROSAT_CHANNEL env (standart @farosatdaan).
 bot.py:  import farosat  →  farosat.register(app)
 """
 
+import asyncio
 import logging
 import os
 
@@ -93,7 +94,7 @@ async def cmd_farosat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def _send_batch(chat_id, context):
     try:
-        cands = _gen_candidates()
+        cands = await asyncio.to_thread(_gen_candidates)
     except Exception as e:
         log.exception("Farosat xatosi: %s", e)
         await context.bot.send_message(chat_id, f"Xatolik: {e}")

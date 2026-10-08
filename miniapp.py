@@ -329,7 +329,7 @@ async def _api_men(request):
              "admin": _admin_mi(user)}
 
     try:
-        z = zikr.holat(uid)
+        z = await asyncio.to_thread(zikr.holat, uid)
         b = z.get("bugun") or {}
         javob["zikr"] = {"yoqilgan": z.get("yoqilgan", False),
                          "streak": z.get("streak", 0),
@@ -342,7 +342,7 @@ async def _api_men(request):
         javob["zikr"] = None
 
     try:
-        sl = zikr.salovat_holat(uid)
+        sl = await asyncio.to_thread(zikr.salovat_holat, uid)
         javob["salovat"] = {"bor": sl["bor"], "juma": sl["juma"],
                             "soni": sl["soni"], "jami": sl["jami"]}
     except Exception:
@@ -380,7 +380,7 @@ async def _api_zikr(request):
     if not user:
         return _xato("Imzo tekshiruvidan o'tmadi")
     try:
-        malumot = zikr.holat(int(user["id"]))
+        malumot = await asyncio.to_thread(zikr.holat, int(user["id"]))
     except Exception:
         # Tafsilot jurnalga yoziladi; foydalanuvchiga ichki xabar
         # (fayl yo'li, SQL matni) ko'rsatilmaydi.
@@ -396,7 +396,8 @@ async def _api_salovat(request):
     if not user:
         return _xato("Imzo tekshiruvidan o'tmadi")
     try:
-        return web.json_response(zikr.salovat_holat(int(user["id"])))
+        return web.json_response(
+            await asyncio.to_thread(zikr.salovat_holat, int(user["id"])))
     except Exception:
         log.exception("Salovat holati o'qilmadi")
         return _xato("Ma'lumot o'qilmadi", 500)
@@ -422,7 +423,7 @@ async def _api_salovat_qadam(request):
         qadam = 1
     qadam = 10 if qadam >= 10 else 1
     try:
-        natija = zikr.salovat_qadam(int(user["id"]), qadam)
+        natija = await asyncio.to_thread(zikr.salovat_qadam, int(user["id"]), qadam)
     except Exception:
         log.exception("Salovat sanog'i yozilmadi")
         return _xato("Yozib bo'lmadi", 500)

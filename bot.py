@@ -29,9 +29,10 @@ from telegram import (
     BotCommand, BotCommandScopeDefault, BotCommandScopeChat,
 )
 from telegram.ext import (
-    Application, CommandHandler, MessageHandler, CallbackQueryHandler,
-    filters, ContextTypes,
+    Application, BaseUpdateProcessor, CommandHandler, MessageHandler,
+    CallbackQueryHandler, filters, ContextTypes,
 )
+import weakref
 
 import agent
 import zikr
@@ -250,9 +251,14 @@ def load_json(path, default):
         return default
 
 def save_json(path, data):
+    # Avval vaqtinchalik faylga, keyin bir zumda almashtiramiz: yozish
+    # o'rtasida jarayon to'xtasa ham eski fayl butun qoladi (aks holda
+    # load_json bo'sh {} qaytarib, keyingi saqlash hammani o'chirardi).
     try:
-        with open(path, "w", encoding="utf-8") as f:
+        vaqtincha = path + ".tmp"
+        with open(vaqtincha, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False)
+        os.replace(vaqtincha, path)
     except Exception:
         pass
 
@@ -348,6 +354,12 @@ async def try_count(bot, uid):
     if not ref or u.get("counted"):
         return None
     if not await is_subscribed(bot, uid):
+        return None
+    # await paytida boshqa foydalanuvchilar yozilgan bo'lishi mumkin —
+    # faylni qayta o'qiymiz, aks holda ularning yozuvi o'chib ketadi
+    users = load_json(USERS_FILE, {})
+    u = users.get(str(uid))
+    if not u or u.get("counted"):
         return None
     inv = users.get(str(ref))
     u["counted"] = True
@@ -594,19 +606,33 @@ async def xabar(update, context):
     ids = list(users.keys())
     await update.message.reply_text(f"📤 Yuborilmoqda... ({len(ids)} foydalanuvchi)")
     sent, failed = 0, 0
+    bloklangan = {}
     for uid in ids:
         try:
             await context.bot.send_message(int(uid), text, disable_web_page_preview=True)
             sent += 1
-            users[uid]["blocked"] = False
+            bloklangan[uid] = False
         except Exception:
             failed += 1
-            users[uid]["blocked"] = True   # bloklagan/o'chirgan deb belgilanadi
+            bloklangan[uid] = True   # bloklagan/o'chirgan deb belgilanadi
         if (sent + failed) % 25 == 0:
             await asyncio.sleep(1)
-    save_json(USERS_FILE, users)
+    _blok_belgila(bloklangan)
     await update.message.reply_text(
         f"✅ Yetkazildi: {sent}\n🚫 Yetmadi (bloklagan/o'chirgan): {failed}")
+
+
+def _blok_belgila(bloklangan):
+    """{uid: True/False} ni users.json ga yozadi.
+
+    Faylni OXIRIDA qayta o'qiymiz: yuborish daqiqalab davom etadi va shu
+    paytda yangi foydalanuvchilar qo'shiladi — boshidagi nusxani yozsak,
+    ular o'chib ketardi."""
+    users = load_json(USERS_FILE, {})
+    for uid, holat in bloklangan.items():
+        if uid in users:
+            users[uid]["blocked"] = holat
+    save_json(USERS_FILE, users)
 
 
 async def tekshir(update, context):
@@ -619,18 +645,19 @@ async def tekshir(update, context):
     await update.message.reply_text(
         f"🔍 Tekshirilmoqda... ({len(ids)} foydalanuvchi, ~{len(ids)//20 + 1} soniya)")
     ok, blocked = 0, 0
+    bloklangan = {}
     for i, uid in enumerate(ids):
         try:
             # 'typing' harakati xabar emas — foydalanuvchi hech narsa sezmaydi
             await context.bot.send_chat_action(int(uid), "typing")
             ok += 1
-            users[uid]["blocked"] = False
+            bloklangan[uid] = False
         except Exception:
             blocked += 1
-            users[uid]["blocked"] = True
+            bloklangan[uid] = True
         if (i + 1) % 20 == 0:
             await asyncio.sleep(1)
-    save_json(USERS_FILE, users)
+    _blok_belgila(bloklangan)
     pct = round(blocked / len(ids) * 100) if ids else 0
     await update.message.reply_text(
         f"🔍 Tekshiruv tugadi\n\n"
@@ -1513,8 +1540,40 @@ async def post_init(app):
         print(f"[K2] Taymer o'rnatilmadi: {e}")
 
 
+class FoydalanuvchiNavbati(BaseUpdateProcessor):
+    """Turli foydalanuvchilar PARALLEL, bitta foydalanuvchi — KETMA-KET.
+
+    Avval bot hamma xabarni bittalab ishlardi: admin videoni ovozlatayotgan
+    10 daqiqa ichida hech kimning "Aytdim" tugmasi javob olmasdi. Endi
+    har kim o'z navbatida. Bitta odamning xabarlari esa avvalgidek ketma-ket
+    — "kutilayotgan matn" kabi holatlar aralashib ketmaydi."""
+
+    def __init__(self, max_concurrent_updates=64):
+        super().__init__(max_concurrent_updates)
+        self._qulflar = weakref.WeakValueDictionary()
+
+    async def do_process_update(self, update, coroutine):
+        user = update.effective_user if isinstance(update, Update) else None
+        if user is None:
+            await coroutine
+            return
+        qulf = self._qulflar.get(user.id)
+        if qulf is None:
+            qulf = asyncio.Lock()
+            self._qulflar[user.id] = qulf
+        async with qulf:
+            await coroutine
+
+    async def initialize(self):
+        pass
+
+    async def shutdown(self):
+        pass
+
+
 def main():
     app = (Application.builder().token(TOKEN)
+           .concurrent_updates(FoydalanuvchiNavbati())
            .post_init(post_init).post_shutdown(miniapp.toxtat).build())
     app.add_handler(CommandHandler(["start", "menu"], start))
     app.add_handler(CommandHandler("konkurs", konkurs))
