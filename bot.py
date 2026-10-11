@@ -46,6 +46,7 @@ import ustoz  # AI Ustoz: topshiriq tekshirish va savol-javob
 import farosat  # Farosatdan kanali uchun kontent-agent
 import sutuur   # Sutuur adabiy kanali uchun kontent-agent
 import admin    # Yagona boshqaruv paneli (/panel)
+import reklama  # Rasmli, tugmali reklama hammaga (/reklama)
 
 try:
     from anthropic import AsyncAnthropic
@@ -1428,6 +1429,7 @@ BUYRUQLAR_ADMIN = [
     ("agent_status", "Agent holati"),
     ("stats",        "Statistika"),
     ("xabar",        "Ommaviy xabar"),
+    ("reklama",      "Rasmli reklama hammaga (Sutuur)"),
     ("zikr_elon",    "Kanalga zikr banneri"),
     ("zikr_sinov",   "Zikr eslatmasini sinash"),
     ("salovat_matn", "Salovat matnini qo'yish"),
@@ -1551,6 +1553,7 @@ def main():
     farosat.register(app)  # Farosat-agent (/farosat)
     sutuur.register(app)   # Sutuur-agent (/sutuur)
     admin.register(app)    # Boshqaruv paneli (/panel)
+    reklama.register(app)  # Rasmli reklama (/reklama)
     print("Bot ishga tushdi...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
