@@ -1431,6 +1431,8 @@ BUYRUQLAR_ADMIN = [
     ("zikr_elon",    "Kanalga zikr banneri"),
     ("zikr_sinov",   "Zikr eslatmasini sinash"),
     ("salovat_matn", "Salovat matnini qo'yish"),
+    ("zikr_export",  "Zikr bazasi nusxasi (yangi botga)"),
+    ("zikr_kochish", "Zikr obunachilarini yangi botga chaqirish"),
     ("ovoz_ishchi",  "Mac'dagi VoiceStudio ovoz ishchisi"),
     ("talaffuz",     "Ovoz talaffuz lug'ati"),
     ("talaffuz_sinov", "Ovozni eshitib sinash"),

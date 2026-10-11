@@ -29,17 +29,26 @@ JUMA SALOVATI (alohida bo'lim, pastda):
   hadisda aytilgan 100 marta uchun sanoqchi bilan. Sanoq har kun
   alohida yuritiladi, /salovat bilan istalgan kuni ochsa bo'ladi.
 
+YANGI BOTGA KO'CHISH (pastda, @zikr_halqasi_bot):
+  /zikr_export — zikr.db nusxasi (yangi botga /zikr_import uchun);
+  /zikr_kochish — obunachilarga bir martalik e'lon. Shundan keyin bu
+  botdagi eslatma va salovat ishlari to'xtaydi, /zikr va /salovat
+  yangi botga yo'naltiradi.
+
 MUHIM: bu yerda AI ISHLATILMAYDI. Zikr matnlari qat'iy ro'yxatdan olinadi,
 shuning uchun noto'g'ri matn yozilishi mumkin emas va xarajat = $0.
 Taklif matni ham qo'lda yozilgan — hech qanday diniy hukm yoki savob va'dasi
 yo'q, faqat samimiy chaqiruv.
 """
 
+import asyncio
 import logging
 import os
 import random
 import re
 import sqlite3
+import tempfile
+from contextlib import closing
 from io import BytesIO
 from urllib.parse import quote
 from datetime import datetime, date, time as dtime, timedelta
@@ -49,7 +58,9 @@ from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
     InlineQueryResultArticle, InputTextMessageContent,
 )
-from telegram.error import Forbidden, BadRequest
+from telegram.error import (
+    Forbidden, BadRequest, RetryAfter, TimedOut, NetworkError,
+)
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -303,6 +314,8 @@ def holat(uid):
 # BUYRUQLAR
 # ======================================================================
 async def cmd_zikr(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if await _yangi_botga_yonalt(update):
+        return
     uid = update.effective_user.id
     conn = db()
     conn.execute(
@@ -1039,6 +1052,8 @@ async def on_salovat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_salovat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/salovat — salovat kartasini ochadi (istalgan kuni)."""
+    if await _yangi_botga_yonalt(update):
+        return
     uid = update.effective_user.id
     conn = db()
     matn = salovat_matn_ol(conn)
@@ -1226,6 +1241,405 @@ def salovat_qadam(uid, qadam=1):
 
 
 # ======================================================================
+# YANGI BOTGA KO'CHISH (@zikr_halqasi_bot)
+# ======================================================================
+# Zikr va juma salovati alohida botga ko'chdi. Tartib:
+#   1. /zikr_export  — zikr.db nusxasi adminga hujjat bo'lib keladi.
+#      Uni yangi botga /zikr_import bilan yuklaysiz: ketma-ketlik
+#      (streak), salovat sanog'i va umumiy hisoblar saqlanadi.
+#   2. /zikr_kochish — barcha faol obunachilarga BIR MARTA e'lon
+#      (rasm + "Yangi botga o'tish" tugmasi) ketadi. Shu zahoti bu
+#      botdagi zikr va salovat ishlari to'xtaydi — aks holda ko'chganlar
+#      ikki marta eslatma olardi.
+#   3. Shundan keyin /zikr va /salovat yangi botga yo'naltiradi.
+# Bir necha haftadan keyin zikr kodi bu botdan butunlay olib tashlanadi.
+#
+# Yangi bot obunachiga birinchi bo'lib yoza olmaydi (Telegram qoidasi),
+# shuning uchun har kim tugmani bosib, o'zi o'tadi.
+YANGI_BOT = os.environ.get("ZIKR_YANGI_BOT", "zikr_halqasi_bot").lstrip("@")
+KOCHISH_HAVOLA = f"https://t.me/{YANGI_BOT}?start=kochish"
+KOCHISH_RASM = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "rasmlar", "zikr_kochish.jpg")
+# Soniyasiga nechta xabar. Telegram chegarasi ~30 — zaxira bilan 20.
+KOCHISH_TEZLIK = 20
+# Ko'chishdan keyin to'xtaydigan ishlar (nomlari register'dagidek)
+ZIKR_ISHLARI = ("zikr_reja", "zikr_tekshir", "zikr_salovat")
+
+KOCHISH_MATNI = (
+    f"Zikr eslatmalari endi alohida botda: @{YANGI_BOT}\n\n"
+    "Shu paytgacha bu botda kelgan kunlik zikr eslatmalari va juma "
+    "salovati yangi, faqat zikr uchun qurilgan botga ko'chdi.\n\n"
+    "Yangi botda:\n"
+    "• kuniga 5 ta qisqa zikr eslatmasi — har birini 11 marta aytasiz;\n"
+    "• tasbeh ilovasi: bosib sanaysiz, telefon yengil tebranib turadi;\n"
+    "• internet uzilsa ham sanoq yo'qolmaydi;\n"
+    "• juma kuni salovat — 100 talik halqa bilan;\n"
+    "• «Hammamiz bugun» — barchaning umumiy zikri;\n"
+    "• kunduzgi va tungi ko'rinish.\n\n"
+    "O'tish uchun pastdagi «Yangi botga o'tish» tugmasini, keyin "
+    "«Start»ni bosing — eslatmalar darhol yoqiladi.\n\n"
+    "Bu botdagi zikr eslatmalari va juma salovati bugundan to'xtatildi."
+)
+
+YONALTIRISH_MATNI = (
+    f"Zikr eslatmalari va juma salovati endi alohida botda: @{YANGI_BOT}\n\n"
+    "Pastdagi tugmani, keyin «Start»ni bosing — eslatmalar darhol "
+    "yoqiladi."
+)
+
+# Fon vazifasi (asyncio.Task) — bir vaqtda faqat bittasi ishlaydi
+_kochish_vazifa = None
+
+
+def _kochish_tugma():
+    return InlineKeyboardMarkup([[InlineKeyboardButton(
+        "Yangi botga o'tish", url=KOCHISH_HAVOLA)]])
+
+
+def _kochish_holati(conn):
+    """None — boshlanmagan, "jarayonda" — yuborilmoqda, "tugadi"."""
+    return meta_get(conn, "kochish_holat")
+
+
+def kochganmi():
+    """/zikr_kochish tasdiqlanganmi (yuborish hali tugamagan bo'lsa ham)."""
+    conn = db()
+    try:
+        return _kochish_holati(conn) is not None
+    finally:
+        conn.close()
+
+
+async def _yangi_botga_yonalt(update):
+    """Ko'chishdan keyin /zikr va /salovat o'rniga yo'naltiruvchi xabar.
+    Yo'naltirgan bo'lsa True qaytaradi."""
+    if not kochganmi():
+        return False
+    xabar = update.effective_message
+    if xabar is not None:
+        await xabar.reply_text(YONALTIRISH_MATNI,
+                               reply_markup=_kochish_tugma())
+    return True
+
+
+def _ochir(yol):
+    try:
+        os.remove(yol)
+    except OSError:
+        pass
+
+
+def _daqiqa(nechta):
+    """Yuborish taxminan necha daqiqa oladi (kamida 1)."""
+    return max(1, -(-int(nechta) // (KOCHISH_TEZLIK * 60)))
+
+
+# --- /zikr_export --------------------------------------------------------
+def _zikr_nusxa():
+    """zikr.db ning butun nusxasi — sqlite3 backup API bilan. Bot ishlab
+    turganda ham xavfsiz: boshqa yozuvlar to'xtamaydi, nusxa izchil
+    bo'ladi. Qaytadi: (fayl yo'li, obunachilar, faollar)."""
+    papka = os.path.dirname(os.path.abspath(DB_PATH))
+    fd, yol = tempfile.mkstemp(prefix="zikr-nusxa-", suffix=".db", dir=papka)
+    os.close(fd)
+    try:
+        with closing(sqlite3.connect(DB_PATH, timeout=30)) as manba, \
+                closing(sqlite3.connect(yol)) as nusxa:
+            manba.backup(nusxa)
+            # Nusxa yolg'iz bitta fayl bo'lsin (-wal/-shm siz)
+            nusxa.execute("PRAGMA journal_mode=DELETE")
+            nusxa.execute("VACUUM")
+            jami, faol = nusxa.execute(
+                "SELECT COUNT(*), COALESCE(SUM(active=1), 0) "
+                "FROM zikr_users").fetchone()
+    except BaseException:
+        _ochir(yol)
+        raise
+    return yol, int(jami), int(faol)
+
+
+async def cmd_zikr_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/zikr_export — zikr.db nusxasini adminga hujjat qilib yuboradi."""
+    if update.effective_user is None or update.effective_user.id != ADMIN_ID:
+        return
+    xabar = update.effective_message
+    try:
+        yol, jami, faol = await asyncio.to_thread(_zikr_nusxa)
+    except Exception:
+        # Tafsilot (fayl yo'li, SQL) faqat jurnalga yoziladi
+        log.exception("Zikr: baza nusxasi olinmadi")
+        await xabar.reply_text("Nusxa olinmadi. Tafsilot jurnalda.")
+        return
+    try:
+        with open(yol, "rb") as f:
+            await context.bot.send_document(
+                chat_id=ADMIN_ID, document=f,
+                filename=f"zikr-{_bugun()}.db",
+                caption=(f"zikr.db nusxasi: {raqam(jami)} obunachi, "
+                         f"{raqam(faol)} tasi faol.\n\n"
+                         f"Endi @{YANGI_BOT} ga o'ting, /zikr_import "
+                         f"yozing va shu faylni o'sha botga uzating."))
+    except Exception:
+        log.exception("Zikr: baza nusxasi yuborilmadi")
+        await xabar.reply_text("Faylni yuborib bo'lmadi. Tafsilot jurnalda.")
+        return
+    finally:
+        _ochir(yol)
+    conn = db()
+    try:
+        meta_set(conn, "eksport_at",
+                 datetime.now(TZ).isoformat(timespec="minutes"))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# --- /zikr_kochish -------------------------------------------------------
+def _kochish_hisobi(conn):
+    return {k: int(meta_get(conn, f"kochish_{k}", "0") or 0)
+            for k in ("yuborildi", "bloklagan", "xato")}
+
+
+def _kochish_hisoboti(hisob):
+    return (f"Yetib bordi: {raqam(hisob['yuborildi'])}\n"
+            f"Botni bloklagan: {raqam(hisob['bloklagan'])}\n"
+            f"Yetmadi (xato): {raqam(hisob['xato'])}")
+
+
+def _kochish_rasmi():
+    try:
+        with open(KOCHISH_RASM, "rb") as f:
+            return f.read()
+    except OSError:
+        log.warning("Zikr: ko'chish rasmi topilmadi — e'lon matnning "
+                    "o'zi bilan ketadi")
+        return None
+
+
+def _soniya(qiymat):
+    """RetryAfter.retry_after — PTB versiyasiga qarab son yoki timedelta."""
+    if hasattr(qiymat, "total_seconds"):
+        return qiymat.total_seconds()
+    return float(qiymat)
+
+
+async def _adminga(bot, matn):
+    if not ADMIN_ID:
+        return
+    try:
+        await bot.send_message(chat_id=ADMIN_ID, text=matn)
+    except Exception:
+        log.warning("Zikr: adminga xabar yuborilmadi", exc_info=True)
+
+
+async def _kochish_bittaga(bot, uid, rasm):
+    """Bitta obunachiga e'lon. Qaytadi: (natija, rasm).
+    natija — "yuborildi" / "bloklagan" / "xato".
+    rasm — birinchi yuklashdan keyin Telegram'dagi file_id bo'ladi,
+    ya'ni qolganlarga fayl qayta yuklanmaydi."""
+    for _ in range(3):
+        try:
+            if rasm is None:
+                await bot.send_message(chat_id=uid, text=KOCHISH_MATNI,
+                                       reply_markup=_kochish_tugma())
+            else:
+                xabar = await bot.send_photo(
+                    chat_id=uid, photo=rasm, caption=KOCHISH_MATNI,
+                    reply_markup=_kochish_tugma())
+                if xabar.photo:
+                    rasm = xabar.photo[-1].file_id
+            return "yuborildi", rasm
+        except RetryAfter as e:
+            # Telegram "sekinroq" dedi — aytgan vaqticha kutib, qaytamiz
+            await asyncio.sleep(_soniya(e.retry_after) + 1)
+        except Forbidden:
+            return "bloklagan", rasm
+        except TimedOut as e:
+            # Javob kelmadi, lekin xabar yetib borgan bo'lishi mumkin —
+            # qayta yuborsak, ikki marta tushib qolardi
+            log.warning("Zikr ko'chish (%s): javob kelmadi: %s", uid, e)
+            return "xato", rasm
+        except BadRequest as e:
+            log.warning("Zikr ko'chish (%s): %s", uid, e)
+            return "xato", rasm
+        except NetworkError as e:
+            log.warning("Zikr ko'chish (%s): tarmoq: %s", uid, e)
+            await asyncio.sleep(3)
+        except Exception:
+            log.exception("Zikr ko'chish (%s): kutilmagan xato", uid)
+            return "xato", rasm
+    return "xato", rasm
+
+
+async def _kochish_yubor(bot):
+    """Fon vazifasi: e'lonni faol obunachilarga uid tartibida yuboradi.
+    Har yuborishdan keyin oxirgi uid zikr_meta ga yoziladi — bot qayta
+    ishga tushsa, qolgan joyidan davom etadi."""
+    conn = db()
+    try:
+        oxirgi = int(meta_get(conn, "kochish_oxirgi_uid", "0") or 0)
+        uidlar = [r[0] for r in conn.execute(
+            "SELECT uid FROM zikr_users WHERE active=1 AND uid>? "
+            "ORDER BY uid", (oxirgi,))]
+        hisob = _kochish_hisobi(conn)
+        rasm = _kochish_rasmi()
+        oraliq = 1 / KOCHISH_TEZLIK
+        loop = asyncio.get_running_loop()
+        log.info("Zikr ko'chish: %d kishiga yuboriladi", len(uidlar))
+        for uid in uidlar:
+            boshi = loop.time()
+            natija, rasm = await _kochish_bittaga(bot, uid, rasm)
+            hisob[natija] += 1
+            if natija == "bloklagan":
+                conn.execute("UPDATE zikr_users SET active=0 WHERE uid=?",
+                             (uid,))
+            meta_set(conn, f"kochish_{natija}", hisob[natija])
+            meta_set(conn, "kochish_oxirgi_uid", uid)
+            conn.commit()
+            kut = oraliq - (loop.time() - boshi)
+            if kut > 0:
+                await asyncio.sleep(kut)
+        meta_set(conn, "kochish_holat", "tugadi")
+        meta_set(conn, "kochish_tugadi",
+                 datetime.now(TZ).isoformat(timespec="minutes"))
+        conn.commit()
+    except Exception:
+        log.exception("Zikr ko'chish to'xtab qoldi")
+        await _adminga(bot, "Ko'chish e'loni yuborilayotganda to'xtab qoldi. "
+                            "/zikr_kochish — qolgan joyidan davom ettiradi.")
+        return
+    finally:
+        conn.close()
+    log.info("Zikr ko'chish tugadi: %s", hisob)
+    await _adminga(bot, "Ko'chish e'loni yuborildi.\n\n"
+                        + _kochish_hisoboti(hisob)
+                        + f"\n\nO'tganlarni @{YANGI_BOT} Admin panelida "
+                          "«eski botdan» manbasi bo'yicha kuzating.")
+
+
+def _kochish_boshlat(app):
+    """Fon vazifasini ishga tushiradi. Allaqachon ishlayotgan bo'lsa,
+    ikkinchisi ochilmaydi — False qaytadi."""
+    global _kochish_vazifa
+    if _kochish_vazifa is not None and not _kochish_vazifa.done():
+        return False
+    _kochish_vazifa = app.create_task(_kochish_yubor(app.bot),
+                                      name="zikr_kochish")
+    return True
+
+
+def _ishlarni_toxtat(app):
+    """Eslatma, kunlik reja va juma salovati ishlarini navbatdan oladi."""
+    jq = getattr(app, "job_queue", None)
+    if jq is None:
+        return
+    for nom in ZIKR_ISHLARI:
+        for ish in jq.get_jobs_by_name(nom):
+            ish.schedule_removal()
+
+
+async def _kochish_davom(context: ContextTypes.DEFAULT_TYPE):
+    """Bot yuborish o'rtasida qayta ishga tushgan bo'lsa — davom etadi."""
+    _kochish_boshlat(context.application)
+
+
+async def cmd_zikr_kochish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/zikr_kochish — obunachilarni yangi botga chaqiruvchi e'lon (faqat
+    admin). Avval e'lon namunasi va necha kishiga ketishi ko'rsatiladi;
+    yuborish faqat tasdiqdan keyin boshlanadi va bir marta bo'ladi."""
+    if update.effective_user is None or update.effective_user.id != ADMIN_ID:
+        return
+    xabar = update.effective_message
+    conn = db()
+    try:
+        holat = _kochish_holati(conn)
+        hisob = _kochish_hisobi(conn)
+        tugadi = meta_get(conn, "kochish_tugadi", "")
+        eksport = meta_get(conn, "eksport_at")
+        faol = conn.execute(
+            "SELECT COUNT(*) FROM zikr_users WHERE active=1").fetchone()[0]
+    finally:
+        conn.close()
+
+    if holat == "tugadi":
+        await xabar.reply_text(
+            f"Ko'chish e'loni {tugadi} da yuborilgan — qayta "
+            f"yuborilmaydi.\n\n" + _kochish_hisoboti(hisob))
+        return
+    if holat == "jarayonda":
+        if _kochish_boshlat(context.application):
+            boshi = "Yuborish to'xtab qolgan edi — qolgan joyidan davom etyapti."
+        else:
+            boshi = "E'lon yuborilmoqda."
+        await xabar.reply_text(f"{boshi}\n\n" + _kochish_hisoboti(hisob))
+        return
+
+    # Hali boshlanmagan: namuna + tasdiq
+    rasm = _kochish_rasmi()
+    if rasm is None:
+        await context.bot.send_message(chat_id=ADMIN_ID, text=KOCHISH_MATNI,
+                                       reply_markup=_kochish_tugma())
+    else:
+        await context.bot.send_photo(chat_id=ADMIN_ID, photo=rasm,
+                                     caption=KOCHISH_MATNI,
+                                     reply_markup=_kochish_tugma())
+    if eksport:
+        nusxa = f"Baza nusxasi olingan: {eksport}."
+    else:
+        nusxa = ("DIQQAT: hali /zikr_export qilinmagan. Avval nusxa olib, "
+                 f"@{YANGI_BOT} ga /zikr_import qiling — aks holda "
+                 "ketma-ketlik va sanoqlar ko'chmaydi.")
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("Yuborish", callback_data="zkoch|ha"),
+        InlineKeyboardButton("Bekor", callback_data="zkoch|yoq")]])
+    await context.bot.send_message(
+        chat_id=ADMIN_ID,
+        text=(f"Yuqoridagi e'lon {raqam(faol)} ta faol obunachiga bir marta "
+              f"yuboriladi (taxminan {_daqiqa(faol)} daqiqa).\n\n"
+              "Tasdiqlashingiz bilan bu botdagi zikr eslatmalari va juma "
+              "salovati to'xtaydi, /zikr va /salovat esa yangi botga "
+              f"yo'naltiradi.\n\n{nusxa}\n\nYuborilsinmi?"),
+        reply_markup=kb)
+
+
+async def on_kochish_tasdiq(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if query.from_user.id != ADMIN_ID:
+        await query.answer("Bu tugma faqat admin uchun.", show_alert=True)
+        return
+    if (query.data or "").split("|")[-1] != "ha":
+        await query.answer("Bekor qilindi")
+        await query.edit_message_text("Ko'chish e'loni yuborilmadi.")
+        return
+
+    conn = db()
+    try:
+        yangi = _kochish_holati(conn) is None
+        if yangi:
+            meta_set(conn, "kochish_holat", "jarayonda")
+            meta_set(conn, "kochish_boshlandi",
+                     datetime.now(TZ).isoformat(timespec="minutes"))
+            conn.commit()
+        faol = conn.execute(
+            "SELECT COUNT(*) FROM zikr_users WHERE active=1").fetchone()[0]
+    finally:
+        conn.close()
+    await query.answer()
+    if not yangi:
+        await query.edit_message_text(
+            "Ko'chish allaqachon boshlangan. Holati: /zikr_kochish")
+        return
+
+    _ishlarni_toxtat(context.application)
+    _kochish_boshlat(context.application)
+    log.info("Zikr: ko'chish boshlandi, eslatma va salovat ishlari to'xtatildi")
+    await query.edit_message_text(
+        f"Yuborish boshlandi: {raqam(faol)} kishi, taxminan "
+        f"{_daqiqa(faol)} daqiqa. Tugagach hisobot keladi.\n\n"
+        "Bu botdagi zikr eslatmalari va juma salovati to'xtatildi.")
+
+
+# ======================================================================
 # RO'YXATGA OLISH
 # ======================================================================
 def register(app: Application):
@@ -1238,12 +1652,16 @@ def register(app: Application):
     app.add_handler(CommandHandler("zikr_yakun", cmd_zikr_yakun))
     app.add_handler(CommandHandler("salovat", cmd_salovat))
     app.add_handler(CommandHandler("salovat_matn", cmd_salovat_matn))
+    app.add_handler(CommandHandler("zikr_export", cmd_zikr_export))
+    app.add_handler(CommandHandler("zikr_kochish", cmd_zikr_kochish))
     # eski "zikr_ok" ham, yangi "zikr_ok|kun|vaqt" ham shu handlerga tushadi
     app.add_handler(CallbackQueryHandler(on_aytdim, pattern=r"^zikr_ok"))
     app.add_handler(CallbackQueryHandler(on_taklif, pattern=r"^zikr_taklif$"))
     app.add_handler(CallbackQueryHandler(on_salovat, pattern=r"^slv\|"))
     app.add_handler(CallbackQueryHandler(on_salovat_matn,
                                          pattern=r"^slvmatn\|"))
+    app.add_handler(CallbackQueryHandler(on_kochish_tasdiq,
+                                         pattern=r"^zkoch\|"))
     if TAKLIF_USUL == "inline":
         # Botdagi yagona inline funksiya — zikr taklifi.
         # BotFather: /setinline yoqilmagan bo'lsa tugma javob bermaydi.
@@ -1252,6 +1670,20 @@ def register(app: Application):
     jq = getattr(app, "job_queue", None)
     if jq is None:
         log.warning("job_queue yo'q — zikr eslatmalari ishlamaydi.")
+        return
+
+    conn = db()
+    try:
+        kochish = _kochish_holati(conn)
+    finally:
+        conn.close()
+    if kochish is not None:
+        # Obunachilar yangi botga ko'chgan — eslatma va salovat ishlari
+        # qayta yoqilmaydi (aks holda ikki marta eslatma olishardi)
+        if kochish == "jarayonda":
+            jq.run_once(_kochish_davom, when=30, name="zikr_kochish")
+        log.info("Zikr: obunachilar @%s ga ko'chgan — eslatma va salovat "
+                 "ishlari yoqilmadi (ko'chish: %s)", YANGI_BOT, kochish)
         return
     jq.run_daily(job_kunlik_reja, time=dtime(0, 5, tzinfo=TZ),
                  name="zikr_reja")
