@@ -1433,6 +1433,7 @@ BUYRUQLAR_ADMIN = [
     ("salovat_matn", "Salovat matnini qo'yish"),
     ("zikr_export",  "Zikr bazasi nusxasi (yangi botga)"),
     ("zikr_kochish", "Zikr obunachilarini yangi botga chaqirish"),
+    ("zikr_hammaga", "Zikrga obuna bo'lmaganlarga yangi botga taklif"),
     ("ovoz_ishchi",  "Mac'dagi VoiceStudio ovoz ishchisi"),
     ("talaffuz",     "Ovoz talaffuz lug'ati"),
     ("talaffuz_sinov", "Ovozni eshitib sinash"),
